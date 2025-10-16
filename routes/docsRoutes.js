@@ -1,44 +1,40 @@
 const express = require("express");
 const multer = require("multer");
+const docsController = require("../controllers/docsController");
 
 const router = express.Router();
 
 const upload = multer({ dest: "uploads/" }); // Multer setup for file uploads
 
 // Home route for testing
-router.get("/", (req, res) => {
-  res.send("Docs API is working");
-});
 
-// POST /docs/upload - Upload multiple documents
-// router.post("/upload", upload.array("files", 20), (req, res) => {
-router.post("/upload", (req, res) => {
-  console.log("File upload endpoint hit"); // Debugging line
+router.get("/", docsController.docs_Testing);
 
-  // TODO: Process the uploaded files here
-  // USE: multer to handle file uploads
-  console.log(req.body);
+///////////////////////////////  GET ROUTES ///////////////////////////////
 
-  // Error handling for bad request
-  //   if (!req.body) {
-  //     return res.status(400).json({ error: "Body Empty." });
-  //   }
+/**
+ * TODO: Add a middleware to restrict access to docs for users depending on their roles
+ * For Example
+ * - Admins can view and upload all documents for all clients
+ * - Clients can only view and upload their own documents and not others
+ * */
 
-  // Error handling for no file uploaded
-  //   if (!req.file) {
-  //     return res.status(400).send("No file uploaded");
-  //   }
+router.get("/all", docsController.getAllDocuments); // Get all documents
+router.get("/id/:id", docsController.getDocumentById); // Get document by ID
+router.get("/type/:type", docsController.getDocumentByType); // Get documents by Type
 
-  //   const uploadedFiles = req.body.formdata.files.map((file) => ({
-  //     filename: file.filename,
-  //     path: file.path,
-  //   }));
-  //   console.log("Uploaded files:", req.body.formdata); // Log the uploaded files info
+///////////////////////////////  POST ROUTES ///////////////////////////////
 
-  res.status(200).json({
-    message: "Files uploaded successfully.",
-    // files: uploadedFiles,
-  });
-});
+router.post("/upload", docsController.uploadDocuments); // Upload multiple documents
+router.post("/create", docsController.createDocument); // Create a new document
+// router.post("/upload", upload.array("files", 20), docsController.uploadDocuments);
+
+///////////////////////////////  PUT ROUTES ///////////////////////////////
+
+router.put("/update/:id", docsController.updateDocument); // Update a document by ID
+
+/////////////////////////////// DELETE ROUTES ///////////////////////////////
+
+router.delete("/delete/:id", docsController.deleteDocument); // Delete a document by ID
 
 module.exports = router;

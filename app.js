@@ -4,7 +4,9 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const routes = require("./routes");
+const { port, host } = require("./config/serverConfig");
 
+const PORT = port;
 const app = express();
 
 // Middlewares
@@ -37,7 +39,7 @@ app.use((req, res) => {
 module.exports = app;
 
 // Start the server
-const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

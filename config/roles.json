@@ -1,0 +1,55 @@
+{
+  "roles": [
+    {
+      "name": "test_role",
+      "permissions": [
+        "register_user",
+        "delete_user",
+        "update_user",
+        "get_all_users",
+        "get_user_by_id",
+        "create_document",
+        "upload_document",
+        "read_document",
+        "update_document",
+        "delete_document"
+      ]
+    },
+    {
+      "name": "super_admin",
+      "permissions": [
+        "create_record",
+        "read_record",
+        "update_record",
+        "delete_record"
+      ]
+    },
+    {
+      "name": "admin",
+      "permissions": [
+        "create_record",
+        "read_record",
+        "update_record",
+        "delete_record"
+      ]
+    },
+    {
+      "name": "client_executive",
+      "permissions": [
+        "create_record",
+        "read_record",
+        "update_record",
+        "delete_record"
+      ]
+    },
+    {
+      "name": "client",
+      "permissions": [
+        "create_record",
+        "read_record",
+        "update_record",
+        "delete_record"
+      ]
+    }
+  ]
+}
