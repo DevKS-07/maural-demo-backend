@@ -19,20 +19,22 @@ router.get("/", docsController.docs_Testing);
  * - Clients can only view and upload their own documents and not others
  * */
 
-router.get("/all", docsController.getAllDocuments);
-router.get("/id/:id", docsController.getDocumentById);
-router.get("/type/:type", docsController.getDocumentByType);
+router.get("/all", docsController.getAllDocuments); // Get all documents
+router.get("/id/:id", docsController.getDocumentById); // Get document by ID
+router.get("/type/:type", docsController.getDocumentByType); // Get documents by Type
 
 ///////////////////////////////  POST ROUTES ///////////////////////////////
 
-router.post("/upload", docsController.uploadDocuments);
-router.post("/create", docsController.createDocument);
+router.post("/upload", docsController.uploadDocuments); // Upload multiple documents
+router.post("/create", docsController.createDocument); // Create a new document
 // router.post("/upload", upload.array("files", 20), docsController.uploadDocuments);
 
 ///////////////////////////////  PUT ROUTES ///////////////////////////////
-router.put("/update/:id", docsController.updateDocument);
+
+router.put("/update/:id", docsController.updateDocument); // Update a document by ID
 
 /////////////////////////////// DELETE ROUTES ///////////////////////////////
-router.delete("/delete/:id", docsController.deleteDocument);
+
+router.delete("/delete/:id", docsController.deleteDocument); // Delete a document by ID
 
 module.exports = router;

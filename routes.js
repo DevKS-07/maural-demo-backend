@@ -22,19 +22,18 @@ router.post("/login", loginUser);
 // TODO: Add a restricted_access middleware for protected routes (i.e only logged in users can access the routes)
 // TODO: Add role based access control (RBAC) middlewares (i.e. super admin, admin, client executive, employee (client), etc.)
 
-// Admin routes (Protected routes, only accessible by admin users)
-router.use("/admin", adminRoutes);
+router.use("/admin", adminRoutes); // Admin routes (Protected routes, only accessible by admin users)
 
-// Client routes (Public routes, accessible by all users)
-router.use("/client", clientRoutes);
+router.use("/client", clientRoutes); // Client routes (Protected routes, only accessible by all clients)
 
-// Docs routes
-router.use("/docs", docsRoutes);
+router.use("/docs", docsRoutes); // Docs routes
 
-// AI routes (Can be implemented later) -- Can also be implemented in the frontend instead
-router.use("/ai", aiRoutes);
+router.use("/ai", aiRoutes); // AI routes (Can be implemented later) -- Can also be implemented in the frontend instead
 
-// Login route (Open to all users; Restrict access for logged in users)
-router.post("/logout", logoutUser);
+router.post("/logout", logoutUser); // Logout route (Protected route, only accessible by logged in users)
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+//                          END OF RESTRICTED ROUTES
+//////////////////////////////////////////////////////////////////////////////////////////////
 
 module.exports = router;
