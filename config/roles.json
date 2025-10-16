@@ -9,6 +9,7 @@
         "get_all_users",
         "get_user_by_id",
         "create_document",
+        "upload_document",
         "read_document",
         "update_document",
         "delete_document"

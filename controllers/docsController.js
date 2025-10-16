@@ -2,37 +2,70 @@ const express = require("express");
 
 // Controller functions for document routes
 
-// Home route for testing
+///////////////////////////////  HOME ROUTE (Test Route) ///////////////////////////////
+
+/**
+ * Test route to check if the Docs API is working
+ * @route GET /docs/
+ * @return {string} A success message
+ * */
 exports.docs_Testing = (req, res) => {
   res.send("Docs API is working");
 };
 
-// Get all documents
+///////////////////////////////  GET ROUTES ///////////////////////////////
+
+/**
+ * Get all documents
+ * @route GET /docs/all
+ * @return {array} An array of document objects
+ * */
 exports.getAllDocuments = (req, res) => {
   // TODO: Implement logic to fetch all documents
   res.status(200).json({ message: "Get all documents" });
 };
 
-// Get a single document by ID
+/** Get a single document by ID
+ * @route GET /docs/id/:id
+ * @param {string} req.params.id The ID of the document to retrieve
+ * @return {object} The document object if found, otherwise an error message
+ * */
 exports.getDocumentById = (req, res) => {
   const { id } = req.params;
   // TODO: Implement logic to fetch a document by ID
   res.status(200).json({ message: `Get document with ID: ${id}` });
 };
 
-// Get a single document by Type (i.e. Financial, Legal, etc.)
+/** Get documents by Type
+ * @route GET /docs/type/:type
+ * @param {string} req.params.type The Type of the document to retrieve
+ * @return {object} The document object if found, otherwise an error message
+ * */
 exports.getDocumentByType = (req, res) => {
   const { type } = req.params;
   // TODO: Implement logic to fetch a document by ID
   res.status(200).json({ message: `Get document with Type: ${type}` });
 };
 
-// Create a new document
+///////////////////////////////  POST ROUTES ///////////////////////////////
+
+/**
+ * Create a new document
+ * @route POST /docs/create
+ * @param {file} req.body.file The file to be uploaded
+ * @return {object} A success message with details of created file or an error message
+ * */
 exports.createDocument = (req, res) => {
   // TODO: Implement logic to create a new document
   res.status(201).json({ message: "Document created" });
 };
 
+/**
+ * Upload multiple documents
+ * @route POST /docs/upload
+ * @param {file} req.body.files The files to be uploaded
+ * @return {object} A success message with details of uploaded files or an error message
+ * */
 exports.uploadDocuments = (req, res) => {
   console.log("File upload endpoint hit"); // Debugging line
 
@@ -62,21 +95,28 @@ exports.uploadDocuments = (req, res) => {
   });
 };
 
-// Update a document by ID
+///////////////////////////////  PUT ROUTES ///////////////////////////////
+
+/**
+ * Update a document by ID
+ * @route PUT /docs/update/:id
+ * @param {string} req.params.id The ID of the document to update
+ * @return {object} A success message with details of updated file or an error message
+ */
 exports.updateDocument = (req, res) => {
   const { id } = req.params;
   // TODO: Implement logic to update a document by ID
   res.status(200).json({ message: `Document with ID: ${id} updated` });
 };
 
-// Update a document by Type
-exports.updateDocument = (req, res) => {
-  const { type } = req.params;
-  // TODO: Implement logic to update a document by ID
-  res.status(200).json({ message: `Document with Type: ${type} updated` });
-};
+/////////////////////////////// DELETE ROUTES ///////////////////////////////
 
-// Delete a document by ID
+/**
+ * Delete a document by ID
+ * @route DELETE /docs/delete/:id
+ * @param {string} req.params.id The ID of the document to delete
+ * @return {object} A success message with details of deleted file or an error message
+ */
 exports.deleteDocument = (req, res) => {
   const { id } = req.params;
   // TODO: Implement logic to delete a document by ID

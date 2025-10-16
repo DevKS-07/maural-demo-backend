@@ -1,5 +1,9 @@
 /**
- *
- * Environment config for server (e.g., port, host)
- *
+ * Environment config for server (e.g., port, host etc.)
  *  */
+
+module.exports = {
+  port: process.env.PORT || 5000,
+  host: process.env.HOST || "localhost",
+  apiVersion: "/api/v1",
+};
