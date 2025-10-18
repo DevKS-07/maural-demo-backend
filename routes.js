@@ -5,6 +5,7 @@ const homeRoutes = require("./routes/homeRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const clientRoutes = require("./routes/clientRoutes");
 const docsRoutes = require("./routes/docsRoutes");
+const aiRoutes = require("./routes/aiRoutes");
 const { loginUser, logoutUser } = require("./controllers/userController");
 
 const router = express.Router();
