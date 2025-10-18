@@ -2,13 +2,18 @@
   "name": "maural-kms-api",
   "version": "1.0.0",
   "description": "API for Maural KMS",
-  "main": "app.js",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon server.js",
+    "test": "jest",
+    "test:unit": "jest __tests__/unit",
+    "test:integration": "jest __tests__/integration",
+    "coverage": "jest --coverage"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@prisma/client": "^6.17.1",
     "axios": "^1.12.2",
     "bcryptjs": "^3.0.2",
     "body-parser": "^2.2.0",
@@ -16,17 +21,18 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
-    "express-validator": "^7.2.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
     "pg": "^8.16.3",
-    "sequelize": "^6.37.7"
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "jest": "^30.2.0",
     "nodemon": "^3.1.10",
+    "prisma": "^6.17.1",
+    "superagent": "^10.2.3",
     "supertest": "^7.1.4"
   }
 }

@@ -21,3 +21,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# jest
+/coverage/
+
+# IDEs and editors
+.vscode/

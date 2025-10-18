@@ -10,7 +10,7 @@ const express = require("express");
  * @return {string} A success message
  * */
 exports.docs_Testing = (req, res) => {
-  res.send("Docs API is working");
+  res.status(200).send("Docs API is working");
 };
 
 ///////////////////////////////  GET ROUTES ///////////////////////////////
