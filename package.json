@@ -14,6 +14,7 @@
   "license": "ISC",
   "dependencies": {
     "@prisma/client": "^6.17.1",
+    "@supabase/supabase-js": "^2.76.0",
     "axios": "^1.12.2",
     "bcryptjs": "^3.0.2",
     "body-parser": "^2.2.0",
@@ -32,6 +33,7 @@
     "jest": "^30.2.0",
     "nodemon": "^3.1.10",
     "prisma": "^6.17.1",
+    "supabase": "^2.51.0",
     "superagent": "^10.2.3",
     "supertest": "^7.1.4"
   }
