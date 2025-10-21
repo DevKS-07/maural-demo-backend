@@ -5,6 +5,7 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const routes = require("./routes");
 
+
 const app = express();
 
 // Middlewares
@@ -15,6 +16,7 @@ app.use(morgan("combined")); // for logging HTTP requests
 
 // Routes
 app.use("/", routes); // Use the routes defined in routes.js
+
 
 // #######################################################
 // ############# 404 & Error Handling Routes #############
