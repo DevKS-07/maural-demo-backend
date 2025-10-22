@@ -6,12 +6,15 @@ const adminRoutes = require("./routes/adminRoutes");
 const clientRoutes = require("./routes/clientRoutes");
 const docsRoutes = require("./routes/docsRoutes");
 const aiRoutes = require("./routes/aiRoutes");
+const uploadRoutes = require("./routes/uploadRoutes")
 const { loginUser, logoutUser } = require("./controllers/userController");
 
 const router = express.Router();
 
 // Home route
 router.use("/", homeRoutes);
+
+router.use("/upload", uploadRoutes);
 
 // Login route (Open to all users; Restrict access for logged in users)
 router.post("/login", loginUser);

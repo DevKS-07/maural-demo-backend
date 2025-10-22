@@ -27,3 +27,5 @@ next-env.d.ts
 
 # IDEs and editors
 .vscode/
+
+/generated/prisma

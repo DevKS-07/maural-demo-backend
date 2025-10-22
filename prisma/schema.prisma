@@ -1,0 +1,129 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ActivityType {
+  activity_id   BigInt         @id @unique @default(autoincrement())
+  activity_name String?
+  Activity_Log  Activity_Log[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Activity_Log {
+  log_id            BigInt       @id @unique @default(autoincrement())
+  user_id           BigInt
+  file_id           BigInt
+  activity_type     BigInt
+  activity_datetime DateTime     @default(now()) @db.Timestamp(6)
+  ActivityType      ActivityType @relation(fields: [activity_type], references: [activity_id], onDelete: SetNull)
+  File              File         @relation(fields: [file_id], references: [file_id], onDelete: NoAction, onUpdate: NoAction)
+  User              User         @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Client {
+  client_id          BigInt    @id @default(autoincrement())
+  client_name        String
+  industry           String?
+  founded            DateTime? @db.Date
+  key_contacts       BigInt?
+  company_location   String?
+  organization_chart String?
+  gpt_types          String?
+  User               User[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Comment {
+  id         BigInt   @id @default(autoincrement())
+  user_id    BigInt
+  file_id    BigInt
+  comment    String?
+  created_at DateTime @db.Timestamp(6)
+  File       File     @relation(fields: [file_id], references: [file_id], onDelete: Cascade)
+  User       User     @relation(fields: [user_id], references: [user_id], onDelete: SetNull)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ExternalSystem {
+  extsys_id    BigInt  @id @default(autoincrement())
+  sys_name     String?
+  type         String?
+  auth_method  String?
+  document_url String?
+  description  String?
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model File {
+  file_id      BigInt         @id @default(autoincrement())
+  file_name    String
+  file_size    Float
+  folder_id    BigInt?
+  file_source  String
+  Activity_Log Activity_Log[]
+  Comment      Comment[]
+  Folder       Folder?        @relation(fields: [folder_id], references: [folder_id], onDelete: Cascade)
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Folder {
+  folder_id          BigInt   @id @default(autoincrement())
+  parentfolder_id    BigInt?
+  folder_name        String
+  folder_description String?
+  File               File[]
+  Folder             Folder?  @relation("FolderToFolder", fields: [parentfolder_id], references: [folder_id], onDelete: Cascade)
+  other_Folder       Folder[] @relation("FolderToFolder")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Permission {
+  permission_id BigInt  @id @default(autoincrement())
+  read_perm     Boolean @default(true)
+  write_perm    Boolean @default(true)
+  delete_perm   Boolean @default(false)
+  Role          Role[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Role {
+  role_id       BigInt     @id @unique @default(autoincrement())
+  role_name     String
+  permission_id BigInt
+  Permission    Permission @relation(fields: [permission_id], references: [permission_id], onDelete: SetNull)
+  User          User[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model User {
+  user_id      BigInt         @id @unique @default(autoincrement())
+  client_id    BigInt
+  role_id      BigInt?
+  first_name   String
+  last_name    String
+  email        String
+  phone        String?
+  gender       String?
+  status       String?
+  last_login   DateTime?      @db.Timestamp(6)
+  Activity_Log Activity_Log[]
+  Comment      Comment[]
+  Client       Client         @relation(fields: [client_id], references: [client_id], onDelete: SetNull)
+  Role         Role?          @relation(fields: [role_id], references: [role_id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model mock_data {
+  id         Int     @id
+  first_name String? @db.VarChar(50)
+  email      String? @db.VarChar(50)
+  gender     String? @db.VarChar(50)
+}
