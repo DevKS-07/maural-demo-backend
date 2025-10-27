@@ -1,8 +1,13 @@
 const express = require("express");
-
+const { createClient } = require('@supabase/supabase-js')
+require('dotenv').config();
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 // Controller functions for document routes
 
 ///////////////////////////////  HOME ROUTE (Test Route) ///////////////////////////////
+
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
 /**
  * Test route to check if the Docs API is working
@@ -20,9 +25,10 @@ exports.docs_Testing = (req, res) => {
  * @route GET /docs/all
  * @return {array} An array of document objects
  * */
-exports.getAllDocuments = (req, res) => {
+exports.getAllDocuments = async (req, res) => {
   // TODO: Implement logic to fetch all documents
-  res.status(200).json({ message: "Get all documents" });
+  const { data: documents, error } = await supabase.storage.from('file_storage').list();
+  res.status(200).json(documents);
 };
 
 /** Get a single document by ID
@@ -30,10 +36,15 @@ exports.getAllDocuments = (req, res) => {
  * @param {string} req.params.id The ID of the document to retrieve
  * @return {object} The document object if found, otherwise an error message
  * */
-exports.getDocumentById = (req, res) => {
+exports.getDocumentById = async(req, res) => {
   const { id } = req.params;
-  // TODO: Implement logic to fetch a document by ID
-  res.status(200).json({ message: `Get document with ID: ${id}` });
+  prisma.file.findUnique({
+    where: {
+      file_id: id,
+    },
+  }).then((file_meta) => {
+  res.status(200).json( file_meta);
+  });
 };
 
 /** Get documents by Type
