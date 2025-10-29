@@ -3,7 +3,7 @@
  *  */
 
 module.exports = {
-  port: process.env.PORT || 5000,
+  port: process.env.PORT || 5002,
   host: process.env.HOST || "localhost",
   apiVersion: "/api/v1",
 };
