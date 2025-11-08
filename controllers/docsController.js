@@ -2,6 +2,7 @@ const express = require("express");
 const { createClient } = require('@supabase/supabase-js')
 require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');
+const e = require("express");
 const prisma = new PrismaClient();
 // Controller functions for document routes
 
@@ -27,7 +28,8 @@ exports.docs_Testing = (req, res) => {
  * */
 exports.getAllDocuments = async (req, res) => {
   // TODO: Implement logic to fetch all documents
-  const { data: documents, error } = await supabase.storage.from('file_storage').list();
+ // const { data: documents, error } = await supabase.storage.from('file_storage').list();
+  const documents = await prisma.file.findMany();
   res.status(200).json(documents);
 };
 
@@ -36,15 +38,17 @@ exports.getAllDocuments = async (req, res) => {
  * @param {string} req.params.id The ID of the document to retrieve
  * @return {object} The document object if found, otherwise an error message
  * */
-exports.getDocumentById = async(req, res) => {
+exports.getDocumentById = async (req, res) => {
   const { id } = req.params;
-  prisma.file.findUnique({
+
+  const file_meta = await prisma.file.findUnique({
     where: {
       file_id: id,
     },
-  }).then((file_meta) => {
-  res.status(200).json( file_meta);
   });
+
+  const file = await supabase.storage.from('file_storage').info(file_meta.file_source.split('/')[1]);
+  res.status(200).json({ "metadata": file_meta, "file": file  });
 };
 
 /** Get documents by Type
@@ -56,6 +60,19 @@ exports.getDocumentByType = (req, res) => {
   const { type } = req.params;
   // TODO: Implement logic to fetch a document by ID
   res.status(200).json({ message: `Get document with Type: ${type}` });
+};
+
+exports.getFileById = async (req, res) => {
+  const { id } = req.params;
+  const file = await prisma.file.findUnique({
+    where: {
+      file_id: id,
+    },
+  });
+
+  const file_url = await supabase.storage.from('file_storage').createSignedUrl(file.file_source.split('/')[1], 300);
+  res.status(200).json({ "file_url": file_url.data.signedUrl, "name": file.file_name, "extension": file.file_name.split('.')[1]  }); 
+
 };
 
 ///////////////////////////////  POST ROUTES ///////////////////////////////
