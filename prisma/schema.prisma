@@ -19,10 +19,11 @@ model ActivityType {
 model Activity_Log {
   log_id            BigInt       @id @unique @default(autoincrement())
   user_id           BigInt
-  file_id           String
+  file_id           String       @db.Uuid
   activity_type     BigInt
   activity_datetime DateTime     @default(now()) @db.Timestamp(6)
   ActivityType      ActivityType @relation(fields: [activity_type], references: [activity_id], onDelete: SetNull)
+  File              File         @relation(fields: [file_id], references: [file_id], onDelete: SetNull)
   User              User         @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 }
 
@@ -62,11 +63,13 @@ model ExternalSystem {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 /// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
 model File {
-  file_name   String
-  file_size   Float
-  folder_id   BigInt?
-  file_source String
-  file_id     String @id  @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  file_name    String
+  file_size    Float
+  folder_id    BigInt?
+  file_source  String
+  file_id      String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  file_type    String?
+  Activity_Log Activity_Log[]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.

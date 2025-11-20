@@ -22,6 +22,7 @@ router.get("/", docsController.docs_Testing);
 router.get("/all", docsController.getAllDocuments); // Get all documents
 router.get("/id/:id", docsController.getDocumentById); // Get document by ID
 router.get("/type/:type", docsController.getDocumentByType); // Get documents by Type
+router.get("/file/:id", docsController.getFileById); // Get file by ID
 
 ///////////////////////////////  POST ROUTES ///////////////////////////////
 

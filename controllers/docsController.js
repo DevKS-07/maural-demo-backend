@@ -4,9 +4,14 @@ require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');
 const e = require("express");
 const prisma = new PrismaClient();
+const fs =  require("fs");
+const path = require("path");
+const { Blob } = require("buffer");
 // Controller functions for document routes
 
 ///////////////////////////////  HOME ROUTE (Test Route) ///////////////////////////////
+
+
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
@@ -70,8 +75,26 @@ exports.getFileById = async (req, res) => {
     },
   });
 
-  const file_url = await supabase.storage.from('file_storage').createSignedUrl(file.file_source.split('/')[1], 300);
-  res.status(200).json({ "file_url": file_url.data.signedUrl, "name": file.file_name, "extension": file.file_name.split('.')[1]  }); 
+
+
+const { data, error } = await supabase.storage
+    .from("file_storage")
+    .download(file.file_name);
+
+   console.log(data);
+
+ if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+ if (!data) {
+      return res.status(404).json({ error: "File not found" });
+    }
+  
+
+  const filePath = path.join("uploads", file.file_name);
+ fs.writeFileSync(filePath, Buffer.from(await data.arrayBuffer()));
+
+  res.status(200).json({ file: file, });
 
 };
 
@@ -137,6 +160,15 @@ exports.updateDocument = (req, res) => {
   res.status(200).json({ message: `Document with ID: ${id} updated` });
 };
 
+
+
+
+
+
+
+
+
+
 /////////////////////////////// DELETE ROUTES ///////////////////////////////
 
 /**
@@ -145,8 +177,17 @@ exports.updateDocument = (req, res) => {
  * @param {string} req.params.id The ID of the document to delete
  * @return {object} A success message with details of deleted file or an error message
  */
-exports.deleteDocument = (req, res) => {
+exports.deleteDocument = async (req, res) => {
   const { id } = req.params;
   // TODO: Implement logic to delete a document by ID
+  const gone = await prisma.file.delete({
+    where: {
+      file_id: id,
+    },
+  });
+
+  supabase.storage.from('file_storage').remove(gone.file_name);
+
+  console.log('Deleted file metadata from database:', gone);
   res.status(200).json({ message: `Document with ID: ${id} deleted` });
 };

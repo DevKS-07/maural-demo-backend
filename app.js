@@ -4,6 +4,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const routes = require("./routes");
+const path = require("path");
 
 
 const app = express();
@@ -17,6 +18,7 @@ app.use(morgan("combined")); // for logging HTTP requests
 // Routes
 app.use("/", routes); // Use the routes defined in routes.js
 
+app.use("/files", express.static( "uploads"));
 
 // #######################################################
 // ############# 404 & Error Handling Routes #############

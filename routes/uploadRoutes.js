@@ -17,10 +17,9 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANO
 // Upload file using standard upload
 async function uploadFile(file) {
   const { data, error } = await supabase.storage.from('file_storage').upload(file.originalname, file)
-  if (error) {
-    console.log(error)
-  } else {
-    console.log(data)
+    console.log('File uploaded to Supabase Storage:', data);
+ if (error) {
+    return error;
   }
 
  const stored = await prisma.file.create({
@@ -29,22 +28,25 @@ async function uploadFile(file) {
       file_name: file.originalname,
       file_size: file.size,
       file_source: data.fullPath,
+      file_type: file.category,
     }})
   
-console.log('File metadata stored in database:', stored);
+  console.log('File metadata stored in database:', stored);
 
 }
 
 
-
 router.post('/', upload.any() ,(req, res) => {
   req.files.map(async file =>{
+    console.log(file);
     await uploadFile(file);
+    
   })
 
   res.status(200).json({
     message: 'Files uploaded locally with original extensions',
   });
+
 });
 
 module.exports = router;
