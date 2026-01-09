@@ -4,19 +4,29 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const routes = require("./routes");
-
+const cookieParser = require("cookie-parser");
+const session = require("express-session");
 
 const app = express();
 
 // Middlewares
+app.use(express.json()); // for parsing application/json
 app.use(helmet()); // for setting various HTTP headers for app security
 app.use(cors()); // Enable CORS for all routes
-app.use(bodyParser.json()); // for parsing application/json
+app.use(cookieParser()); // for parsing cookies
 app.use(morgan("combined")); // for logging HTTP requests
 
-// Routes
-app.use("/", routes); // Use the routes defined in routes.js
+// Use a session to keep track of client IDs (if needed)
+app.use(
+  session({
+    secret: Math.random().toString(36).substring(2),
+    resave: false,
+    saveUninitialized: true,
+  })
+);
 
+// Routes
+app.use("/api", routes); // Use the routes defined in routes.js
 
 // #######################################################
 // ############# 404 & Error Handling Routes #############

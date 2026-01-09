@@ -7,8 +7,8 @@ const clientRoutes = require("./routes/clientRoutes");
 const docsRoutes = require("./routes/docsRoutes");
 const aiRoutes = require("./routes/aiRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
-const externalApiRoutes = require("./routes/externalApiRoutes");
-const { loginUser, logoutUser } = require("./controllers/userController");
+const integrations = require("./routes/integrations");
+const { loginUser, logoutUser } = require("./controllers/user.controller");
 
 const router = express.Router();
 
@@ -35,7 +35,7 @@ router.use("/docs", docsRoutes); // Docs routes
 
 router.use("/ai", aiRoutes); // AI routes (Can be implemented later) -- Can also be implemented in the frontend instead
 
-router.use("/external-api", require(externalApiRoutes)); // External API routes (Protected routes, only accessible by logged in users)
+router.use("/integrations", integrations); // External API routes (Protected routes, only accessible by logged in users)
 
 router.post("/logout", logoutUser); // Logout route (Protected route, only accessible by logged in users)
 

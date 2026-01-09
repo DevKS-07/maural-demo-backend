@@ -66,7 +66,7 @@ model File {
   file_size   Float
   folder_id   BigInt?
   file_source String
-  file_id     String @id  @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  file_id     String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -121,4 +121,15 @@ model mock_data {
   first_name String? @db.VarChar(50)
   email      String? @db.VarChar(50)
   gender     String? @db.VarChar(50)
+}
+
+model HubspotToken {
+  user_id       Int       @id
+  access_token  String
+  refresh_token String
+  expires_at    DateTime
+  created_at    DateTime? @default(now())
+  updated_at    DateTime?
+
+  @@map("hubspot_tokens")
 }
