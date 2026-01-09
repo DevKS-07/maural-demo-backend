@@ -16,6 +16,7 @@ yarn-error.log*
 
 # env files
 .env*
+.env.*.local
 
 
 # typescript
@@ -29,3 +30,6 @@ next-env.d.ts
 .vscode/
 
 /generated/prisma
+
+# HubSpot config file
+hubspot.config.yml
