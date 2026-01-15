@@ -68,9 +68,172 @@ const getHubSpotCallback = async (req, res) => {
   }
 };
 
+/**
+ * Handle logica after successful connection to HubSpot
+ * @param {*} req
+ * @param {*} res
+ */
+const connectionSuccessHandler = (req, res) => {
+  const user_id = req.session.user_id;
+  console.log(`User: ${user_id}`);
+
+  const token = prisma.hubspotToken.findUnique({
+    where: { user_id: user_id },
+  });
+  console.log(`Token: ${token}`);
+
+  console.log(`HubSpot Integration Successful!`);
+  res.redirect("http://localhost:3000/hubspot"); // Redirecting to frontend HubSpot Dashboard page
+};
+
+/**
+ * Check if the logged-in user has connected their HubSpot account
+ * @param {*} req
+ * @param {*} res
+ * @returns true/false based on connection status
+ */
+const getHubSpotStatus = async (req, res) => {
+  try {
+    const user_id = req.session.user_id;
+
+    if (!user_id) {
+      return res.status(200).json({ connected: false });
+    }
+
+    const token = await prisma.hubspotToken.findUnique({
+      where: { user_id },
+    });
+
+    return res.status(200).json({
+      connected: Boolean(token),
+    });
+  } catch (error) {
+    console.error("HubSpot status error:", error);
+    return res.status(500).json({
+      connected: false,
+      error: "Failed to check HubSpot connection status",
+    });
+  }
+};
+
+/**
+ * Get contacts from HubSpot for the logged-in user
+ * @param {*} req
+ * @param {*} res
+ */
+const getHubSpotContacts = async (req, res) => {
+  // TODO: Fetch contacts from HubSpot API using stored access token
+
+  // Get user_id from session
+  const user_id = req.session.user_id;
+  // Get Access Token from DB using user_id
+  const tokenRecord = await getTokenRecord(user_id);
+
+  try {
+    // Make API request to HubSpot to fetch contacts
+    if (tokenRecord.access_token) {
+      const fetchContactsRes = await axios.get(
+        `https://api.hubapi.com/crm/v3/objects/contacts?limit=50`,
+        {
+          headers: {
+            Authorization: `Bearer ${tokenRecord.access_token}`,
+          },
+        }
+      );
+      // Return contacts data as JSON response
+      res.status(200).json(fetchContactsRes.data);
+    } else {
+      // No access token found
+      res.status(400).send("No access token found for user");
+    }
+  } catch (error) {
+    // Handle errors appropriately
+    res.status(500).send("Error fetching contacts");
+  }
+};
+
+/**
+ * Get carts data from HubSpot for logged-in user
+ * @param {*} req
+ * @param {*} res
+ */
+const getHubSpotCarts = async (req, res) => {
+  // TODO: Fetch contacts from HubSpot API using stored access token
+
+  // Get user_id from session
+  const user_id = req.session.user_id;
+
+  // Get Access Token from DB using user_id
+  const tokenRecord = await getTokenRecord(user_id);
+
+  try {
+    // Make API request to HubSpot to fetch contacts
+    if (tokenRecord.access_token) {
+      const fetchCartsRes = await axios.get(
+        `https://api.hubapi.com/crm/v3/objects/carts?limit=50`,
+        {
+          headers: {
+            Authorization: `Bearer ${tokenRecord.access_token}`,
+          },
+        }
+      );
+      // Return contacts data as JSON response
+      res.status(200).json(fetchCartsRes.data);
+    } else {
+      // No access token found
+      res.status(400).send("No access token found for user");
+    }
+  } catch (error) {
+    // Handle errors appropriately
+    res.status(500).send("Error fetching contacts");
+  }
+};
+
+/**
+ * Get Companies data from HubSpot for logged-in user
+ * @param {*} req
+ * @param {*} res
+ */
+const getHubSpotCompanies = async (req, res) => {
+  // TODO: Fetch contacts from HubSpot API using stored access token
+
+  // Get user_id from session
+  const user_id = req.session.user_id;
+
+  // Get Access Token from DB using user_id
+  const tokenRecord = await getTokenRecord(user_id);
+
+  try {
+    // Make API request to HubSpot to fetch contacts
+    if (tokenRecord.access_token) {
+      const fetchCompaniesRes = await axios.get(
+        `https://api.hubapi.com/crm/v3/objects/companies?limit=50`,
+        {
+          headers: {
+            Authorization: `Bearer ${tokenRecord.access_token}`,
+          },
+        }
+      );
+      // Return contacts data as JSON response
+      res.status(200).json(fetchCompaniesRes.data);
+    } else {
+      // No access token found
+      res.status(400).send("No access token found for user");
+    }
+  } catch (error) {
+    // Handle errors appropriately
+    res.status(500).send("Error fetching contacts");
+  }
+};
+
 module.exports = {
   installHubSpot,
   getHubSpotCallback,
+  getHubSpotStatus,
+  connectionSuccessHandler,
+  getHubSpotContacts,
+  getHubSpotCarts,
+  getHubSpotCompanies,
 };
 
 // ##################### Utility Functions #####################
@@ -148,4 +311,39 @@ const refreshHubSpotToken = async (refreshToken) => {
   );
 
   return response.data;
+};
+
+/**
+ * Get the token record for a specific user
+ * @param {*} user_id user ID
+ * @returns The token record from the database
+ */
+const getTokenRecord = async (user_id) => {
+  return await prisma.hubspotToken.findUnique({
+    where: { user_id: user_id },
+  });
+};
+
+const checkAndRefreshToken = async (user_id) => {
+  const tokenRecord = await getTokenRecord(user_id);
+  if (!tokenRecord) {
+    throw new Error("No token record found for user");
+  }
+  const now = new Date();
+  if (now >= tokenRecord.expires_at) {
+    console.log("> Access token has expired. Refreshing...");
+    const newTokens = await refreshHubSpotToken(tokenRecord.refresh_token);
+    const expires_at = new Date(Date.now() + newTokens.expires_in * 1000);
+    await prisma.hubspotToken.update({
+      where: { user_id: user_id },
+      data: {
+        access_token: newTokens.access_token,
+        refresh_token: newTokens.refresh_token,
+        expires_at: expires_at,
+      },
+    });
+    return newTokens.access_token;
+  } else {
+    return tokenRecord.access_token;
+  }
 };
