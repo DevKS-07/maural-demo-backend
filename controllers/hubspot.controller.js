@@ -8,6 +8,10 @@ const CLIENT_ID = process.env.HUBSPOT_CLIENT_ID;
 const CLIENT_SECRET = process.env.HUBSPOT_CLIENT_SECRET;
 const REDIRECT_URI = process.env.HUBSPOT_REDIRECT_URI;
 
+// TODO: Adjust scopes as needed
+// TODO: Implement refresh token logic
+// TODO: Fetch more data from HubSpot APIs as needed
+
 let SCOPES = ["crm.objects.contacts.read"];
 if (process.env.SCOPE) {
   SCOPES = process.env.SCOPE.split(/ |, ?|%20/).join(" ");
@@ -122,8 +126,6 @@ const getHubSpotStatus = async (req, res) => {
  * @param {*} res
  */
 const getHubSpotContacts = async (req, res) => {
-  // TODO: Fetch contacts from HubSpot API using stored access token
-
   // Get user_id from session
   const user_id = req.session.user_id;
   // Get Access Token from DB using user_id
@@ -158,8 +160,6 @@ const getHubSpotContacts = async (req, res) => {
  * @param {*} res
  */
 const getHubSpotCarts = async (req, res) => {
-  // TODO: Fetch contacts from HubSpot API using stored access token
-
   // Get user_id from session
   const user_id = req.session.user_id;
 
@@ -195,8 +195,6 @@ const getHubSpotCarts = async (req, res) => {
  * @param {*} res
  */
 const getHubSpotCompanies = async (req, res) => {
-  // TODO: Fetch contacts from HubSpot API using stored access token
-
   // Get user_id from session
   const user_id = req.session.user_id;
 
