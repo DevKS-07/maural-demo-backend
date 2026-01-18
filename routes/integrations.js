@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const hubspotRoutes = require("./hubspotRoutes");
+const quickbooksRoutes = require("./quickbooksRoutes");
 
 // External API Routes
 router.get("/", (req, res) => {
@@ -9,5 +10,7 @@ router.get("/", (req, res) => {
 });
 
 router.use("/hubspot", hubspotRoutes);
+
+router.use("/quickbooks", quickbooksRoutes);
 
 module.exports = router;
