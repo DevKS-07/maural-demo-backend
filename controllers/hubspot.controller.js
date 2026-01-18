@@ -23,19 +23,13 @@ if (process.env.SCOPE) {
  * @param {*} res
  */
 const installHubSpot = (req, res) => {
-  console.log(" ");
-  console.log("=== Initiating OAuth 2.0 flow with HubSpot ===");
-  console.log(" ");
-  // Create the authorization URL
   const authUrl =
     "https://app.hubspot.com/oauth/authorize" +
-    `?client_id=${encodeURIComponent(CLIENT_ID)}` + // app's client ID
-    `&scope=${encodeURIComponent(SCOPES)}` + // scopes being requested by the app
-    `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`; // where to send the user after the consent page
+    `?client_id=${encodeURIComponent(CLIENT_ID)}` +
+    `&scope=${encodeURIComponent(SCOPES)}` +
+    `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
 
-  console.log("===> Step 1: Redirecting user to your app's OAuth URL");
   res.redirect(authUrl);
-  console.log("===> Step 2: User is being prompted for consent by HubSpot");
 };
 
 /**
@@ -43,11 +37,8 @@ const installHubSpot = (req, res) => {
  * @param {*} req
  * @param {*} res
  */
-const getHubSpotCallback = async (req, res) => {
-  console.log("===> Step 3: Handling the request sent by the server");
-
+const callbackHandler = async (req, res) => {
   if (req.query.code) {
-    console.log("> Received an authorization token");
     const authCodeProof = {
       grant_type: "authorization_code",
       client_id: CLIENT_ID,
@@ -64,16 +55,14 @@ const getHubSpotCallback = async (req, res) => {
       res.status(500).send("Error during token exchange. Please try again.");
     }
 
-    // Storing user_id in session for future use
     req.session.user_id = tokenData.user_id;
 
-    // Once the tokens have been retrieved to redirect to success page i.e. HubSpot Dashboard page
     res.redirect("/api/integrations/hubspot/success");
   }
 };
 
 /**
- * Handle logica after successful connection to HubSpot
+ * Handle logic after successful connection to HubSpot
  * @param {*} req
  * @param {*} res
  */
@@ -96,7 +85,7 @@ const connectionSuccessHandler = (req, res) => {
  * @param {*} res
  * @returns true/false based on connection status
  */
-const getHubSpotStatus = async (req, res) => {
+const connectionStatus = async (req, res) => {
   try {
     const user_id = req.session.user_id;
 
@@ -125,14 +114,11 @@ const getHubSpotStatus = async (req, res) => {
  * @param {*} req
  * @param {*} res
  */
-const getHubSpotContacts = async (req, res) => {
-  // Get user_id from session
+const getContacts = async (req, res) => {
   const user_id = req.session.user_id;
-  // Get Access Token from DB using user_id
   const tokenRecord = await getTokenRecord(user_id);
 
   try {
-    // Make API request to HubSpot to fetch contacts
     if (tokenRecord.access_token) {
       const fetchContactsRes = await axios.get(
         `https://api.hubapi.com/crm/v3/objects/contacts?limit=50`,
@@ -142,14 +128,11 @@ const getHubSpotContacts = async (req, res) => {
           },
         }
       );
-      // Return contacts data as JSON response
       res.status(200).json(fetchContactsRes.data);
     } else {
-      // No access token found
       res.status(400).send("No access token found for user");
     }
   } catch (error) {
-    // Handle errors appropriately
     res.status(500).send("Error fetching contacts");
   }
 };
@@ -159,15 +142,11 @@ const getHubSpotContacts = async (req, res) => {
  * @param {*} req
  * @param {*} res
  */
-const getHubSpotCarts = async (req, res) => {
-  // Get user_id from session
+const getCarts = async (req, res) => {
   const user_id = req.session.user_id;
-
-  // Get Access Token from DB using user_id
   const tokenRecord = await getTokenRecord(user_id);
 
   try {
-    // Make API request to HubSpot to fetch contacts
     if (tokenRecord.access_token) {
       const fetchCartsRes = await axios.get(
         `https://api.hubapi.com/crm/v3/objects/carts?limit=50`,
@@ -177,14 +156,11 @@ const getHubSpotCarts = async (req, res) => {
           },
         }
       );
-      // Return contacts data as JSON response
       res.status(200).json(fetchCartsRes.data);
     } else {
-      // No access token found
       res.status(400).send("No access token found for user");
     }
   } catch (error) {
-    // Handle errors appropriately
     res.status(500).send("Error fetching contacts");
   }
 };
@@ -194,15 +170,11 @@ const getHubSpotCarts = async (req, res) => {
  * @param {*} req
  * @param {*} res
  */
-const getHubSpotCompanies = async (req, res) => {
-  // Get user_id from session
+const getCompanies = async (req, res) => {
   const user_id = req.session.user_id;
-
-  // Get Access Token from DB using user_id
   const tokenRecord = await getTokenRecord(user_id);
 
   try {
-    // Make API request to HubSpot to fetch contacts
     if (tokenRecord.access_token) {
       const fetchCompaniesRes = await axios.get(
         `https://api.hubapi.com/crm/v3/objects/companies?limit=50`,
@@ -212,29 +184,27 @@ const getHubSpotCompanies = async (req, res) => {
           },
         }
       );
-      // Return contacts data as JSON response
       res.status(200).json(fetchCompaniesRes.data);
     } else {
-      // No access token found
       res.status(400).send("No access token found for user");
     }
   } catch (error) {
-    // Handle errors appropriately
     res.status(500).send("Error fetching contacts");
   }
 };
 
 module.exports = {
   installHubSpot,
-  getHubSpotCallback,
-  getHubSpotStatus,
+  callbackHandler,
+  connectionStatus,
   connectionSuccessHandler,
-  getHubSpotContacts,
-  getHubSpotCarts,
-  getHubSpotCompanies,
+  getContacts,
+  getCarts,
+  getCompanies,
 };
 
 // ##################### Utility Functions #####################
+
 /**
  * Exchange the authorization code for an access token and refresh token
  * @param {*} userId
@@ -250,21 +220,17 @@ const exchangeAuthCodeForTokens = async (exchangeProof) => {
     const { access_token, refresh_token, expires_in } = response.data;
     const expires_at = new Date(Date.now() + expires_in * 1000);
 
-    console.log("       > Received an access token and refresh token");
-
     // Fetching user metadata using access token
     const userMetadataRes = await axios.get(
       `https://api.hubapi.com/oauth/v1/access-tokens/${access_token}`
     );
-    // extracting hubspot_user_id from response
-    console.log(userMetadataRes.data);
 
     const user_id = userMetadataRes.data.hub_id;
 
-    console.log(
-      `User ${user_id} Tokens:\n
-      \nAccess Token: ${access_token} \nRefresh Token: ${refresh_token}\nExpires In: ${expires_in} seconds`
-    );
+    // console.log(
+    //   `User ${user_id} Tokens:\n
+    //   \nAccess Token: ${access_token} \nRefresh Token: ${refresh_token}\nExpires In: ${expires_in} seconds`
+    // );
 
     // Storing these tokens in DB
     await prisma.hubspotToken.upsert({

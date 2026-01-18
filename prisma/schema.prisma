@@ -135,3 +135,15 @@ model HubspotToken {
 
   @@map("hubspot_tokens")
 }
+
+model QuickbooksToken {
+  user_id                    BigInt @id
+  access_token               String
+  refresh_token              String
+  token_type                 String
+  expires_in                 Int
+  x_refresh_token_expires_in Int
+  realmId                    BigInt
+
+  @@map("quickbooks_tokens")
+}

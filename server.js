@@ -9,5 +9,5 @@ const HOST = process.env.HOST || "localhost";
 
 /* Start the server */
 app.listen(PORT, () => {
-  console.log(`Server is running at http://${HOST}:${PORT}`);
+  console.log(`Server is running at http://${HOST}:${PORT}/api`);
 });

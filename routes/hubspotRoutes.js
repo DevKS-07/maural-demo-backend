@@ -13,17 +13,17 @@ router.get("/", (req, res) => {
 
 router.get("/install", hubspotController.installHubSpot);
 
-router.get("/oauth-callback", hubspotController.getHubSpotCallback);
+router.get("/oauth-callback", hubspotController.callbackHandler);
 
 router.get("/success", hubspotController.connectionSuccessHandler);
 
-router.get("/status", hubspotController.getHubSpotStatus);
+router.get("/status", hubspotController.connectionStatus);
 
-router.get("/contacts", hubspotController.getHubSpotContacts);
+router.get("/contacts", hubspotController.getContacts);
 
-router.get("/carts", hubspotController.getHubSpotCarts);
+router.get("/carts", hubspotController.getCarts);
 
-router.get("/companies", hubspotController.getHubSpotCompanies);
+router.get("/companies", hubspotController.getCompanies);
 
 /**
  *
