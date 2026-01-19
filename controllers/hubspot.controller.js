@@ -126,11 +126,11 @@ const getContacts = async (req, res) => {
           headers: {
             Authorization: `Bearer ${tokenRecord.access_token}`,
           },
-        }
+        },
       );
       res.status(200).json(fetchContactsRes.data);
     } else {
-      res.status(400).send("No access token found for user");
+      res.status(400).send("No access token found for the user");
     }
   } catch (error) {
     res.status(500).send("Error fetching contacts");
@@ -154,7 +154,7 @@ const getCarts = async (req, res) => {
           headers: {
             Authorization: `Bearer ${tokenRecord.access_token}`,
           },
-        }
+        },
       );
       res.status(200).json(fetchCartsRes.data);
     } else {
@@ -182,7 +182,7 @@ const getCompanies = async (req, res) => {
           headers: {
             Authorization: `Bearer ${tokenRecord.access_token}`,
           },
-        }
+        },
       );
       res.status(200).json(fetchCompaniesRes.data);
     } else {
@@ -214,7 +214,7 @@ const exchangeAuthCodeForTokens = async (exchangeProof) => {
   try {
     const response = await axios.post(
       "https://api.hubapi.com/oauth/v1/token",
-      new URLSearchParams(exchangeProof)
+      new URLSearchParams(exchangeProof),
     );
 
     const { access_token, refresh_token, expires_in } = response.data;
@@ -222,7 +222,7 @@ const exchangeAuthCodeForTokens = async (exchangeProof) => {
 
     // Fetching user metadata using access token
     const userMetadataRes = await axios.get(
-      `https://api.hubapi.com/oauth/v1/access-tokens/${access_token}`
+      `https://api.hubapi.com/oauth/v1/access-tokens/${access_token}`,
     );
 
     const user_id = userMetadataRes.data.hub_id;
@@ -251,7 +251,7 @@ const exchangeAuthCodeForTokens = async (exchangeProof) => {
     return { user_id, access_token };
   } catch (err) {
     console.error(
-      `> Error exchanging ${exchangeProof.grant_type} for access token`
+      `> Error exchanging ${exchangeProof.grant_type} for access token`,
     );
     console.error(err);
     return err;
@@ -271,7 +271,7 @@ const refreshHubSpotToken = async (refreshToken) => {
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
       refresh_token: refreshToken,
-    })
+    }),
   );
 
   return response.data;
