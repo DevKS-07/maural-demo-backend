@@ -5,14 +5,13 @@ const prisma = new PrismaClient();
 const fs = require("fs");
 const path = require("path");
 const { Blob } = require("buffer");
-// Controller functions for document routes
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
 ///////////////////////////////  HOME ROUTE (Test Route) ///////////////////////////////
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 /**
  * Test route to check if the Docs API is working

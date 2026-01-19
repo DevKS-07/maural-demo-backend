@@ -1,4 +1,17 @@
-const docsController = require("../../controllers/docsController");
+jest.mock("@supabase/supabase-js", () => ({
+  createClient: jest.fn(() => ({})),
+}));
+
+jest.mock("@prisma/client", () => {
+  const mPrisma = {
+    file: {
+      findMany: jest.fn().mockResolvedValue([{ id: 1, name: "test.pdf" }]),
+    },
+  };
+  return { PrismaClient: jest.fn(() => mPrisma) };
+});
+
+const docsController = require("../../controllers/docs.controller.js");
 
 const createRes = () => {
   const res = {};
@@ -21,13 +34,13 @@ describe("Docs Controller - Unit Tests", () => {
   });
 
   // Test for getAllDocuments function
-  test("getAllDocuments should return 200 and a message", () => {
+  test("getAllDocuments should return 200 and documents array", async () => {
     const req = {};
     const res = createRes();
 
-    docsController.getAllDocuments(req, res);
+    await docsController.getAllDocuments(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ message: "Get all documents" });
+    expect(res.json).toHaveBeenCalledWith([{ id: 1, name: "test.pdf" }]);
   });
 });

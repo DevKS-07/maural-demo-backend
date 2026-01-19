@@ -35,6 +35,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "baseline-browser-mapping": "^2.9.15",
     "jest": "^30.2.0",
     "nodemon": "^3.1.10",
     "prisma": "^6.18.0",
