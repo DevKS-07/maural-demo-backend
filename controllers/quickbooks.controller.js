@@ -5,6 +5,8 @@ const { createClient } = require("@supabase/supabase-js");
 const prisma = new PrismaClient();
 const OAuthClient = require("intuit-oauth");
 const crypto = require("crypto");
+const uuid = require("uuid");
+// import { v4 as uuidv4 } from 'uuid';
 
 const CLIENT_ID = process.env.QUICKBOOKS_CLIENT_ID;
 const CLIENT_SECRET = process.env.QUICKBOOKS_CLIENT_SECRET;
@@ -14,10 +16,10 @@ const baseURL = process.env.QUICKBOOKS_BASE_URL;
 
 let oauthClient = null;
 
+// ################## OAuth Flow Handlers ##################
+
 /**
  * Install QuickBooks - Initiates the OAuth 2.0 flow
- * @param {*} req
- * @param {*} res
  */
 const installQuickbooks = async (req, res) => {
   if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
@@ -74,8 +76,6 @@ const installQuickbooks = async (req, res) => {
 
 /**
  * Handle OAuth callback from QuickBooks
- * @param {*} req
- * @param {*} res
  */
 const callbackHandler = async (req, res) => {
   const { code, state, realmId } = req.query;
@@ -143,16 +143,16 @@ const callbackHandler = async (req, res) => {
       },
     });
 
-    // TODO: Redirect to /success route
     res.redirect("/api/integrations/quickbooks/success");
-
-    // res.status(200).json(authResponse.json);
   } catch (error) {
     console.error("Error fetching access tokens: ", error);
     res.status(500).send("Error connecting QuickBooks. Please try again.");
   }
 };
 
+/**
+ * Handle logic after successful connection to QuickBooks
+ */
 const connectionSuccessHandler = async (req, res) => {
   const user_id = req.session.user_id;
   console.log(`User (realmId): ${user_id}`);
@@ -164,7 +164,10 @@ const connectionSuccessHandler = async (req, res) => {
     console.log(`Token: ${token}`);
 
     console.log(`QuickBooks Integration Successful!`);
+
+    // TODO: Redirect to frontend /quickbooks  route
     // res.redirect("http://localhost:3000/quickbooks"); // Redirecting to frontend QuickBooks Dashboard page
+
     res.redirect("/api/integrations/quickbooks/status");
   } catch (error) {
     console.error(error);
@@ -175,8 +178,7 @@ const connectionSuccessHandler = async (req, res) => {
 /**
  * Check if the user is connected to Quickbooks or not.
  * @param {*} req
- * @param {*} res
- * @returns true if the user is connected, otherwise false.
+ * @param {*} res sends {connected: true} if the user is connected, otherwise {connected: false}.
  */
 const connectionStatus = async (req, res) => {
   try {
@@ -202,9 +204,256 @@ const connectionStatus = async (req, res) => {
   }
 };
 
+/**
+ * Refresh the access-token
+ */
+const refreshAccessToken = (req, res) => {
+  oauthClient
+    .refresh()
+    .then(function (authResponse) {
+      console.log(
+        `\n The Refresh Token is  ${JSON.stringify(authResponse.json)}`,
+      );
+      oauth2_token_json = JSON.stringify(authResponse.json, null, 2);
+      // TODO: update access_token in db.
+      res.send(oauth2_token_json);
+    })
+    .catch(function (e) {
+      console.error(e);
+    });
+};
+
+// ################## Data Handlers ##################
+/**
+ * Retrieves the details of all accounts in a Company.
+ */
+const getAccounts = async (req, res) => {
+  const user_id = req.session.user_id;
+  const tokenRecord = await getTokenRecord(user_id);
+  const { access_token, realmId } = tokenRecord;
+
+  try {
+    if (!realmId) {
+      return res.status(401).send("No realmId found!");
+    }
+
+    if (!access_token) {
+      return res.status(401).send("No access token found for the user");
+    }
+
+    // ! TODO: Set "maxresults 100" in the query later on.
+    const query = encodeURIComponent("select * from Account");
+    const reqUrl = `${baseURL}/v3/company/${realmId}/query?query=${query}&minorversion=75`;
+
+    const response = await axios.get(reqUrl, {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        Accept: "application/json",
+      },
+    });
+
+    res.status(200).json(response.data);
+  } catch (error) {
+    console.error(error.response?.data || error.message);
+    res.status(500).send("Error fetching Account");
+  }
+};
+
+/**
+ * Retrieves the details of a specific account in a Company using its ID.
+ */
+const getAccountById = async (req, res) => {
+  const { accountId } = req.params;
+  const user_id = req.session.user_id;
+  const tokenRecord = await getTokenRecord(user_id);
+  const { access_token, realmId } = tokenRecord;
+
+  try {
+    if (!accountId) {
+      return res.status(400).send("Account ID is required");
+    }
+
+    if (!realmId) {
+      return res.status(401).send("No realmId found!");
+    }
+
+    if (!access_token) {
+      return res.status(401).send("No access token found for the user");
+    }
+
+    const reqUrl = `${baseURL}/v3/company/${realmId}/account/${accountId}?minorversion=75`;
+
+    const response = await axios.get(reqUrl, {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        Accept: "application/json",
+      },
+    });
+
+    res.status(200).json(response.data);
+  } catch (error) {
+    console.error(error.response?.data || error.message);
+
+    if (error.response?.status === 404) {
+      return res.status(404).send("Account not found in QuickBooks");
+    }
+
+    res.status(500).send("Error fetching Account");
+  }
+};
+
+/**
+ * Retrieves the details of the CompanyInfo object.
+ */
+const getCompanyInfo = async (req, res) => {
+  const user_id = req.session.user_id;
+  const tokenRecord = await getTokenRecord(user_id);
+  const { access_token, realmId } = tokenRecord;
+
+  try {
+    if (!realmId) {
+      return res.status(401).send("No realmId found!");
+    }
+
+    if (!access_token) {
+      return res.status(401).send("No access token found for the user");
+    }
+
+    const reqUrl = `${baseURL}/v3/company/${realmId}/companyinfo/${realmId}`;
+
+    const response = await axios.get(reqUrl, {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        Accept: "application/json",
+      },
+    });
+
+    res.status(200).json(response.data);
+  } catch (error) {
+    console.error(error.response?.data || error.message);
+    res.status(500).send("Error fetching Company Info");
+  }
+};
+
+/**
+ * Retrieves all Bills in a Company (paged).
+ */
+const getBills = async (req, res) => {
+  const user_id = req.session.user_id;
+  const tokenRecord = await getTokenRecord(user_id);
+  const { access_token, realmId } = tokenRecord;
+
+  try {
+    if (!realmId) {
+      return res.status(401).send("No realmId found!");
+    }
+
+    if (!access_token) {
+      return res.status(401).send("No access token found for the user");
+    }
+
+    let startPosition = 1;
+    const maxResults = 1000;
+    let allBills = [];
+    let hasMore = true;
+
+    while (hasMore) {
+      const query = encodeURIComponent(
+        `select * from Bill STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`,
+      );
+
+      const reqUrl = `${baseURL}/v3/company/${realmId}/query?query=${query}&minorversion=75`;
+
+      const response = await axios.get(reqUrl, {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+          Accept: "application/json",
+        },
+      });
+
+      const bills = response.data?.QueryResponse?.Bill || [];
+      allBills.push(...bills);
+
+      if (bills.length < maxResults) {
+        hasMore = false;
+      } else {
+        startPosition += maxResults;
+        await new Promise((r) => setTimeout(r, 300)); // throttle
+      }
+    }
+
+    res.status(200).json(allBills);
+  } catch (error) {
+    console.error(error.response?.data || error.message);
+    res.status(500).send("Error fetching Bills");
+  }
+};
+
+/**
+ * Retrieves the details of a specific Bill in a Company using its ID.
+ */
+const getBillById = async (req, res) => {
+  const { billId } = req.params;
+  const user_id = req.session.user_id;
+  const tokenRecord = await getTokenRecord(user_id);
+  const { access_token, realmId } = tokenRecord;
+
+  try {
+    if (!billId) {
+      return res.status(400).send("Bill ID is required");
+    }
+
+    if (!realmId) {
+      return res.status(401).send("No realmId found!");
+    }
+
+    if (!access_token) {
+      return res.status(401).send("No access token found for the user");
+    }
+
+    const reqUrl = `${baseURL}/v3/company/${realmId}/bill/${billId}?minorversion=75`;
+
+    const response = await axios.get(reqUrl, {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        Accept: "application/json",
+      },
+    });
+
+    res.status(200).json(response.data);
+  } catch (error) {
+    console.error(error.response?.data || error.message);
+
+    if (error.response?.status === 404) {
+      return res.status(404).send("Bill not found in QuickBooks");
+    }
+
+    res.status(500).send("Error fetching Bill");
+  }
+};
+
 module.exports = {
   installQuickbooks,
   callbackHandler,
   connectionSuccessHandler,
   connectionStatus,
+  refreshAccessToken,
+  getAccounts,
+  getAccountById,
+  getCompanyInfo,
+  getBills,
+  getBillById,
+};
+
+// ##################### Utility Functions #####################
+
+/**
+ * Get the token data for a specific user
+ * @param {*} user_id user ID
+ * @returns The token record from the database
+ */
+const getTokenRecord = async (user_id) => {
+  return await prisma.quickbooksToken.findUnique({
+    where: { user_id: user_id },
+  });
 };
