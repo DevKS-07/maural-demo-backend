@@ -1,6 +1,4 @@
-const express = require("express");
 const bcrypt = require("bcryptjs");
-const e = require("express");
 
 // const jwt = require("jsonwebtoken");
 // const JWT_SECRET = "your_jwt_secret_key"; // Use env variable in production

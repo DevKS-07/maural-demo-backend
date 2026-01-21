@@ -30,7 +30,7 @@ app.use(
     secret: Math.random().toString(36).substring(2),
     resave: false,
     saveUninitialized: true,
-  })
+  }),
 );
 
 // Routes

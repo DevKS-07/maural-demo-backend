@@ -34,6 +34,10 @@ router.get("/invoices/:invoiceId", quickbooksController.getInvoiceById); // Get 
 
 router.get("/invoices/:invoiceId/pdf", quickbooksController.getInvoicePdf); // Get a specific invoice as a pdf (Try these id's for testing: 178, 180, 177, 174)
 
+router.get("/tax-agency", quickbooksController.getTaxAgency); // Get all TaxAgency Objects in a Company (paged).
+
+router.get("/tax-agency/:taxId", quickbooksController.getTaxAgencyById); // Get a specefic TaxAgency Object (try 1, 2)
+
 /**
  **Online Accounting API endpoint format
  * Basic format: <OPERATION> <baseURL>/v3/company/<id>/<entity>?<minorversion>
@@ -48,7 +52,7 @@ router.get("/invoices/:invoiceId/pdf", quickbooksController.getInvoicePdf); // G
  *
  * @Transactional_Data
  ** Bill: All, ById
- ** Invoice
+ ** Invoice: All, ById, ByIdPdf
  * Payment
  * JournalEntry
  *
@@ -63,7 +67,7 @@ router.get("/invoices/:invoiceId/pdf", quickbooksController.getInvoicePdf); // G
  * BalanceSheet
  * ProfitAndLoss
  * CashFlow
- * TaxAgency
+ ** TaxAgency
  *
  ** Other
  * Estimate

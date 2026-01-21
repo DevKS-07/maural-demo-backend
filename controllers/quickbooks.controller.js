@@ -1,12 +1,9 @@
 const axios = require("axios");
-const express = require("express");
 const { PrismaClient } = require("@prisma/client");
-const { createClient } = require("@supabase/supabase-js");
 const prisma = new PrismaClient();
 const OAuthClient = require("intuit-oauth");
 const crypto = require("crypto");
 const uuid = require("uuid");
-// import { v4 as uuidv4 } from 'uuid';
 
 const CLIENT_ID = process.env.QUICKBOOKS_CLIENT_ID;
 const CLIENT_SECRET = process.env.QUICKBOOKS_CLIENT_SECRET;
@@ -487,7 +484,7 @@ const getInvoices = async (req, res) => {
 };
 
 /**
- * Retrieves the details of a specific Bill in a Company using its ID.
+ * Retrieves the details of a specific Invoice using its ID.
  */
 const getInvoiceById = async (req, res) => {
   const { invoiceId } = req.params;
@@ -584,6 +581,103 @@ const getInvoicePdf = async (req, res) => {
   }
 };
 
+/**
+ * Retrieves all TaxAgency Objects in a Company (paged).
+ */
+const getTaxAgency = async (req, res) => {
+  const user_id = req.session.user_id;
+  const tokenRecord = await getTokenRecord(user_id);
+  const { access_token, realmId } = tokenRecord;
+
+  try {
+    if (!realmId) {
+      return res.status(401).send("No realmId found!");
+    }
+
+    if (!access_token) {
+      return res.status(401).send("No access token found for the user");
+    }
+
+    let startPosition = 1;
+    const maxResults = 1000;
+    let allTaxObjects = [];
+    let hasMore = true;
+
+    while (hasMore) {
+      const query = encodeURIComponent(
+        `select * from TaxAgency STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`,
+      );
+
+      const reqUrl = `${baseURL}/v3/company/${realmId}/query?query=${query}&minorversion=75`;
+
+      const response = await axios.get(reqUrl, {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+          Accept: "application/json",
+        },
+      });
+
+      const taxObjects = response.data?.QueryResponse?.TaxAgency || [];
+      allTaxObjects.push(...taxObjects);
+
+      if (taxObjects.length < maxResults) {
+        hasMore = false;
+      } else {
+        startPosition += maxResults;
+        await new Promise((r) => setTimeout(r, 300)); // throttle
+      }
+    }
+
+    res.status(200).json(allTaxObjects);
+  } catch (error) {
+    console.error(error.response?.data || error.message);
+    res.status(500).send("Error fetching TaxAgency");
+  }
+};
+
+/**
+ * Retrieves the details of a specific Invoice using its ID.
+ */
+const getTaxAgencyById = async (req, res) => {
+  const { taxId } = req.params;
+  const user_id = req.session.user_id;
+  const tokenRecord = await getTokenRecord(user_id);
+  const { access_token, realmId } = tokenRecord;
+
+  try {
+    if (!taxId) {
+      return res.status(400).send("TaxAgency ID is required");
+    }
+
+    if (!realmId) {
+      return res.status(401).send("No realmId found!");
+    }
+
+    if (!access_token) {
+      return res.status(401).send("No access token found for the user");
+    }
+
+    const reqUrl = `${baseURL}/v3/company/${realmId}/taxagency/${taxId}?minorversion=75`;
+
+    const response = await axios.get(reqUrl, {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        Accept: "application/json",
+      },
+    });
+
+    res.status(200).json(response.data);
+  } catch (error) {
+    console.error(error.response?.data || error.message);
+
+    if (error.response?.status === 404) {
+      return res.status(404).send("TaxAgency not found in QuickBooks");
+    }
+
+    res.status(500).send("Error fetching TaxAgency");
+  }
+};
+
 module.exports = {
   installQuickbooks,
   callbackHandler,
@@ -598,6 +692,8 @@ module.exports = {
   getInvoices,
   getInvoiceById,
   getInvoicePdf,
+  getTaxAgency,
+  getTaxAgencyById,
 };
 
 // ##################### Utility Functions #####################

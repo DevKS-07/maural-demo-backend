@@ -1,13 +1,13 @@
 const express = require("express");
 
 // Import route modules
-const homeRoutes = require("./routes/homeRoutes");
-const adminRoutes = require("./routes/adminRoutes");
-const clientRoutes = require("./routes/clientRoutes");
-const docsRoutes = require("./routes/docsRoutes");
-const aiRoutes = require("./routes/aiRoutes");
-const uploadRoutes = require("./routes/uploadRoutes");
-const integrations = require("./routes/integrations");
+const homeRoutes = require("./routes/home.routes");
+const adminRoutes = require("./routes/admin.routes");
+const clientRoutes = require("./routes/client.routes");
+const docsRoutes = require("./routes/docs.routes");
+const aiRoutes = require("./routes/ai.routes");
+const uploadRoutes = require("./routes/upload.routes");
+const integrations = require("./routes/integrations.routes");
 const { loginUser, logoutUser } = require("./controllers/user.controller");
 
 const router = express.Router();

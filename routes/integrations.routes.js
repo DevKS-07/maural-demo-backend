@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
 
-const hubspotRoutes = require("./hubspotRoutes");
-const quickbooksRoutes = require("./quickbooksRoutes");
+const hubspotRoutes = require("./hubspot.routes");
+const quickbooksRoutes = require("./quickbooks.routes");
 
 // External API Routes
 router.get("/", (req, res) => {
