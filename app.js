@@ -10,6 +10,7 @@ const session = require("express-session");
 const app = express();
 
 // Middlewares
+app.use(express.urlencoded({ extended: true }));
 app.use(express.json()); // for parsing application/json
 app.use(helmet()); // for setting various HTTP headers for app security
 app.use(cors()); // Enable CORS for all routes
