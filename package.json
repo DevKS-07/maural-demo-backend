@@ -14,7 +14,7 @@
   "license": "ISC",
   "dependencies": {
     "@prisma/client": "^6.18.0",
-    "@supabase/supabase-js": "^2.76.0",
+    "@supabase/supabase-js": "^2.91.0",
     "axios": "^1.12.2",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
@@ -30,7 +30,8 @@
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
     "pg": "^8.16.3",
-    "postgres": "^3.4.8",
+    "supabase": "^2.72.8",
+    "tar": "^7.5.5",
     "tslib": "^2.8.1",
     "uuid": "^13.0.0",
     "zod": "^4.1.12"
@@ -40,7 +41,6 @@
     "jest": "^30.2.0",
     "nodemon": "^3.1.10",
     "prisma": "^6.18.0",
-    "supabase": "^2.51.0",
     "superagent": "^10.2.3",
     "supertest": "^7.1.4"
   }
