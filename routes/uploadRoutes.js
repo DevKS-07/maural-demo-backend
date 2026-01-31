@@ -1,10 +1,14 @@
-require('dotenv').config();
+
 const express = require('express');
 const router = express.Router();
 const { createClient } = require('@supabase/supabase-js')
 const multer = require('multer')
 const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const { PrismaPg } = require('@prisma/adapter-pg');
+const adapter = new PrismaPg({ 
+  connectionString: process.env.DATABASE_URL 
+});
+const prisma = new PrismaClient({ adapter });
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage });

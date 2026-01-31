@@ -3,8 +3,6 @@ const router = express.Router();
 
 const quickbooksController = require("../controllers/quickbooks.controller");
 
-const { PrismaClient } = require("@prisma/client");
-const prisma = new PrismaClient();
 
 // External API Routes
 router.get("/", (req, res) => {

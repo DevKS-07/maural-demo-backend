@@ -1,13 +1,17 @@
-const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
-const { PrismaClient } = require("@prisma/client");
-const prisma = new PrismaClient();
-const fs = require("fs");
-const path = require("path");
-const { Blob } = require("buffer");
+const { PrismaClient } = require('@prisma/client');
+const { PrismaPg } = require('@prisma/adapter-pg');
+
+const adapter = new PrismaPg({ 
+  connectionString: process.env.DATABASE_URL 
+});
+const prisma = new PrismaClient({ adapter });
+
+
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
 
 ///////////////////////////////  HOME ROUTE (Test Route) ///////////////////////////////
 
@@ -31,7 +35,7 @@ exports.docs_Testing = (req, res) => {
  * */
 exports.getAllDocuments = async (req, res) => {
   // TODO: Implement logic to fetch all documents
-  // const { data: documents, error } = await supabase.storage.from('file_storage').list();
+
   const documents = await prisma.file.findMany();
   res.status(200).json(documents);
 };

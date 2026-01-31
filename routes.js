@@ -10,6 +10,7 @@ const uploadRoutes = require("./routes/uploadRoutes");
 const integrations = require("./routes/integrations");
 const { loginUser, logoutUser } = require("./controllers/user.controller");
 
+
 const router = express.Router();
 
 // Home route

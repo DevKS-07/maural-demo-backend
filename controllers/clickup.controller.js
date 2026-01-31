@@ -1,6 +1,3 @@
-const axios = require("axios");
-const express = require("express");
-const { createClient } = require("@supabase/supabase-js");
 const { PrismaClient } = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
 
@@ -8,16 +5,18 @@ const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL 
 });
 const prisma = new PrismaClient({ adapter });
+const axios = require("axios");
+const e = require("express");
 
-const CLIENT_ID = process.env.HUBSPOT_CLIENT_ID;
-const CLIENT_SECRET = process.env.HUBSPOT_CLIENT_SECRET;
-const REDIRECT_URI = process.env.HUBSPOT_REDIRECT_URI;
+const CLIENT_ID = process.env.CLICKUP_CLIENT_ID;
+const CLIENT_SECRET = process.env.CLICKUP_CLIENT_SECRET;
+const REDIRECT_URI = process.env.CLICKUP_REDIRECT_URI;
 
 // TODO: Adjust scopes as needed
 // TODO: Implement refresh token logic
-// TODO: Fetch more data from HubSpot APIs as needed
+// TODO: Fetch more data from ClickUp APIs as needed
 
-let SCOPES = ["crm.objects.contacts.read"];
+let SCOPES = ["read", "write"];
 if (process.env.SCOPE) {
   SCOPES = process.env.SCOPE.split(/ |, ?|%20/).join(" ");
 }
@@ -27,9 +26,9 @@ if (process.env.SCOPE) {
  * @param {*} req
  * @param {*} res
  */
-const installHubSpot = (req, res) => {
+const installClickUp = (req, res) => {
   const authUrl =
-    "https://app.hubspot.com/oauth/authorize" +
+    "https://app.clickup.com/api" +
     `?client_id=${encodeURIComponent(CLIENT_ID)}` +
     `&scope=${encodeURIComponent(SCOPES)}` +
     `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
@@ -37,11 +36,6 @@ const installHubSpot = (req, res) => {
   res.redirect(authUrl);
 };
 
-/**
- * Receive the authorization code from the OAuth 2.0 Server, and process it based on the query parameters that are passed
- * @param {*} req
- * @param {*} res
- */
 const callbackHandler = async (req, res) => {
   if (req.query.code) {
     const authCodeProof = {
@@ -62,12 +56,12 @@ const callbackHandler = async (req, res) => {
 
     req.session.user_id = tokenData.user_id;
 
-    res.redirect("/api/integrations/hubspot/success");
+    res.redirect("/api/integrations/clickup/success");
   }
 };
 
 /**
- * Handle logic after successful connection to HubSpot
+ * Handle logic after successful connection to ClickUp
  * @param {*} req
  * @param {*} res
  */
@@ -75,17 +69,17 @@ const connectionSuccessHandler = (req, res) => {
   const user_id = req.session.user_id;
   console.log(`User: ${user_id}`);
 
-  const token = prisma.hubspotToken.findUnique({
-    where: { user_id: user_id },
-  });
-  console.log(`Token: ${token}`);
+ // const token = prisma.clickupToken.findUnique({
+  //  where: { user_id: user_id },
+  //});
+  // console.log(`Token: ${token}`);
 
-  console.log(`HubSpot Integration Successful!`);
-  res.redirect("http://localhost:3000/hubspot"); // Redirecting to frontend HubSpot Dashboard page
+  console.log(`ClickUp Integration Successful!`);
+  res.redirect("http://localhost:3000/integrations");
 };
 
 /**
- * Check if the logged-in user has connected their HubSpot account
+ * Check if the logged-in user has connected their ClickUp account
  * @param {*} req
  * @param {*} res
  * @returns true/false based on connection status
@@ -98,7 +92,7 @@ const connectionStatus = async (req, res) => {
       return res.status(200).json({ connected: false });
     }
 
-    const token = await prisma.hubspotToken.findUnique({
+    const token = await prisma.clickupToken.findUnique({
       where: { user_id },
     });
 
@@ -106,106 +100,20 @@ const connectionStatus = async (req, res) => {
       connected: Boolean(token),
     });
   } catch (error) {
-    console.error("HubSpot status error:", error);
+    console.error("ClickUp status error:", error);
     return res.status(500).json({
       connected: false,
-      error: "Failed to check HubSpot connection status",
+      error: "Failed to check ClickUp connection status",
     });
   }
 };
 
-/**
- * Get contacts from HubSpot for the logged-in user
- * @param {*} req
- * @param {*} res
- */
-const getContacts = async (req, res) => {
-  const user_id = req.session.user_id;
-  const tokenRecord = await getTokenRecord(user_id);
-
-  try {
-    if (tokenRecord.access_token) {
-      const fetchContactsRes = await axios.get(
-        `https://api.hubapi.com/crm/v3/objects/contacts?limit=50`,
-        {
-          headers: {
-            Authorization: `Bearer ${tokenRecord.access_token}`,
-          },
-        },
-      );
-      res.status(200).json(fetchContactsRes.data);
-    } else {
-      res.status(400).send("No access token found for the user");
-    }
-  } catch (error) {
-    res.status(500).send("Error fetching contacts");
-  }
-};
-
-/**
- * Get carts data from HubSpot for logged-in user
- * @param {*} req
- * @param {*} res
- */
-const getCarts = async (req, res) => {
-  const user_id = req.session.user_id;
-  const tokenRecord = await getTokenRecord(user_id);
-
-  try {
-    if (tokenRecord.access_token) {
-      const fetchCartsRes = await axios.get(
-        `https://api.hubapi.com/crm/v3/objects/carts?limit=50`,
-        {
-          headers: {
-            Authorization: `Bearer ${tokenRecord.access_token}`,
-          },
-        },
-      );
-      res.status(200).json(fetchCartsRes.data);
-    } else {
-      res.status(400).send("No access token found for user");
-    }
-  } catch (error) {
-    res.status(500).send("Error fetching contacts");
-  }
-};
-
-/**
- * Get Companies data from HubSpot for logged-in user
- * @param {*} req
- * @param {*} res
- */
-const getCompanies = async (req, res) => {
-  const user_id = req.session.user_id;
-  const tokenRecord = await getTokenRecord(user_id);
-
-  try {
-    if (tokenRecord.access_token) {
-      const fetchCompaniesRes = await axios.get(
-        `https://api.hubapi.com/crm/v3/objects/companies?limit=50`,
-        {
-          headers: {
-            Authorization: `Bearer ${tokenRecord.access_token}`,
-          },
-        },
-      );
-      res.status(200).json(fetchCompaniesRes.data);
-    } else {
-      res.status(400).send("No access token found for user");
-    }
-  } catch (error) {
-    res.status(500).send("Error fetching contacts");
-  }
-};
 
 module.exports = {
-  installHubSpot,
+  installClickUp,
   callbackHandler,
-  connectionStatus,
   connectionSuccessHandler,
-  getContacts,
-  getCarts,
-  getCompanies,
+  connectionStatus,
 };
 
 // ##################### Utility Functions #####################
@@ -218,7 +126,7 @@ module.exports = {
 const exchangeAuthCodeForTokens = async (exchangeProof) => {
   try {
     const response = await axios.post(
-      "https://api.hubapi.com/oauth/v1/token",
+      "https://api.clickup.com/api/v2/oauth/token",
       new URLSearchParams(exchangeProof),
     );
 
@@ -227,10 +135,15 @@ const exchangeAuthCodeForTokens = async (exchangeProof) => {
 
     // Fetching user metadata using access token
     const userMetadataRes = await axios.get(
-      `https://api.hubapi.com/oauth/v1/access-tokens/${access_token}`,
+      `https://api.clickup.com/api/v2/user`,
+      {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+        },
+      },
     );
-
-    const user_id = userMetadataRes.data.hub_id;
+    
+    const user_id = userMetadataRes.data.user.id;
 
     // console.log(
     //   `User ${user_id} Tokens:\n
@@ -238,7 +151,8 @@ const exchangeAuthCodeForTokens = async (exchangeProof) => {
     // );
 
     // Storing these tokens in DB
-    await prisma.hubspotToken.upsert({
+    /*
+    await prisma.clickupToken.upsert({
       where: { user_id: user_id },
       create: {
         user_id: user_id,
@@ -252,6 +166,7 @@ const exchangeAuthCodeForTokens = async (exchangeProof) => {
         expires_at,
       },
     });
+    */
 
     return { user_id, access_token };
   } catch (err) {
@@ -263,14 +178,9 @@ const exchangeAuthCodeForTokens = async (exchangeProof) => {
   }
 };
 
-/**
- * Use a previously obtained refresh token to generate a new access token.
- * @param {*} refreshToken previous refresh token
- * @returns
- */
-const refreshHubSpotToken = async (refreshToken) => {
+const refreshClickUpToken = async (refreshToken) => {
   const response = await axios.post(
-    "https://api.hubapi.com/oauth/v1/token",
+    "https://api.clickup.com/api/v2/oauth/token",
     new URLSearchParams({
       grant_type: "refresh_token",
       client_id: CLIENT_ID,
@@ -288,7 +198,7 @@ const refreshHubSpotToken = async (refreshToken) => {
  * @returns The token record from the database
  */
 const getTokenRecord = async (user_id) => {
-  return await prisma.hubspotToken.findUnique({
+  return await prisma.clickupToken.findUnique({
     where: { user_id: user_id },
   });
 };
@@ -301,9 +211,9 @@ const checkAndRefreshToken = async (user_id) => {
   const now = new Date();
   if (now >= tokenRecord.expires_at) {
     console.log("> Access token has expired. Refreshing...");
-    const newTokens = await refreshHubSpotToken(tokenRecord.refresh_token);
+    const newTokens = await refreshClickUpToken(tokenRecord.refresh_token);
     const expires_at = new Date(Date.now() + newTokens.expires_in * 1000);
-    await prisma.hubspotToken.update({
+    await prisma.clickupToken.update({
       where: { user_id: user_id },
       data: {
         access_token: newTokens.access_token,
@@ -315,4 +225,5 @@ const checkAndRefreshToken = async (user_id) => {
   } else {
     return tokenRecord.access_token;
   }
-};
+};    
+

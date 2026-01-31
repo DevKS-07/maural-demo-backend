@@ -3,9 +3,6 @@ const router = express.Router();
 
 const hubspotController = require("../controllers/hubspot.controller");
 
-const { PrismaClient } = require("@prisma/client");
-const prisma = new PrismaClient();
-
 // External API Routes
 router.get("/", (req, res) => {
   res.send("This is the HubSpot API.");
