@@ -13,6 +13,9 @@ const { loginUser, logoutUser } = require("./controllers/user.controller");
 
 const router = express.Router();
 
+
+router.use(express.json()); // Middleware to parse JSON bodies
+
 // Home route
 router.use("/", homeRoutes);
 
