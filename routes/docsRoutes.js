@@ -4,7 +4,7 @@ const docsController = require("../controllers/docs.controller");
 
 const router = express.Router();
 
-const upload = multer({ dest: "uploads/" }); // Multer setup for file uploads
+multer({ storage: multer.memoryStorage() });
 
 // Home route for testing
 
