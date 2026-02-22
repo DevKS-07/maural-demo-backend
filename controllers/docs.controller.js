@@ -50,16 +50,21 @@ exports.getAllDocuments = async (req, res) => {
 
 exports.getDocumentById = async (req, res) => {
   const { id } = req.params;
+  console.log(id)
 
   const file_meta = await prisma.file.findUnique({
     where: { file_id: id },
   });
+
+  console.log(file_meta);
 
   if (!file_meta) {
     return res.status(404).send("File not found");
   }
 
   const filePath = file_meta.file_source.split("file_storage/")[1];
+
+  console.log(filePath);
 
   const { data: fileBlob, error } = await supabase.storage
     .from("file_storage")
@@ -72,13 +77,12 @@ exports.getDocumentById = async (req, res) => {
 
   const buffer = Buffer.from(await fileBlob.arrayBuffer());
 
-  // 🔥 Correct MIME type
   const mimeType = mime.lookup(file_meta.file_name) || "application/octet-stream";
 
   res.setHeader("Content-Type", mimeType);
   res.setHeader("Content-Length", buffer.length);
 
-  // 🔥 Send raw binary without Express transforming it
+  
   res.end(buffer);
 };
 

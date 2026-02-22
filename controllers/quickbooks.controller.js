@@ -438,6 +438,158 @@ const getBillById = async (req, res) => {
   }
 };
 
+// SUMMARY ENGINE UTILITIES
+// SUMMARY ENGINE UTILITIES
+const getFinancialSummary = async (req, res) => {
+  const user_id = req.session.user_id;
+  const tokenRecord = await getTokenRecord(user_id);
+  const { access_token, realmId } = tokenRecord;
+
+  try {
+    if (!realmId) {
+      return res.status(401).send("No realmId found!");
+    }
+
+    if (!access_token) {
+      return res.status(401).send("No access token found for the user");
+    }
+
+
+    // Helper to fetch a report
+    const fetchReport = async (reportName, params) => {
+      const url = `${baseURL}/v3/company/${realmId}/reports/${reportName}`;
+      const response = await axios.get(url, {
+        params,
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+          Accept: "application/json",
+        },
+      });
+      return response.data;
+    };
+
+    // Fetch ProfitAndLoss for revenue, profitability, burn rate
+    const plParams = {
+      start_date: '2025-01-01',
+      end_date: '2025-12-31',
+      accounting_method: 'Accrual',
+      minorversion: '75',
+    };
+    const plData = await fetchReport('ProfitAndLoss', plParams);
+
+    // Parse ProfitAndLoss (simplified - recurse in real code if nested deeply)
+    let totalIncome = 0;
+    let cogs = 0;
+    let netIncome = 0;
+    let totalExpenses = 0;
+    let interest = 0;
+    let taxes = 0;
+    let depreciation = 0;
+    let amortization = 0;
+
+    // Example parsing logic (adjust based on actual JSON structure)
+    const rows = plData.Rows.Row || [];
+    rows.forEach(row => {
+      if (row.Header && row.Header.ColData[0].value === 'Income') {
+        totalIncome = parseFloat(row.Summary.ColData[1].value) || 0;
+      }
+      if (row.Header && row.Header.ColData[0].value === 'Cost of Goods Sold') {
+        cogs = parseFloat(row.Summary.ColData[1].value) || 0;
+      }
+      if (row.Summary && row.Summary.ColData[0].value === 'Net Income') {
+        netIncome = parseFloat(row.Summary.ColData[1].value) || 0;
+      }
+      // Parse expenses - assume subsections for interest, taxes, etc.
+      if (row.Header && row.Header.ColData[0].value === 'Expenses') {
+        totalExpenses = parseFloat(row.Summary.ColData[1].value) || 0;
+        // Loop through expense rows for specific items (simplified)
+        row.Rows.Row.forEach(expRow => {
+          const label = expRow.ColData[0].value.toLowerCase();
+          const value = parseFloat(expRow.ColData[1].value) || 0;
+          if (label.includes('interest')) interest += value;
+          if (label.includes('tax')) taxes += value;
+          if (label.includes('depreciation')) depreciation += value;
+          if (label.includes('amortization')) amortization += value;
+        });
+      }
+    });
+
+    const grossMargin = totalIncome ? ((totalIncome - cogs) / totalIncome * 100).toFixed(2) : 0;
+    const netMargin = totalIncome ? (netIncome / totalIncome * 100).toFixed(2) : 0;
+    const ebitda = netIncome + interest + taxes + depreciation + amortization;
+    const ebitdaMargin = totalIncome ? (ebitda / totalIncome * 100).toFixed(2) : 0;
+    const monthlyBurn = totalExpenses / 12; // Average monthly expenses as burn
+
+    // Fetch BudgetVsActuals for variance
+    const bvaParams = {
+      start_date: '2025-10-01',
+      end_date: '2025-12-31',
+      accounting_method: 'Accrual',
+      minorversion: '75',
+    };
+    const bvaData = await fetchReport('BudgetVsActuals', bvaParams);
+
+    // Parse BudgetVsActuals (simplified)
+    let varianceRevenuePct = 0;
+    let varianceCOGSPct = 0;
+    let varianceGrossProfitPct = 0;
+    let varianceOperatingExpensesPct = 0;
+    let varianceNetIncomePct = 0;
+
+    const bvaRows = bvaData.Rows.Row || [];
+    bvaRows.forEach(row => {
+      const label = row.ColData[0].value.toLowerCase();
+      const variancePct = parseFloat(row.ColData[4].value) || 0; // Assume col 4 is % variance
+      if (label === 'revenue') varianceRevenuePct = variancePct;
+      if (label === 'cogs') varianceCOGSPct = variancePct;
+      if (label === 'gross profit') varianceGrossProfitPct = variancePct;
+      if (label === 'operating expenses') varianceOperatingExpensesPct = variancePct;
+      if (label === 'net income') varianceNetIncomePct = variancePct;
+    });
+
+    // Fetch BalanceSheet for cash position
+    const bsParams = {
+      date: '2025-12-31', // End of period
+      minorversion: '75',
+    };
+    const bsData = await fetchReport('BalanceSheet', bsParams);
+
+    // Parse BalanceSheet for cash
+    let cashPosition = 0;
+    const bsRows = bsData.Rows.Row || [];
+    bsRows.forEach(row => {
+      if (row.Header && row.Header.ColData[0].value.toLowerCase() === 'cash') {
+        cashPosition = parseFloat(row.Summary.ColData[1].value) || 0;
+      }
+    });
+
+    const runwayMonths = monthlyBurn ? (cashPosition / monthlyBurn).toFixed(2) : 0;
+
+    // Send raw/parsed values (no summary JSON - you can normalize further)
+    res.status(200).json({
+      totalIncome,
+      cogs,
+      grossMargin,
+      netIncome,
+      netMargin,
+      ebitda,
+      ebitdaMargin,
+      monthlyBurn,
+      varianceRevenuePct,
+      varianceCOGSPct,
+      varianceGrossProfitPct,
+      varianceOperatingExpensesPct,
+      varianceNetIncomePct,
+      cashPosition,
+      runwayMonths,
+    });
+  } catch (error) {
+    console.error(error.response?.data || error.message);
+    res.status(500).send("Error fetching financial summary");
+  }
+};
+
+
 module.exports = {
   installQuickbooks,
   callbackHandler,
@@ -449,6 +601,7 @@ module.exports = {
   getCompanyInfo,
   getBills,
   getBillById,
+  getFinancialSummary,  
 };
 
 // ##################### Utility Functions #####################
