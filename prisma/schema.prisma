@@ -19,10 +19,10 @@ model Activity_Log {
   file_id           String       @db.Uuid
   activity_type     BigInt
   activity_datetime DateTime     @default(now()) @db.Timestamp(6)
-  user_id           BigInt
-  ActivityType      ActivityType @relation(fields: [activity_type], references: [activity_id], onDelete: SetNull)
-  File              File         @relation(fields: [file_id], references: [file_id], onDelete: SetNull)
-  User              User         @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  user_id           BigInt?
+  ActivityType      ActivityType @relation(fields: [activity_type], references: [activity_id])
+  File              File         @relation(fields: [file_id], references: [file_id])
+  User              User?        @relation(fields: [user_id], references: [user_id])
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -35,17 +35,19 @@ model Client {
   company_location   String?
   organization_chart String?
   gpt_types          String?
+  storage_bucket     String    @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   User               User[]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model Comment {
   id         BigInt   @id @default(autoincrement())
-  file_id    String
+  file_id    String   @db.Uuid
   comment    String?
   created_at DateTime @db.Timestamp(6)
-  user_id    BigInt
-  User       User     @relation(fields: [user_id], references: [user_id], onDelete: SetNull)
+  user_id    BigInt?
+  File       File     @relation(fields: [file_id], references: [file_id], onDelete: Cascade)
+  User       User?    @relation(fields: [user_id], references: [user_id])
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -61,22 +63,17 @@ model ExternalSystem {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 /// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
 model File {
-  file_name    String
-  file_size    Float
-  folder_id    BigInt?
-  file_source  String
-  file_id      String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  activityLogs Activity_Log[]
-}
-
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model Folder {
-  folder_id          BigInt   @id @default(autoincrement())
-  parentfolder_id    BigInt?
-  folder_name        String
-  folder_description String?
-  Folder             Folder?  @relation("FolderToFolder", fields: [parentfolder_id], references: [folder_id], onDelete: Cascade)
-  other_Folder       Folder[] @relation("FolderToFolder")
+  file_name      String
+  file_size      Float
+  ctg_id         BigInt?
+  file_source    String
+  file_id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  file_extension String?
+  user_id        BigInt?
+  activityLogs   Activity_Log[]
+  Comment        Comment[]
+  Category       Category?      @relation(fields: [ctg_id], references: [ctg_id])
+  User           User?          @relation(fields: [user_id], references: [user_id])
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -96,7 +93,7 @@ model Role {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model User {
-  client_id    BigInt
+  client_id    BigInt?
   role_id      BigInt?
   first_name   String
   last_name    String
@@ -108,7 +105,8 @@ model User {
   user_id      BigInt         @id @unique @default(autoincrement())
   Activity_Log Activity_Log[]
   Comment      Comment[]
-  Client       Client         @relation(fields: [client_id], references: [client_id], onDelete: SetNull)
+  File         File[]
+  Client       Client?        @relation(fields: [client_id], references: [client_id], onDelete: Restrict)
   Role         Role?          @relation(fields: [role_id], references: [role_id])
 }
 
@@ -178,4 +176,20 @@ model RolePermission {
   Role          Role       @relation(fields: [role_id], references: [role_id], onDelete: Cascade)
 
   @@id([role_id, permission_id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Category {
+  ctg_id   BigInt  @id @unique @default(autoincrement())
+  ctg_name String?
+  File     File[]
+}
+
+model document_embeddings {
+  id        BigInt                @id @default(autoincrement())
+  content   String
+  metadata  Json?                 @default("{}")
+  embedding Unsupported("vector")
+
+  @@index([embedding])
 }
