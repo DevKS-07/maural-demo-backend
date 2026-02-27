@@ -4,7 +4,7 @@ const docsController = require("../controllers/docs.controller");
 
 const router = express.Router();
 
-const upload = multer({ dest: "uploads/" }); // Multer setup for file uploads
+multer({ storage: multer.memoryStorage() });
 
 // Home route for testing
 
@@ -19,7 +19,7 @@ router.get("/", docsController.docs_Testing);
  * - Clients can only view and upload their own documents and not others
  * */
 
-router.get("/", docsController.getAllDocuments); // Get all documents
+router.get("/all", docsController.getAllDocuments); // Get all documents
 router.get("/type", docsController.getDocumentByType); // Get documents by Type
 router.get("/:id", docsController.getDocumentById); // Get document by ID
 

@@ -1,6 +1,14 @@
 const axios = require("axios");
+const express = require("express");
 const { PrismaClient } = require("@prisma/client");
-const prisma = new PrismaClient();
+const { PrismaPg } = require("@prisma/adapter-pg");
+
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL,
+});
+const prisma = new PrismaClient({ adapter });
+const { createClient } = require("@supabase/supabase-js");
+
 const OAuthClient = require("intuit-oauth");
 const crypto = require("crypto");
 const uuid = require("uuid");
