@@ -6,6 +6,7 @@ const adminRoutes = require("./routes/adminRoutes");
 const clientRoutes = require("./routes/clientRoutes");
 const docsRoutes = require("./routes/docsRoutes");
 const aiRoutes = require("./routes/aiRoutes");
+const chatRoutes = require("./routes/chatRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
 const integrations = require("./routes/integrations");
 const { loginUser, logoutUser } = require("./controllers/user.controller");
@@ -16,6 +17,7 @@ const router = express.Router();
 router.use("/", homeRoutes);
 
 router.use("/upload", uploadRoutes);
+router.use("/chat", chatRoutes);
 
 // Login route (Open to all users; Restrict access for logged in users)
 router.post("/login", loginUser);

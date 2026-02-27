@@ -24,11 +24,9 @@ async function uploadFile(file) {
 
  const stored = await prisma.file.create({
     data: {
-      file_id: data.id,
       file_name: file.originalname,
       file_size: file.size,
       file_source: data.fullPath,
-      file_type: file.category,
     }})
   
   console.log('File metadata stored in database:', stored);
@@ -36,17 +34,20 @@ async function uploadFile(file) {
 }
 
 
-router.post('/', upload.any() ,(req, res) => {
-  req.files.map(async file =>{
-    console.log(file);
-    await uploadFile(file);
-    
-  })
+router.post('/', upload.any(), async (req, res) => {
+  try {
+    await Promise.all(req.files.map(async file => {
+      console.log(file);
+      await uploadFile(file);
+    }));
 
-  res.status(200).json({
-    message: 'Files uploaded locally with original extensions',
-  });
-
+    res.status(200).json({
+      message: 'Files uploaded successfully',
+    });
+  } catch (err) {
+    console.error('Upload error:', err.message);
+    res.status(500).json({ error: 'Upload failed: ' + err.message });
+  }
 });
 
 module.exports = router;

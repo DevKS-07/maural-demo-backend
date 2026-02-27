@@ -38,6 +38,7 @@ model Client {
   organization_chart String?
   gpt_types          String?
   User               User[]
+  File               File[]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -61,24 +62,25 @@ model ExternalSystem {
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
-model File {
-  file_name    String
-  file_size    Float
-  folder_id    BigInt?
-  file_source  String
-  file_id      String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  activityLogs Activity_Log[]
+model Category {
+  ctg_id   BigInt  @id @unique @default(autoincrement())
+  ctg_name String?
+  File     File[]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model Folder {
-  folder_id          BigInt   @id @default(autoincrement())
-  parentfolder_id    BigInt?
-  folder_name        String
-  folder_description String?
-  Folder             Folder?  @relation("FolderToFolder", fields: [parentfolder_id], references: [folder_id], onDelete: Cascade)
-  other_Folder       Folder[] @relation("FolderToFolder")
+model File {
+  file_id      String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  file_name    String
+  file_size    Float
+  file_source  String
+  ctg_id       BigInt?        // Document category FK → Category (e.g. legal, financial, hr)
+  client_id    BigInt?        // Which client owns this file (FK → Client)
+  user_id      BigInt?        // Which user uploaded it (FK → User)
+  activityLogs Activity_Log[]
+  Category     Category?      @relation(fields: [ctg_id], references: [ctg_id])
+  Client       Client?        @relation(fields: [client_id], references: [client_id])
+  User         User?          @relation(fields: [user_id], references: [user_id])
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -113,6 +115,7 @@ model User {
   last_login   DateTime?      @db.Timestamp(6)
   Activity_Log Activity_Log[]
   Comment      Comment[]
+  File         File[]
   Client       Client         @relation(fields: [client_id], references: [client_id], onDelete: SetNull)
   Role         Role?          @relation(fields: [role_id], references: [role_id])
 }

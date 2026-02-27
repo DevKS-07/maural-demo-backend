@@ -15,6 +15,7 @@ const { OpenAIEmbeddings } = require("@langchain/openai");
 const prisma = require("../lib/prisma");
 const pdfParse = require("pdf-parse");
 const XLSX = require("xlsx");
+const mammoth = require("mammoth");
 
 // ---------------------------------------------------------------------------
 // Supabase client (same project as the rest of the app)
@@ -77,6 +78,10 @@ async function extractText(buffer, fileName) {
         return `[Sheet: ${name}]\n${csv}`;
       }).join("\n\n");
     }
+    case "docx": {
+      const result = await mammoth.extractRawText({ buffer });
+      return sanitizeText(result.value || "");
+    }
     case "txt":
     case "md":
     case "csv":
@@ -134,8 +139,17 @@ exports.ingest = async (req, res) => {
   try {
     const supabase = getSupabase();
 
-    // 1. Fetch all files from the File table
-    const files = await prisma.file.findMany();
+    // 1. Fetch all files from the File table.
+    // Raw SQL with explicit columns avoids SELECT * failures caused by any
+    // Prisma-schema / live-DB column mismatches during schema evolution.
+    const files = await prisma.$queryRaw`
+      SELECT file_id::text AS file_id,
+             file_name,
+             file_source,
+             client_id,
+             ctg_id
+      FROM   "File"
+    `;
 
     if (files.length === 0) {
       return res.status(200).json({ message: "No files found in the database to ingest.", ingested: 0 });
@@ -163,13 +177,16 @@ exports.ingest = async (req, res) => {
         // 5. Embed all chunks in one batch call
         const vectors = await embedBatch(chunks.map((c) => c.content));
 
-        // 6. Prepare rows for document_embeddings
+        // 6. Prepare rows for document_embeddings.
+        // client_id enables the RAG service to scope retrieval to a specific client.
+        // ctg_id enables filtering by document category (FK → Category table).
         const rows = chunks.map((chunk, i) => ({
           content: chunk.content,
           metadata: {
             file_id: file.file_id,
             file_name: file.file_name,
-            folder_id: file.folder_id ? Number(file.folder_id) : null,
+            client_id: file.client_id ? Number(file.client_id) : null,
+            ctg_id: file.ctg_id ? Number(file.ctg_id) : null,
             chunk_index: chunk.chunkIndex,
           },
           embedding: vectors[i],

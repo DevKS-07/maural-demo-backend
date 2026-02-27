@@ -8,9 +8,17 @@
  *   - table: document_embeddings (id, content, metadata jsonb, embedding vector(1536))
  *   - function: match_documents(query_embedding, match_count, filter)
  *
- * Folder-scoped retrieval:
- *   Pass folderIds as an array of folder IDs to restrict retrieval to those folders.
- *   Pass "all" (or omit) to search across all ingested documents.
+ * Client-scoped retrieval:
+ *   Every File belongs to a Client via client_id. Every ingested chunk carries
+ *   client_id in its metadata. Pass a clientId (or array of clientIds) to restrict
+ *   the vector search to only that client's documents.
+ *   Pass "all" (or omit) to search across ALL clients' documents (admin use).
+ *
+ *   When clientIds is provided the RPC filter enforces the scope at the DB level
+ *   (single client). For multiple clients the RPC fetches a larger result set and
+ *   JavaScript post-filters to keep only the relevant clients' chunks.
+ *
+ *   ctg_id can be used to further narrow results to a specific document category.
  */
 
 const { OpenAIEmbeddings } = require("@langchain/openai");
@@ -50,34 +58,87 @@ function getEmbeddings() {
 // ---------------------------------------------------------------------------
 
 /**
- * Retrieve the top-K most relevant document chunks from Supabase pgvector.
+ * Normalise the clientIds argument into a plain array of numbers, or null.
+ * null means "all clients" (admin / unrestricted search).
  *
- * clientIds is accepted (matches the frontend contract) but currently used
- * as a best-effort filter on `metadata->folder_id`. If the ingested documents
- * don't carry a matching folder_id the search falls back to all documents.
+ * @param {number|number[]|string|"all"|null|undefined} raw
+ * @returns {number[]|null}
+ */
+function normaliseClientIds(raw) {
+  if (!raw || raw === "all") return null;
+  const arr = Array.isArray(raw) ? raw : [raw];
+  const nums = arr.map(Number).filter((n) => !isNaN(n) && n > 0);
+  return nums.length > 0 ? nums : null;
+}
+
+/**
+ * Retrieve the top-K most relevant document chunks from Supabase pgvector,
+ * scoped to the specified client(s).
  *
- * @param {string} query
- * @param {number[]|"all"} clientIds
- * @param {number} topK
+ * Each ingested chunk stores { client_id, ctg_id, file_id, file_name }
+ * in its metadata. This function uses client_id to enforce document isolation
+ * between clients.
+ *
+ * @param {string}                    query      - User question to embed
+ * @param {number|number[]|"all"}     clientIds  - Restrict to these client IDs, or "all"
+ * @param {number}                    topK       - Number of chunks to return
  * @returns {Promise<Array<{content:string, metadata:object, similarity:number}>>}
  */
-async function retrieveDocuments(query, _clientIds, topK = 15) {
+async function retrieveDocuments(query, clientIds, topK = 15) {
   const supabase = getSupabase();
   const embeddings = getEmbeddings();
 
-  // Fetch all file names from the File table so the model always knows
-  // what documents exist, regardless of vector similarity scores.
-  const allFiles = await prisma.file.findMany({
-    select: { file_id: true, file_name: true },
-  });
+  // Normalise → [1, 2, 3] or null
+  const clientIdList = normaliseClientIds(clientIds);
+
+  // -------------------------------------------------------------------------
+  // Build the list of files the model should know about (scoped to client).
+  // We use raw SQL because the Prisma schema may not yet be migrated to the
+  // live DB — explicit column names avoids SELECT * failures.
+  // -------------------------------------------------------------------------
+  let allFiles;
+  try {
+    if (clientIdList) {
+      // Only files belonging to the requested client(s)
+      allFiles = await prisma.$queryRaw`
+        SELECT file_id::text AS file_id, file_name
+        FROM   "File"
+        WHERE  client_id = ANY(${clientIdList}::bigint[])
+      `;
+    } else {
+      // Admin / no filter — return all files
+      allFiles = await prisma.$queryRaw`
+        SELECT file_id::text AS file_id, file_name FROM "File"
+      `;
+    }
+  } catch {
+    // Fallback if client_id column doesn't exist yet (pre-migration)
+    allFiles = await prisma.$queryRaw`
+      SELECT file_id::text AS file_id, file_name FROM "File"
+    `;
+  }
+
+  // -------------------------------------------------------------------------
+  // Build the JSONB filter for the match_documents RPC.
+  // The RPC uses `metadata @> filter` (JSONB containment).
+  // Single-client: pass directly. Multi-client: no RPC filter — post-filter in JS.
+  // -------------------------------------------------------------------------
+  const rpcFilter =
+    clientIdList && clientIdList.length === 1
+      ? { client_id: clientIdList[0] }
+      : {};
+
+  // Fetch more rows for multi-client so post-filter still gets topK results
+  const fetchCount =
+    clientIdList && clientIdList.length > 1 ? topK * clientIdList.length : topK;
 
   // Embed the incoming query
   const queryEmbedding = await embeddings.embedQuery(query);
 
   const { data, error } = await supabase.rpc("match_documents", {
     query_embedding: queryEmbedding,
-    match_count: topK,
-    filter: {},
+    match_count: fetchCount,
+    filter: rpcFilter,
   });
 
   if (error) {
@@ -88,10 +149,19 @@ async function retrieveDocuments(query, _clientIds, topK = 15) {
     return [];
   }
 
-  const chunks = data || [];
+  let chunks = data || [];
 
-  // Guarantee at least 1 chunk per file in the knowledge base.
-  // Files whose chunks all scored outside topK would otherwise be invisible to the model.
+  // Post-filter: for multiple clients, keep only chunks belonging to those clients.
+  if (clientIdList && clientIdList.length > 1) {
+    chunks = chunks
+      .filter((c) => clientIdList.includes(Number(c.metadata?.client_id)))
+      .slice(0, topK);
+  }
+
+  // -------------------------------------------------------------------------
+  // Document coverage guarantee: every file the client owns should have at
+  // least one chunk visible to the model, even if it scored outside topK.
+  // -------------------------------------------------------------------------
   const representedFileIds = new Set(
     chunks.map((c) => c.metadata?.file_id).filter(Boolean)
   );
@@ -106,7 +176,6 @@ async function retrieveDocuments(query, _clientIds, topK = 15) {
       .limit(missingFiles.length); // 1 chunk per missing file is enough
 
     if (fallbackChunks && fallbackChunks.length > 0) {
-      // Deduplicate: one chunk per missing file
       const seen = new Set();
       for (const chunk of fallbackChunks) {
         const fid = chunk.metadata?.file_id;
@@ -118,8 +187,10 @@ async function retrieveDocuments(query, _clientIds, topK = 15) {
     }
   }
 
-  // Prepend a synthetic "document index" entry so the model always has the
-  // full list of available files, even if a file's chunks scored low.
+  // -------------------------------------------------------------------------
+  // Prepend a synthetic "document index" entry so the model always knows
+  // which files belong to this client, regardless of similarity scores.
+  // -------------------------------------------------------------------------
   const fileIndex = {
     content: `Available documents in the knowledge base:\n${allFiles
       .map((f) => `- ${f.file_name}`)
