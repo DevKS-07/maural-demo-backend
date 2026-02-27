@@ -1,11 +1,6 @@
-const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
-const { PrismaClient } = require("@prisma/client");
-const prisma = new PrismaClient();
-const fs = require("fs");
-const path = require("path");
-const { Blob } = require("buffer");
-
+const prisma = require("../lib/prisma");
+const mime = require("mime-types");
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 
@@ -31,7 +26,7 @@ exports.docs_Testing = (req, res) => {
  * */
 exports.getAllDocuments = async (req, res) => {
   // TODO: Implement logic to fetch all documents
-  // const { data: documents, error } = await supabase.storage.from('file_storage').list();
+
   const documents = await prisma.file.findMany();
   res.status(200).json(documents);
 };
@@ -41,19 +36,43 @@ exports.getAllDocuments = async (req, res) => {
  * @param {string} req.params.id The ID of the document to retrieve
  * @return {object} The document object if found, otherwise an error message
  * */
+
 exports.getDocumentById = async (req, res) => {
   const { id } = req.params;
+  console.log(id);
 
   const file_meta = await prisma.file.findUnique({
-    where: {
-      file_id: id,
-    },
+    where: { file_id: id },
   });
 
-  const file = await supabase.storage
+  console.log(file_meta);
+
+  if (!file_meta) {
+    return res.status(404).send("File not found");
+  }
+
+  const filePath = file_meta.file_source.split("file_storage/")[1];
+
+  console.log(filePath);
+
+  const { data: fileBlob, error } = await supabase.storage
     .from("file_storage")
-    .info(file_meta.file_source.split("/")[1]);
-  res.status(200).json({ metadata: file_meta, file: file });
+    .download(filePath);
+
+  if (error) {
+    console.error(error);
+    return res.status(500).send("Failed to download file");
+  }
+
+  const buffer = Buffer.from(await fileBlob.arrayBuffer());
+
+  const mimeType =
+    mime.lookup(file_meta.file_name) || "application/octet-stream";
+
+  res.setHeader("Content-Type", mimeType);
+  res.setHeader("Content-Length", buffer.length);
+
+  res.end(buffer);
 };
 
 /** Get documents by Type
@@ -67,24 +86,6 @@ exports.getDocumentByType = (req, res) => {
 
   // TODO: Implement logic to fetch a document by Type
   res.status(200).json({ message: `Get document with Type: ${type}` });
-};
-
-exports.getFileById = async (req, res) => {
-  const { id } = req.params;
-  const file = await prisma.file.findUnique({
-    where: {
-      file_id: id,
-    },
-  });
-
-  const file_url = await supabase.storage
-    .from("file_storage")
-    .createSignedUrl(file.file_source.split("/")[1], 300);
-  res.status(200).json({
-    file_url: file_url.data.signedUrl,
-    name: file.file_name,
-    extension: file.file_name.split(".")[1],
-  });
 };
 
 ///////////////////////////////  POST ROUTES ///////////////////////////////
