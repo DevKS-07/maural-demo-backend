@@ -5,8 +5,7 @@ const { createClient } = require("@supabase/supabase-js");
 const prisma = new PrismaClient();
 const OAuthClient = require("intuit-oauth");
 const crypto = require("crypto");
-const uuid = require("uuid");
-// import { v4 as uuidv4 } from 'uuid';
+
 
 const CLIENT_ID = process.env.QUICKBOOKS_CLIENT_ID;
 const CLIENT_SECRET = process.env.QUICKBOOKS_CLIENT_SECRET;
