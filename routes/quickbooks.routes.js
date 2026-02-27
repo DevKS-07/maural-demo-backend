@@ -20,6 +20,7 @@ router.get("/success", quickbooksController.connectionSuccessHandler);
 router.get("/status", quickbooksController.connectionStatus);
 
 router.get("/accounts", quickbooksController.getAccounts); // Get All accounts in a company
+
 router.get("/accounts/:accountId", quickbooksController.getAccountById); // Get a specific account (Try these id's for testing: 33, 30, 90)
 
 router.get("/company-info", quickbooksController.getCompanyInfo); // get the CompanyInfo object
@@ -38,41 +39,31 @@ router.get("/tax-agency", quickbooksController.getTaxAgency); // Get all TaxAgen
 
 router.get("/tax-agency/:taxId", quickbooksController.getTaxAgencyById); // Get a specefic TaxAgency Object (try 1, 2)
 
+router.get("/customers", quickbooksController.getCustomers); // Get All customers in a company
+
+router.get("/customers/:customerId", quickbooksController.getCustomerById); // Get a specific customer object by id (Try 61, 1, 58, 59)
+
 /**
  **Online Accounting API endpoint format
  * Basic format: <OPERATION> <baseURL>/v3/company/<id>/<entity>?<minorversion>
  */
 
 /**
- * TODO: -------- Add Routes to Fetch Data -------- *
+ ** ------------ TO BE IMPLEMENTED ------------ *
  *
- ** Ref: https://developer.intuit.com/app/developer/qbo/docs/api/accounting/most-commonly-used/account
- *
- ** Following are the most common data object types fetched from quickbooks
- *
- * @Transactional_Data
- ** Bill: All, ById
- ** Invoice: All, ById, ByIdPdf
+ * ---- Transactional_Data ----
  * Payment
  * JournalEntry
  *
- * @Reference data
- ** Account: All, ById
- * Customer
+ * ---- Reference data ----
  * Vendor
- ** CompanyInfo
  * Employee
  *
- ** Financial reports (high value)
+ * ---- Financial reports (high value) ----
  * BalanceSheet
  * ProfitAndLoss
  * CashFlow
- ** TaxAgency
  *
- ** Other
- * Estimate
- * Item
- * Preferences
  */
 
 module.exports = router;

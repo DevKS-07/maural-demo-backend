@@ -8,7 +8,11 @@ const docsRoutes = require("./routes/docs.routes");
 const aiRoutes = require("./routes/ai.routes");
 const uploadRoutes = require("./routes/upload.routes");
 const integrations = require("./routes/integrations.routes");
-const { loginUser, logoutUser } = require("./controllers/user.controller");
+const {
+  loginUser,
+  logoutUser,
+  registerUser,
+} = require("./controllers/user.controller");
 
 const router = express.Router();
 

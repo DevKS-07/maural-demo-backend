@@ -13,14 +13,14 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json()); // for parsing application/json
 app.use(helmet()); // for setting various HTTP headers for app security
-app.use(cors()); // Enable CORS for all routes
-// app.use(
-//   // Enable CORS with specific settings
-//   cors({
-//     origin: "http://localhost:3000", // For now, allowing only frontend server
-//     credentials: true,
-//   })
-// );
+// app.use(cors()); // Enable CORS for all routes
+app.use(
+  // Enable CORS with specific settings
+  cors({
+    origin: "http://localhost:3000", // For now, allowing only frontend server
+    credentials: true,
+  }),
+);
 
 app.use(cookieParser()); // for parsing cookies
 app.use(morgan("combined")); // for logging HTTP requests
