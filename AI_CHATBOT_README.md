@@ -29,19 +29,20 @@ The Maural KMS AI Chatbot is a multi-agent RAG (Retrieval-Augmented Generation) 
 Run the following command to install all AI chatbot dependencies:
 
 ```bash
-npm install @langchain/openai @langchain/core langchain @supabase/supabase-js pdf-parse@1 xlsx
+npm install @langchain/openai @langchain/core langchain @supabase/supabase-js pdf-parse@1 xlsx mammoth
 ```
 
 ### Full dependency list (relevant to AI chatbot)
 
 ```json
-"@langchain/core": "^1.1.27",
-"@langchain/openai": "^1.2.9",
-"langchain": "^1.2.25",
+"@langchain/core": "^1.1.29",
+"@langchain/openai": "^1.2.11",
+"langchain": "^1.2.28",
 "@supabase/supabase-js": "^2.76.0",
 "@prisma/client": "^6.18.0",
 "pdf-parse": "^1.1.4",
-"xlsx": "^0.18.5"
+"xlsx": "^0.18.5",
+"mammoth": "^1.11.0"
 ```
 
 > **Note:** Use `pdf-parse@1` specifically. Version 2.x changed to a class-based API incompatible with the current integration.
@@ -64,7 +65,6 @@ SUPABASE_SERVICE_ROLE_KEY=eyJ...
 | `POST` | `/api/chat/stream` | SSE streaming chat (primary) |
 | `POST` | `/api/chat` | JSON chat (fallback) |
 | `POST` | `/api/chat/ingest` | Ingest all documents from Supabase Storage |
-| `GET` | `/api/clients` | List all clients |
 
 ---
 
@@ -100,6 +100,7 @@ Upload file to Supabase Storage
 |---|---|
 | `.pdf` | `pdf-parse` |
 | `.xlsx`, `.xls` | SheetJS (`xlsx`) — each sheet converted to CSV text |
+| `.docx` | `mammoth` — extracts raw text from Word documents |
 | `.txt`, `.md`, `.csv`, `.json` | Raw UTF-8 buffer |
 | Other | Skipped (no extractable text) |
 
@@ -266,7 +267,7 @@ The guardrail runs on every response before it reaches the user.
 maural-kms-api/
 ├── controllers/
 │   ├── chat.controller.js       # Orchestration — streaming + JSON endpoints
-│   └── ingest.controller.js     # Document ingestion pipeline
+│   └── ingest.controller.js     # Document ingestion pipeline (Supabase Storage)
 ├── services/
 │   ├── ragService.js            # Document retrieval + prompt construction
 │   ├── intentRouter.js          # Multi-intent detection (gpt-4o-mini)
@@ -274,6 +275,8 @@ maural-kms-api/
 │   └── guardrail.js             # Answer accuracy verification
 ├── routes/
 │   └── chatRoutes.js            # /stream, /, /ingest routes
+├── scripts/
+│   └── ingest-local.js          # Local ingestion script (reads from uploads/ folder)
 ├── lib/
 │   └── prisma.js                # Prisma singleton
 └── uploads/                     # Temporary Multer upload directory (gitignored)
