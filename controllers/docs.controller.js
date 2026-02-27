@@ -1,13 +1,6 @@
 const { createClient } = require("@supabase/supabase-js");
-const { PrismaClient } = require("@prisma/client");
-const { PrismaPg } = require("@prisma/adapter-pg");
+const prisma = require("../lib/prisma");
 const mime = require("mime-types");
-
-const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL,
-});
-const prisma = new PrismaClient({ adapter });
-
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 

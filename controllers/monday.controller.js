@@ -1,12 +1,16 @@
+//* TODO: Remove this import if not needed, instead import prisma client directly from lib/prisma.js
+// const { createClient } = require("@supabase/supabase-js");
+// const { PrismaClient } = require("@prisma/client");
+// const { PrismaPg } = require("@prisma/adapter-pg");
+// const adapter = new PrismaPg({
+//   connectionString: process.env.DATABASE_URL,
+// });
+// const prisma = new PrismaClient({ adapter });
+
+const { createClient } = require("@supabase/supabase-js");
+const prisma = require("../lib/prisma");
+
 const axios = require("axios");
-const { PrismaClient } = require("@prisma/client");
-const { PrismaPg } = require("@prisma/adapter-pg");
-
-const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL,
-});
-const prisma = new PrismaClient({ adapter });
-
 const CLIENT_ID = process.env.MONDAY_CLIENT_ID;
 const CLIENT_SECRET = process.env.MONDAY_CLIENT_SECRET;
 const REDIRECT_URI = process.env.MONDAY_REDIRECT_URI;

@@ -19,7 +19,11 @@
 const { ChatOpenAI } = require("@langchain/openai");
 const { detectIntents } = require("../services/intentRouter");
 const { getSystemPrompt } = require("../services/promptTemplates");
-const { retrieveDocuments, buildMessagesForIntent, mapSources } = require("../services/ragService");
+const {
+  retrieveDocuments,
+  buildMessagesForIntent,
+  mapSources,
+} = require("../services/ragService");
 const { checkAndRefine } = require("../services/guardrail");
 
 // ---------------------------------------------------------------------------
@@ -41,7 +45,8 @@ async function runAgent(intent, message, docs, history) {
   const messages = buildMessagesForIntent(message, docs, history, systemPrompt);
 
   // Temperature varies by intent: predictions slightly higher, factual QA lower
-  const temperature = intent === "predict" ? 0.4 : intent === "explain" ? 0.35 : 0.2;
+  const temperature =
+    intent === "predict" ? 0.4 : intent === "explain" ? 0.35 : 0.2;
   const llm = getLLM({ temperature });
   const response = await llm.invoke(messages);
   return response.content || "";
@@ -60,7 +65,10 @@ Do not add new information — only organize and merge what you receive.`;
 
 async function combineAnswers(intents, answers, question) {
   const sections = intents
-    .map((intent, i) => `### ${intent.charAt(0).toUpperCase() + intent.slice(1)}\n${answers[i]}`)
+    .map(
+      (intent, i) =>
+        `### ${intent.charAt(0).toUpperCase() + intent.slice(1)}\n${answers[i]}`,
+    )
     .join("\n\n");
 
   const llm = getLLM({ model: "gpt-4o-mini", temperature: 0.1 });
@@ -109,7 +117,7 @@ async function orchestrate(message, clientIds, history) {
 
   // Step 2 — one specialized agent per intent, all run in parallel
   const agentAnswers = await Promise.all(
-    intents.map((intent) => runAgent(intent, message, docs, history))
+    intents.map((intent) => runAgent(intent, message, docs, history)),
   );
 
   // Step 3 — combine if multiple intents detected
@@ -124,7 +132,7 @@ async function orchestrate(message, clientIds, history) {
   const { validatedAnswer, confidence, issues } = await checkAndRefine(
     combinedAnswer,
     docs,
-    message
+    message,
   );
 
   // Step 5 — map sources for frontend citation chips
@@ -151,7 +159,9 @@ exports.streamChat = async (req, res) => {
   res.flushHeaders();
 
   const sendEvent = (data) => {
-    res.write(`data: ${typeof data === "string" ? data : JSON.stringify(data)}\n\n`);
+    res.write(
+      `data: ${typeof data === "string" ? data : JSON.stringify(data)}\n\n`,
+    );
   };
 
   try {
@@ -174,7 +184,10 @@ exports.streamChat = async (req, res) => {
     sendEvent("[DONE]");
   } catch (err) {
     console.error("[chat.controller] streamChat error:", err.message);
-    sendEvent({ type: "error", message: "An error occurred while generating the response." });
+    sendEvent({
+      type: "error",
+      message: "An error occurred while generating the response.",
+    });
     sendEvent("[DONE]");
   } finally {
     res.end();
@@ -203,6 +216,8 @@ exports.chat = async (req, res) => {
     });
   } catch (err) {
     console.error("[chat.controller] chat error:", err.message);
-    return res.status(500).json({ error: "Failed to generate a response. Please try again." });
+    return res
+      .status(500)
+      .json({ error: "Failed to generate a response. Please try again." });
   }
 };

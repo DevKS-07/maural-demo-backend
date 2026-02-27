@@ -23,7 +23,7 @@ const mammoth = require("mammoth");
 function getSupabase() {
   return createClient(
     process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY,
   );
 }
 
@@ -43,7 +43,10 @@ async function downloadFile(supabase, fileSource) {
     .from("file_storage")
     .download(pathInBucket);
 
-  if (error) throw new Error(`Storage download failed for "${pathInBucket}": ${error.message}`);
+  if (error)
+    throw new Error(
+      `Storage download failed for "${pathInBucket}": ${error.message}`,
+    );
   // data is a Blob in Node; convert to Buffer
   const arrayBuffer = await data.arrayBuffer();
   return Buffer.from(arrayBuffer);
@@ -95,7 +98,7 @@ async function extractText(buffer, fileName) {
 // ---------------------------------------------------------------------------
 // Text chunker (simple sliding window, no extra deps needed)
 // ---------------------------------------------------------------------------
-const CHUNK_SIZE = 1000;   // characters per chunk
+const CHUNK_SIZE = 1000; // characters per chunk
 const CHUNK_OVERLAP = 150; // overlap between consecutive chunks
 
 function chunkText(text, fileName) {
@@ -152,7 +155,10 @@ exports.ingest = async (req, res) => {
     `;
 
     if (files.length === 0) {
-      return res.status(200).json({ message: "No files found in the database to ingest.", ingested: 0 });
+      return res.status(200).json({
+        message: "No files found in the database to ingest.",
+        ingested: 0,
+      });
     }
 
     let totalChunks = 0;
@@ -166,7 +172,9 @@ exports.ingest = async (req, res) => {
         // 3. Extract text
         const rawText = await extractText(buffer, file.file_name);
         if (!rawText.trim()) {
-          console.log(`[ingest] Skipping "${file.file_name}" — no extractable text.`);
+          console.log(
+            `[ingest] Skipping "${file.file_name}" — no extractable text.`,
+          );
           continue;
         }
 
@@ -201,7 +209,9 @@ exports.ingest = async (req, res) => {
         await upsertChunks(supabase, rows);
 
         totalChunks += rows.length;
-        console.log(`[ingest] ✓ "${file.file_name}" — ${rows.length} chunks ingested.`);
+        console.log(
+          `[ingest] ✓ "${file.file_name}" — ${rows.length} chunks ingested.`,
+        );
       } catch (fileErr) {
         console.error(`[ingest] ✗ "${file.file_name}":`, fileErr.message);
         errors.push({ file: file.file_name, error: fileErr.message });
