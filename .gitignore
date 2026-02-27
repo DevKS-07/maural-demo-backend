@@ -33,3 +33,6 @@ next-env.d.ts
 
 # HubSpot config file
 hubspot.config.yml
+
+
+generate-routes-docs.js

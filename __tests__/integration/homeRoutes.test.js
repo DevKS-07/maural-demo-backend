@@ -1,6 +1,6 @@
 const request = require("supertest");
 const express = require("express");
-const homeRouter = require("../../routes/homeRoutes");
+const homeRouter = require("../../routes/home.routes");
 
 describe("homeRoutes", () => {
   let app;

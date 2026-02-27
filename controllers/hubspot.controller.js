@@ -1,6 +1,4 @@
 const axios = require("axios");
-const express = require("express");
-const { createClient } = require("@supabase/supabase-js");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
