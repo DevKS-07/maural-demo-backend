@@ -1,8 +1,8 @@
-const { PrismaClient } = require('@prisma/client');
-const { PrismaPg } = require('@prisma/adapter-pg');
+const { PrismaClient } = require("@prisma/client");
+const { PrismaPg } = require("@prisma/adapter-pg");
 
-const adapter = new PrismaPg({ 
-  connectionString: process.env.DATABASE_URL 
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL,
 });
 const prisma = new PrismaClient({ adapter });
 const axios = require("axios");
@@ -69,7 +69,7 @@ const connectionSuccessHandler = (req, res) => {
   const user_id = req.session.user_id;
   console.log(`User: ${user_id}`);
 
- // const token = prisma.clickupToken.findUnique({
+  // const token = prisma.clickupToken.findUnique({
   //  where: { user_id: user_id },
   //});
   // console.log(`Token: ${token}`);
@@ -108,7 +108,6 @@ const connectionStatus = async (req, res) => {
   }
 };
 
-
 module.exports = {
   installClickUp,
   callbackHandler,
@@ -142,7 +141,7 @@ const exchangeAuthCodeForTokens = async (exchangeProof) => {
         },
       },
     );
-    
+
     const user_id = userMetadataRes.data.user.id;
 
     // console.log(
@@ -225,5 +224,4 @@ const checkAndRefreshToken = async (user_id) => {
   } else {
     return tokenRecord.access_token;
   }
-};    
-
+};

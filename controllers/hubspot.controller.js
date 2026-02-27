@@ -198,7 +198,6 @@ const getCompanies = async (req, res) => {
   }
 };
 
-
 // SUMMARY ENGINE UTILITIES
 const getCRMSummary = async (req, res) => {
   const user_id = req.session.user_id;
@@ -210,47 +209,54 @@ const getCRMSummary = async (req, res) => {
       return res.status(401).send("No access token found for the user");
     }
 
-    const baseURL = 'https://api.hubapi.com'; // HubSpot API base
+    const baseURL = "https://api.hubapi.com"; // HubSpot API base
 
     // Helper to fetch HubSpot data
-    const fetchHubSpot = async (endpoint, params = {}, method = 'GET', body = null) => {
+    const fetchHubSpot = async (
+      endpoint,
+      params = {},
+      method = "GET",
+      body = null,
+    ) => {
       const url = `${baseURL}${endpoint}`;
       const config = {
         params,
         headers: {
           Authorization: `Bearer ${access_token}`,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
+          "Content-Type": "application/json",
+          Accept: "application/json",
         },
       };
-      if (method === 'POST' && body) config.data = body;
+      if (method === "POST" && body) config.data = body;
       const response = await axios({ method, url, ...config });
       return response.data;
     };
 
     // Pipeline Coverage: Fetch deals in pipeline, sum weighted amounts (amount * probability)
-    const dealsData = await fetchHubSpot('/crm/v3/objects/deals', {
-      properties: 'amount,probability,pipeline,dealstage',
+    const dealsData = await fetchHubSpot("/crm/v3/objects/deals", {
+      properties: "amount,probability,pipeline,dealstage",
       limit: 100, // Paginate if more
     });
     let totalWeightedPipeline = 0;
-    dealsData.results.forEach(deal => {
+    dealsData.results.forEach((deal) => {
       const amount = parseFloat(deal.properties.amount) || 0;
       const probability = parseFloat(deal.properties.probability) || 0;
       totalWeightedPipeline += amount * (probability / 100);
     });
     const salesTarget = 850000; // Example target; fetch from custom property or config
-    const pipelineCoverage = salesTarget ? (totalWeightedPipeline / salesTarget).toFixed(2) : 0;
+    const pipelineCoverage = salesTarget
+      ? (totalWeightedPipeline / salesTarget).toFixed(2)
+      : 0;
 
     // Deal Velocity: Fetch closed deals, avg time from create to close
-    const closedDealsData = await fetchHubSpot('/crm/v3/objects/deals', {
-      properties: 'createdate,closedate,dealstage',
-      filter: 'dealstage__eq__closedwon', // Adjust for closed stages
+    const closedDealsData = await fetchHubSpot("/crm/v3/objects/deals", {
+      properties: "createdate,closedate,dealstage",
+      filter: "dealstage__eq__closedwon", // Adjust for closed stages
       limit: 100,
     });
     let totalTime = 0;
     let closedCount = 0;
-    closedDealsData.results.forEach(deal => {
+    closedDealsData.results.forEach((deal) => {
       if (deal.properties.closedate) {
         const createDate = new Date(deal.properties.createdate);
         const closeDate = new Date(deal.properties.closedate);
@@ -262,13 +268,13 @@ const getCRMSummary = async (req, res) => {
     const dealVelocity = closedCount ? (totalTime / closedCount).toFixed(2) : 0;
 
     // Recurring vs One-Time Revenue: Fetch line items, filter by recurringbillingfrequency
-    const lineItemsData = await fetchHubSpot('/crm/v3/objects/line_items', {
-      properties: 'amount,recurringbillingfrequency',
+    const lineItemsData = await fetchHubSpot("/crm/v3/objects/line_items", {
+      properties: "amount,recurringbillingfrequency",
       limit: 100,
     });
     let recurringRevenue = 0;
     let oneTimeRevenue = 0;
-    lineItemsData.results.forEach(item => {
+    lineItemsData.results.forEach((item) => {
       const amount = parseFloat(item.properties.amount) || 0;
       if (item.properties.recurringbillingfrequency) {
         recurringRevenue += amount;
@@ -276,33 +282,46 @@ const getCRMSummary = async (req, res) => {
         oneTimeRevenue += amount;
       }
     });
-    const recurringPercent = (recurringRevenue + oneTimeRevenue) ? (recurringRevenue / (recurringRevenue + oneTimeRevenue) * 100).toFixed(2) : 0;
+    const recurringPercent =
+      recurringRevenue + oneTimeRevenue
+        ? (
+            (recurringRevenue / (recurringRevenue + oneTimeRevenue)) *
+            100
+          ).toFixed(2)
+        : 0;
 
     // Customer Engagement: Fetch engagements, count activities
-    const engagementsData = await fetchHubSpot('/crm/v3/objects/engagements', { limit: 100 });
+    const engagementsData = await fetchHubSpot("/crm/v3/objects/engagements", {
+      limit: 100,
+    });
     const customerEngagement = engagementsData.total || 0; // Total count; refine with filters
 
     // Forecast Accuracy: Fetch closed deals, compare forecasted vs actual (assuming forecast property)
-    const forecastData = await fetchHubSpot('/crm/v3/objects/deals', {
-      properties: 'forecast_amount,amount,closedate',
-      filter: 'closedate__gte__2025-01-01', // Recent closed
+    const forecastData = await fetchHubSpot("/crm/v3/objects/deals", {
+      properties: "forecast_amount,amount,closedate",
+      filter: "closedate__gte__2025-01-01", // Recent closed
       limit: 100,
     });
     let totalForecasted = 0;
     let totalActual = 0;
-    forecastData.results.forEach(deal => {
+    forecastData.results.forEach((deal) => {
       totalForecasted += parseFloat(deal.properties.forecast_amount) || 0;
       totalActual += parseFloat(deal.properties.amount) || 0;
     });
-    const forecastAccuracy = totalForecasted ? ((totalActual / totalForecasted) * 100).toFixed(2) : 0;
+    const forecastAccuracy = totalForecasted
+      ? ((totalActual / totalForecasted) * 100).toFixed(2)
+      : 0;
 
     // Deal Stage Conversion: Fetch pipelines, then deals to count transitions
-    const pipelinesData = await fetchHubSpot('/crm/v3/pipelines/deals');
+    const pipelinesData = await fetchHubSpot("/crm/v3/pipelines/deals");
     const stages = pipelinesData.results[0]?.stages || []; // Assume first pipeline
     // Fetch deals for stage counts (simplified; use analytics API for better)
-    const dealStagesData = await fetchHubSpot('/crm/v3/objects/deals', { properties: 'dealstage', limit: 100 });
+    const dealStagesData = await fetchHubSpot("/crm/v3/objects/deals", {
+      properties: "dealstage",
+      limit: 100,
+    });
     const stageCounts = {};
-    dealStagesData.results.forEach(deal => {
+    dealStagesData.results.forEach((deal) => {
       const stage = deal.properties.dealstage;
       stageCounts[stage] = (stageCounts[stage] || 0) + 1;
     });
@@ -310,9 +329,9 @@ const getCRMSummary = async (req, res) => {
     // Example: loop through stages and calculate sequential conversions
 
     // Revenue per Segment: Fetch deals with company associations, group by segment
-    const segmentedDeals = await fetchHubSpot('/crm/v3/objects/deals', {
-      properties: 'amount',
-      associations: 'companies',
+    const segmentedDeals = await fetchHubSpot("/crm/v3/objects/deals", {
+      properties: "amount",
+      associations: "companies",
       limit: 100,
     });
     const revenuePerSegment = {};
@@ -320,22 +339,30 @@ const getCRMSummary = async (req, res) => {
       const amount = parseFloat(deal.properties.amount) || 0;
       const companyId = deal.associations.companies?.results[0]?.id;
       if (companyId) {
-        const company = await fetchHubSpot(`/crm/v3/objects/companies/${companyId}`, { properties: 'segment' });
-        const segment = company.properties.segment || 'Unknown';
+        const company = await fetchHubSpot(
+          `/crm/v3/objects/companies/${companyId}`,
+          { properties: "segment" },
+        );
+        const segment = company.properties.segment || "Unknown";
         revenuePerSegment[segment] = (revenuePerSegment[segment] || 0) + amount;
       }
     }
 
     // Churn/Retention: Fetch contacts, count by lifecyclestage
-    const contactsData = await fetchHubSpot('/crm/v3/objects/contacts', { properties: 'lifecyclestage', limit: 100 });
+    const contactsData = await fetchHubSpot("/crm/v3/objects/contacts", {
+      properties: "lifecyclestage",
+      limit: 100,
+    });
     let totalCustomers = 0;
     let retainedCustomers = 0;
-    contactsData.results.forEach(contact => {
+    contactsData.results.forEach((contact) => {
       const stage = contact.properties.lifecyclestage;
-      if (stage === 'customer') totalCustomers++;
+      if (stage === "customer") totalCustomers++;
       // Retained = active customers; churned = lost (e.g., stage !== 'customer')
     });
-    const retentionRate = totalCustomers ? ((retainedCustomers / totalCustomers) * 100).toFixed(2) : 0;
+    const retentionRate = totalCustomers
+      ? ((retainedCustomers / totalCustomers) * 100).toFixed(2)
+      : 0;
 
     // Send parsed values (no summary JSON - you can normalize further)
     res.status(200).json({

@@ -1,17 +1,15 @@
 const axios = require("axios");
-const { PrismaClient } = require('@prisma/client');
-const { PrismaPg } = require('@prisma/adapter-pg');
+const { PrismaClient } = require("@prisma/client");
+const { PrismaPg } = require("@prisma/adapter-pg");
 
-const adapter = new PrismaPg({ 
-  connectionString: process.env.DATABASE_URL 
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL,
 });
 const prisma = new PrismaClient({ adapter });
-
 
 const CLIENT_ID = process.env.MONDAY_CLIENT_ID;
 const CLIENT_SECRET = process.env.MONDAY_CLIENT_SECRET;
 const REDIRECT_URI = process.env.MONDAY_REDIRECT_URI;
-
 
 let SCOPES = [
   "boards:read account:read assets:read teams:read workspaces:read tags:read me:read",
@@ -62,9 +60,9 @@ const callbackHandler = async (req, res) => {
 const connectionSuccessHandler = (req, res) => {
   const user_id = req.session.user_id;
   console.log(`User: ${user_id}`);
-  
+
   const token = prisma.mondayToken.findUnique({
-  where: { user_id: user_id },
+    where: { user_id: user_id },
   });
 
   console.log(`Monday Integration Successful!`);
@@ -154,7 +152,7 @@ const exchangeAuthCodeForTokens = async (exchangeProof) => {
     );
 
     // Storing these tokens in DB
-    
+
     await prisma.mondayToken.upsert({
       where: { user_id: user_id },
       create: {
@@ -169,7 +167,6 @@ const exchangeAuthCodeForTokens = async (exchangeProof) => {
         expires_at,
       },
     });
-  
 
     return { user_id, access_token };
   } catch (err) {

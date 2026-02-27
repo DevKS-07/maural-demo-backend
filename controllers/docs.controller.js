@@ -1,18 +1,15 @@
 const { createClient } = require("@supabase/supabase-js");
-const { PrismaClient } = require('@prisma/client');
-const { PrismaPg } = require('@prisma/adapter-pg');
+const { PrismaClient } = require("@prisma/client");
+const { PrismaPg } = require("@prisma/adapter-pg");
 const mime = require("mime-types");
 
-const adapter = new PrismaPg({ 
-  connectionString: process.env.DATABASE_URL 
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL,
 });
 const prisma = new PrismaClient({ adapter });
 
-
-
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-
 
 ///////////////////////////////  HOME ROUTE (Test Route) ///////////////////////////////
 
@@ -47,10 +44,9 @@ exports.getAllDocuments = async (req, res) => {
  * @return {object} The document object if found, otherwise an error message
  * */
 
-
 exports.getDocumentById = async (req, res) => {
   const { id } = req.params;
-  console.log(id)
+  console.log(id);
 
   const file_meta = await prisma.file.findUnique({
     where: { file_id: id },
@@ -77,18 +73,14 @@ exports.getDocumentById = async (req, res) => {
 
   const buffer = Buffer.from(await fileBlob.arrayBuffer());
 
-  const mimeType = mime.lookup(file_meta.file_name) || "application/octet-stream";
+  const mimeType =
+    mime.lookup(file_meta.file_name) || "application/octet-stream";
 
   res.setHeader("Content-Type", mimeType);
   res.setHeader("Content-Length", buffer.length);
 
-  
   res.end(buffer);
 };
-
-
-
-
 
 /** Get documents by Type
  * @route GET api/docs/type
