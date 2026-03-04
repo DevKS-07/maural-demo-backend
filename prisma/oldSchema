@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ActivityType {
+  activity_id   BigInt         @id @unique @default(autoincrement())
+  activity_name String?
+  Activity_Log  Activity_Log[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Activity_Log {
+  log_id            BigInt       @id @unique @default(autoincrement())
+  file_id           String       @db.Uuid
+  activity_type     BigInt
+  activity_datetime DateTime     @default(now()) @db.Timestamp(6)
+  user_id           BigInt?
+  ActivityType      ActivityType @relation(fields: [activity_type], references: [activity_id])
+  File              File         @relation(fields: [file_id], references: [file_id])
+  User              User?        @relation(fields: [user_id], references: [user_id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Client {
+  client_id          BigInt    @id @default(autoincrement())
+  client_name        String
+  industry           String?
+  founded            DateTime? @db.Date
+  key_contacts       BigInt?
+  company_location   String?
+  organization_chart String?
+  gpt_types          String?
+  storage_bucket     String    @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  User               User[]
+  File               File[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Comment {
+  id         BigInt   @id @default(autoincrement())
+  file_id    String   @db.Uuid
+  comment    String?
+  created_at DateTime @db.Timestamp(6)
+  user_id    BigInt?
+  File       File     @relation(fields: [file_id], references: [file_id], onDelete: Cascade)
+  User       User?    @relation(fields: [user_id], references: [user_id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ExternalSystem {
+  extsys_id    BigInt  @id @default(autoincrement())
+  sys_name     String?
+  type         String?
+  auth_method  String?
+  document_url String?
+  description  String?
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Category {
+  ctg_id   BigInt  @id @unique @default(autoincrement())
+  ctg_name String?
+  File     File[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model File {
+  file_id      String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  file_name    String
+  file_size    Float
+  file_source  String
+  ctg_id       BigInt? // Document category FK → Category (e.g. legal, financial, hr)
+  client_id    BigInt? // Which client owns this file (FK → Client)
+  user_id      BigInt? // Which user uploaded it (FK → User)
+  activityLogs Activity_Log[]
+  Category     Category?      @relation(fields: [ctg_id], references: [ctg_id])
+  Client       Client?        @relation(fields: [client_id], references: [client_id])
+  User         User?          @relation(fields: [user_id], references: [user_id])
+  comments     Comment[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Permission {
+  permission_id   BigInt           @id @default(autoincrement())
+  permission_name String
+  RolePermission  RolePermission[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Role {
+  role_id        BigInt           @id @unique @default(autoincrement())
+  role_name      String
+  RolePermission RolePermission[]
+  User           User[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model User {
+  client_id    BigInt?
+  role_id      BigInt?
+  first_name   String
+  last_name    String
+  email        String
+  phone        String?
+  gender       String?
+  status       String?
+  last_login   DateTime?      @db.Timestamp(6)
+  user_id      BigInt         @id @unique @default(autoincrement())
+  Activity_Log Activity_Log[]
+  Comment      Comment[]
+  File         File[]
+  Client       Client?        @relation(fields: [client_id], references: [client_id], onDelete: SetNull)
+  Role         Role?          @relation(fields: [role_id], references: [role_id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model mock_data {
+  id         Int     @id
+  first_name String? @db.VarChar(50)
+  email      String? @db.VarChar(50)
+  gender     String? @db.VarChar(50)
+}
+
+model HubspotToken {
+  user_id       Int       @id
+  access_token  String
+  refresh_token String
+  expires_at    DateTime
+  created_at    DateTime? @default(now())
+  updated_at    DateTime?
+
+  @@map("hubspot_tokens")
+}
+
+model QuickbooksToken {
+  user_id                    BigInt @id
+  access_token               String
+  refresh_token              String
+  token_type                 String
+  expires_in                 Int
+  x_refresh_token_expires_in Int
+  realmId                    BigInt
+
+  @@map("quickbooks_tokens")
+}
+
+model MondayToken {
+  id                       Int      @id @default(autoincrement())
+  user_id                  String   @unique
+  access_token             String
+  refresh_token            String
+  token_type               String?
+  realm_id                 String?
+  expires_in               Int?
+  refresh_token_expires_in Int?
+  created_at               DateTime @default(now())
+  updated_at               DateTime @updatedAt
+
+  @@map("monday_tokens")
+}
+
+model ClickUpToken {
+  user_id       Int       @id
+  access_token  String
+  refresh_token String
+  token_type    String
+  expires_at    DateTime
+  created_at    DateTime? @default(now())
+  updated_at    DateTime?
+
+  @@map("clickup_tokens")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model RolePermission {
+  role_id       BigInt
+  permission_id BigInt
+  Permission    Permission @relation(fields: [permission_id], references: [permission_id], onDelete: Cascade)
+  Role          Role       @relation(fields: [role_id], references: [role_id], onDelete: Cascade)
+
+  @@id([role_id, permission_id])
+}
+
+model document_embeddings {
+  id        BigInt                @id @default(autoincrement())
+  content   String
+  metadata  Json?                 @default("{}")
+  embedding Unsupported("vector")
+
+  @@index([embedding])
+}
