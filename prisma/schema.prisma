@@ -103,6 +103,7 @@ model Role {
 model User {
     client_id    BigInt?
     role_id      BigInt?
+    clerk_id     String?        @unique
     first_name   String
     last_name    String
     email        String

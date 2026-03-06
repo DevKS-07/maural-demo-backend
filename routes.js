@@ -1,57 +1,46 @@
 const express = require("express");
 
-// Import route modules
+// Route modules
 const homeRoutes = require("./routes/home.routes");
 const adminRoutes = require("./routes/admin.routes");
+const authRoutes = require("./routes/auth.routes");
+const userRoutes = require("./routes/user.routes");
 const clientRoutes = require("./routes/client.routes");
 const docsRoutes = require("./routes/docs.routes");
-const aiRoutes = require("./routes/ai.routes");
 const chatRoutes = require("./routes/chat.routes");
-const uploadRoutes = require("./routes/upload.routes");
 const integrations = require("./routes/integrations.routes");
-const {
-  loginUser,
-  logoutUser,
-  registerUser,
-} = require("./controllers/user.controller");
+
+// Auth middleware
+const { requireAuth } = require("./middleware/auth.middleware");
 
 const router = express.Router();
 
-router.use(express.json()); // Middleware to parse JSON bodies
+router.use(express.json());
 
-// Home route
+// ****************************  PUBLIC ROUTES  ****************************
+
 router.use("/", homeRoutes);
 
-router.use("/upload", uploadRoutes);
+// Clerk webhook endpoint — must be public (no requireAuth).
+// express.raw() body parser for this path is applied in app.js
+// so Svix can verify the raw request body signature.
+router.use("/webhooks", authRoutes);
 
-router.post("/signup", registerUser);
+// ****************************  PROTECTED ROUTES  *************************
+// All routes below require a valid Clerk JWT (returns 401 if missing/invalid)
 
-router.use("/chat", chatRoutes);
+router.use("/auth", requireAuth, authRoutes);           // GET /api/auth/me
 
-// Login route (Open to all users; Restrict access for logged in users)
-router.post("/login", loginUser);
+router.use("/admin", requireAuth, adminRoutes);         // Admin-only management routes
 
-//////////////////////////////////////////////////////////////////////////////////////////////
-//            RESTRICTED ROUTES (only logged in users can access these routes)
-//////////////////////////////////////////////////////////////////////////////////////////////
+router.use("/user", requireAuth, userRoutes);           // User CRUD + activity/files/comments/permissions
 
-// TODO: Add a restricted_access middleware for protected routes (i.e only logged in users can access the routes)
-// TODO: Add role based access control (RBAC) middlewares (i.e. super admin, admin, client executive, employee (client), etc.)
+router.use("/client", requireAuth, clientRoutes);       // Client CRUD + users/files
 
-router.use("/admin", adminRoutes); // Admin routes (Protected routes, only accessible by admin users)
+router.use("/docs", requireAuth, docsRoutes);           // Documents + comments + activity
 
-router.use("/client", clientRoutes); // Client routes (Protected routes, only accessible by all clients)
+router.use("/integrations", requireAuth, integrations); // HubSpot, QuickBooks, Monday, ClickUp
 
-router.use("/docs", docsRoutes); // Docs routes
-
-router.use("/ai", aiRoutes); // AI routes (Can be implemented later) -- Can also be implemented in the frontend instead
-
-router.use("/integrations", integrations); // External API routes (Protected routes, only accessible by logged in users)
-
-router.post("/logout", logoutUser); // Logout route (Protected route, only accessible by logged in users)
-
-//////////////////////////////////////////////////////////////////////////////////////////////
-//                          END OF RESTRICTED ROUTES
-//////////////////////////////////////////////////////////////////////////////////////////////
+router.use("/chat", requireAuth, chatRoutes);           // AI chat
 
 module.exports = router;

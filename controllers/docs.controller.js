@@ -1,17 +1,18 @@
 const { createClient } = require("@supabase/supabase-js");
 const prisma = require("../lib/prisma");
 const mime = require("mime-types");
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY,
+);
 
 ///////////////////////////////  HOME ROUTE (Test Route) ///////////////////////////////
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
 /**
  * Test route to check if the Docs API is working
- * @route GET api/docs/
- * @return {string} A success message
+ * @route GET /docs/
+ * @returns {string} A success message
  * */
 exports.docs_Testing = (req, res) => {
   res.status(200).send("Docs API is working");
@@ -21,154 +22,278 @@ exports.docs_Testing = (req, res) => {
 
 /**
  * Get all documents
- * @route GET api/docs
- * @return {array} An array of document objects
+ * @route GET /docs/all
+ * @returns {array} An array of file metadata objects
  * */
 exports.getAllDocuments = async (req, res) => {
-  // TODO: Implement logic to fetch all documents
-
-  const documents = await prisma.file.findMany();
-  res.status(200).json(documents);
+  try {
+    const documents = await prisma.file.findMany();
+    res.status(200).json(documents);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to retrieve documents", error });
+  }
 };
 
-/** Get a single document by ID
- * @route GET api/docs/:id
- * @param {string} req.params.id The ID of the document to retrieve
- * @return {object} The document object if found, otherwise an error message
+/**
+ * Get all documents belonging to a category
+ * @route GET /docs/category/:ctgId
+ * @param {string} req.params.ctgId - The ID of the category to filter by
+ * @returns {array} An array of file metadata objects in the given category
  * */
+exports.getDocumentsByCategory = async (req, res) => {
+  const { ctgId } = req.params;
+  try {
+    const documents = await prisma.file.findMany({
+      where: { ctg_id: BigInt(ctgId) },
+      include: { Category: true },
+    });
+    res.status(200).json(documents);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Failed to retrieve documents by category", error });
+  }
+};
 
+/**
+ * Get a single document by ID and stream the file from Supabase Storage
+ * @route GET /docs/:id
+ * @param {string} req.params.id - The UUID of the document to retrieve
+ * @returns {Buffer} The raw file buffer with correct Content-Type headers
+ * */
 exports.getDocumentById = async (req, res) => {
   const { id } = req.params;
-  console.log(id);
+  try {
+    const file_meta = await prisma.file.findUnique({
+      where: { file_id: id },
+    });
 
-  const file_meta = await prisma.file.findUnique({
-    where: { file_id: id },
-  });
+    if (!file_meta) {
+      return res.status(404).json({ message: "File not found" });
+    }
 
-  console.log(file_meta);
+    const filePath = file_meta.file_source.split("file_storage/")[1];
 
-  if (!file_meta) {
-    return res.status(404).send("File not found");
+    const { data: fileBlob, error } = await supabase.storage
+      .from("file_storage")
+      .download(filePath);
+
+    if (error) {
+      return res
+        .status(500)
+        .json({ message: "Failed to download file from storage", error });
+    }
+
+    const buffer = Buffer.from(await fileBlob.arrayBuffer());
+    const mimeType =
+      mime.lookup(file_meta.file_name) || "application/octet-stream";
+
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Content-Length", buffer.length);
+    res.end(buffer);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to retrieve document", error });
   }
-
-  const filePath = file_meta.file_source.split("file_storage/")[1];
-
-  console.log(filePath);
-
-  const { data: fileBlob, error } = await supabase.storage
-    .from("file_storage")
-    .download(filePath);
-
-  if (error) {
-    console.error(error);
-    return res.status(500).send("Failed to download file");
-  }
-
-  const buffer = Buffer.from(await fileBlob.arrayBuffer());
-
-  const mimeType =
-    mime.lookup(file_meta.file_name) || "application/octet-stream";
-
-  res.setHeader("Content-Type", mimeType);
-  res.setHeader("Content-Length", buffer.length);
-
-  res.end(buffer);
 };
 
-/** Get documents by Type
- * @route GET api/docs/type
- * @param {string} req.params.type The Type of the document to retrieve
- * @return {object} The document object if found, otherwise an error message
+/**
+ * Get all comments on a document
+ * @route GET /docs/:id/comments
+ * @param {string} req.params.id - The UUID of the document
+ * @returns {array} An array of comment objects for the document
  * */
-exports.getDocumentByType = (req, res) => {
-  const type = req.query.type;
-  console.log(type);
+exports.getDocumentComments = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const comments = await prisma.comment.findMany({
+      where: { file_id: id },
+    });
+    res.status(200).json(comments);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Failed to retrieve document comments", error });
+  }
+};
 
-  // TODO: Implement logic to fetch a document by Type
-  res.status(200).json({ message: `Get document with Type: ${type}` });
+/**
+ * Get the activity log for a document
+ * @route GET /docs/:id/activity
+ * @param {string} req.params.id - The UUID of the document
+ * @returns {array} An array of activity log entries for the document
+ * */
+exports.getDocumentActivity = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const activity = await prisma.activity_Log.findMany({
+      where: { file_id: id },
+      include: { ActivityType: true },
+    });
+    res.status(200).json(activity);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Failed to retrieve document activity", error });
+  }
 };
 
 ///////////////////////////////  POST ROUTES ///////////////////////////////
 
 /**
- * Create a new document
- * @route POST api/docs/create
- * @param {file} req.body.file The file to be uploaded
- * @return {object} A success message with details of created file or an error message
+ * Upload a file to Supabase Storage and create its metadata record in the database
+ * @route POST /docs/
+ * @param {file}   req.file          - The file uploaded via multipart/form-data (field name: "file")
+ * @param {number} req.body.ctg_id   - Category ID to assign to the document
+ * @param {number} req.body.client_id - Client ID that owns this document
+ * @param {number} req.body.user_id  - User ID of the uploader
+ * @returns {object} The created file metadata record
  * */
-exports.createDocument = (req, res) => {
-  // TODO: Implement logic to create a new document
-  res.status(201).json({ message: "Document created" });
+exports.createDocument = async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: "No file provided" });
+  }
+
+  const { ctg_id, client_id, user_id } = req.body;
+  const safeName = encodeURIComponent(req.file.originalname);
+
+  try {
+    const { data, error } = await supabase.storage
+      .from("file_storage")
+      .upload(`uploads/${safeName}`, req.file.buffer, {
+        contentType: req.file.mimetype,
+        upsert: true,
+      });
+
+    if (error) {
+      return res
+        .status(500)
+        .json({ message: "Failed to upload file to storage", error });
+    }
+
+    const newFile = await prisma.file.create({
+      data: {
+        file_name: safeName,
+        file_size: req.file.size,
+        file_source: data.fullPath,
+        ctg_id: ctg_id ? BigInt(ctg_id) : undefined,
+        client_id: client_id ? BigInt(client_id) : undefined,
+        user_id: user_id ? BigInt(user_id) : undefined,
+      },
+    });
+
+    res.status(201).json(newFile);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to create document", error });
+  }
 };
 
 /**
- * Upload multiple documents
- * @route POST api/docs/upload
- * @param {file} req.body.files The files to be uploaded
- * @return {object} A success message with details of uploaded files or an error message
+ * Add a comment to a document
+ * @route POST /docs/:id/comments
+ * @param {string} req.params.id    - The UUID of the document to comment on
+ * @param {string} req.body.comment - The comment text
+ * @param {number} req.body.user_id - The ID of the user posting the comment
+ * @returns {object} The created comment object
  * */
-exports.uploadDocuments = (req, res) => {
-  console.log("File upload endpoint hit"); // Debugging line
+exports.addDocumentComment = async (req, res) => {
+  const { id } = req.params;
+  const { comment, user_id } = req.body;
 
-  // TODO: Process the uploaded files here
-  // USE: multer to handle file uploads
-  console.log(req.body);
+  if (!comment) {
+    return res.status(400).json({ message: "comment text is required" });
+  }
 
-  // Error handling for bad request
-  //   if (!req.body) {
-  //     return res.status(400).json({ error: "Body Empty." });
-  //   }
-
-  // Error handling for no file uploaded
-  //   if (!req.file) {
-  //     return res.status(400).send("No file uploaded");
-  //   }
-
-  //   const uploadedFiles = req.body.formdata.files.map((file) => ({
-  //     filename: file.filename,
-  //     path: file.path,
-  //   }));
-  //   console.log("Uploaded files:", req.body.formdata); // Log the uploaded files info
-
-  res.status(200).json({
-    message: "Files uploaded successfully.",
-    // files: uploadedFiles,
-  });
+  try {
+    const newComment = await prisma.comment.create({
+      data: {
+        file_id: id,
+        comment,
+        user_id: user_id ? BigInt(user_id) : undefined,
+        created_at: new Date(),
+      },
+    });
+    res.status(201).json(newComment);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to add comment", error });
+  }
 };
 
 ///////////////////////////////  PUT ROUTES ///////////////////////////////
 
 /**
- * Update a document by ID
+ * Update document metadata by ID (does not replace the file itself)
  * @route PUT /docs/:id
- * @param {string} req.params.id The ID of the document to update
- * @return {object} A success message with details of updated file or an error message
- */
-exports.updateDocument = (req, res) => {
+ * @param {string} req.params.id      - The UUID of the document to update
+ * @param {string} req.body.file_name - Updated file name
+ * @param {number} req.body.ctg_id    - Updated category ID
+ * @param {number} req.body.client_id - Updated client ID
+ * @returns {object} The updated file metadata record
+ * */
+exports.updateDocument = async (req, res) => {
   const { id } = req.params;
-  // TODO: Implement logic to update a document by ID
-  res.status(200).json({ message: `Document with ID: ${id} updated` });
+  const { file_name, ctg_id, client_id } = req.body;
+
+  try {
+    const updatedFile = await prisma.file.update({
+      where: { file_id: id },
+      data: {
+        file_name,
+        ctg_id: ctg_id ? BigInt(ctg_id) : undefined,
+        client_id: client_id ? BigInt(client_id) : undefined,
+      },
+    });
+    res.status(200).json(updatedFile);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: `Failed to update document with ID ${id}`, error });
+  }
 };
 
-/////////////////////////////// DELETE ROUTES ///////////////////////////////
+///////////////////////////////  DELETE ROUTES ///////////////////////////////
 
 /**
- * Delete a document by ID
+ * Delete a document by ID — removes from Supabase Storage and the database
  * @route DELETE /docs/:id
- * @param {string} req.params.id The ID of the document to delete
- * @return {object} A success message with details of deleted file or an error message
- */
+ * @param {string} req.params.id - The UUID of the document to delete
+ * @returns {object} A success message
+ * */
 exports.deleteDocument = async (req, res) => {
   const { id } = req.params;
-  // TODO: Implement logic to delete a document by ID
-  const gone = await prisma.file.delete({
-    where: {
-      file_id: id,
-    },
-  });
+  try {
+    const file = await prisma.file.delete({
+      where: { file_id: id },
+    });
 
-  supabase.storage.from("file_storage").remove(gone.file_name);
+    const filePath = file.file_source.split("file_storage/")[1];
+    await supabase.storage.from("file_storage").remove([filePath]);
 
-  console.log("Deleted file metadata from database:", gone);
-  res.status(200).json({ message: `Document with ID: ${id} deleted` });
+    res.status(200).json({ message: `Document with ID ${id} deleted` });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: `Failed to delete document with ID ${id}`, error });
+  }
+};
+
+/**
+ * Delete a comment from a document
+ * @route DELETE /docs/:id/comments/:commentId
+ * @param {string} req.params.id        - The UUID of the document (for context)
+ * @param {string} req.params.commentId - The ID of the comment to delete
+ * @returns {object} A success message
+ * */
+exports.deleteDocumentComment = async (req, res) => {
+  const { commentId } = req.params;
+  try {
+    await prisma.comment.delete({
+      where: { id: BigInt(commentId) },
+    });
+    res.status(200).json({ message: `Comment with ID ${commentId} deleted` });
+  } catch (error) {
+    res.status(500).json({
+      message: `Failed to delete comment with ID ${commentId}`,
+      error,
+    });
+  }
 };
