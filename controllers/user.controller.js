@@ -1,10 +1,4 @@
-const bcrypt = require("bcryptjs");
-
-// const jwt = require("jsonwebtoken");
-// const JWT_SECRET = "your_jwt_secret_key"; // Use env variable in production
-
-// Mock data
-const users = []; // use a database when the setup is ready
+const prisma = require("../lib/prisma");
 
 ///////////////////////////////  HOME ROUTE (Test Route) ///////////////////////////////
 
@@ -20,133 +14,226 @@ exports.user_Testing = (req, res) => {
 ///////////////////////////////  GET ROUTES ///////////////////////////////
 
 /**
- * ### FOR ADMINS ONLY ###
- * Get all clients
- * @route GET /admin/all-clients
- * @return {array} - An array of user objects
+ * ### FOR SUPER ADMIN / ADMIN ONLY ###
+ * Get all users
+ * @route GET /users/all
+ * @returns {array} - An array of user objects
  * */
-exports.getAllUsers = (req, res) => {
-  // TODO: Implement logic to fetch all clients
-  res.status(200).json({ message: "Getting all users" });
+exports.getAllUsers = async (req, res) => {
+  try {
+    const users = await prisma.user.findMany();
+    res.status(200).json(users);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to retrieve users", error });
+  }
 };
 
 /**
- * ### FOR ADMINS ONLY ###
- * Get a single client by ID
- * @route GET /admin/client/:id
- * @param {string} req.params.id The ID of the client to retrieve
- * @return {object} The user object if found, otherwise an error message
+ * Get a single user by ID
+ * @route GET /users/:userId
+ * @param {string} req.params.userId - The ID of the user to retrieve
+ * @returns {object} - The user object if found, otherwise an error message
  * */
-exports.getUserById = (req, res) => {
-  const userId = req.params.id;
-  // TODO: Implement logic to fetch client by ID
-  res.status(200).json({ message: `Get user with ID ${userId}` });
+exports.getUserById = async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const user = await prisma.user.findUnique({
+      where: { user_id: BigInt(userId) },
+    });
+    if (!user) {
+      return res.status(404).json({ message: `User with ID ${userId} not found` });
+    }
+    res.status(200).json(user);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to retrieve user", error });
+  }
 };
 
 /**
- * ### FOR ADMINS ONLY ###
- * Get analytics data (Can be implemented later)
- * @route GET /admin/analytics
- * @return {object} An object containing analytics data
+ * Get all activity logs for a user
+ * @route GET /users/:userId/activity
+ * @param {string} req.params.userId - The ID of the user
+ * @returns {array} - An array of activity log entries for the user
  * */
-exports.getAnalyticsData = (req, res) => {
-  // TODO: Implement logic to fetch analytics data
-  res.status(200).json({ message: "Getting analytics data" });
+exports.getUserActivity = async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const activity = await prisma.activity_Log.findMany({
+      where: { user_id: BigInt(userId) },
+      include: { ActivityType: true },
+    });
+    res.status(200).json(activity);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to retrieve user activity", error });
+  }
 };
 
 /**
- * Get user's profile by ID
- * @route GET /client/profile/:id
- * @route GET /admin/profile/:id
- * @param {string} req.params.id The ID of the user to retrieve
- * @return {object} The user object if found, otherwise an error message
+ * Get all files uploaded by a user
+ * @route GET /users/:userId/files
+ * @param {string} req.params.userId - The ID of the user
+ * @returns {array} - An array of file objects uploaded by the user
  * */
-exports.getUserProfile = (req, res) => {
-  const userId = req.params.id;
-  // TODO: Implement logic to fetch user profile by ID
-  res.status(200).json({ message: `Get user with ID ${userId}` });
+exports.getUserFiles = async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const files = await prisma.file.findMany({
+      where: { user_id: BigInt(userId) },
+    });
+    res.status(200).json(files);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to retrieve user files", error });
+  }
+};
+
+/**
+ * Get all comments made by a user
+ * @route GET /users/:userId/comments
+ * @param {string} req.params.userId - The ID of the user
+ * @returns {array} - An array of comment objects made by the user
+ * */
+exports.getUserComments = async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const comments = await prisma.comment.findMany({
+      where: { user_id: BigInt(userId) },
+    });
+    res.status(200).json(comments);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to retrieve user comments", error });
+  }
+};
+
+/**
+ * Get all permissions for a user via their assigned role
+ * @route GET /users/:userId/permissions
+ * @param {string} req.params.userId - The ID of the user
+ * @returns {array} - An array of permission objects associated with the user's role
+ * */
+exports.getUserPermissions = async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const user = await prisma.user.findUnique({
+      where: { user_id: BigInt(userId) },
+      include: {
+        Role: {
+          include: {
+            RolePermission: {
+              include: { Permission: true },
+            },
+          },
+        },
+      },
+    });
+    if (!user) {
+      return res.status(404).json({ message: `User with ID ${userId} not found` });
+    }
+    const permissions = user.Role?.RolePermission.map((rp) => rp.Permission) ?? [];
+    res.status(200).json(permissions);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to retrieve user permissions", error });
+  }
 };
 
 ///////////////////////////////  POST ROUTES ///////////////////////////////
 
 /**
- * Register a new user
- * @param {string} req.body.username The username of the new user
- * @param {string} req.body.email The email of the new user
- * @param {string} req.body.fullName The full name of the new user
- * @param {string} req.body.role The role of the new user (e.g., admin, client, etc.)
- * @param {string} req.body.password The password of the new user
- * @return {object} A success message or an error message
+ * ### FOR SUPER ADMIN / ADMIN ONLY ###
+ * Create a new user
+ * @route POST /users/
+ * @param {string} req.body.first_name - First name of the new user (required)
+ * @param {string} req.body.last_name - Last name of the new user (required)
+ * @param {string} req.body.email - Email of the new user (required)
+ * @param {number} req.body.client_id - ID of the client this user belongs to
+ * @param {number} req.body.role_id - ID of the role assigned to this user
+ * @param {string} req.body.phone - Phone number of the new user
+ * @param {string} req.body.gender - Gender of the new user
+ * @param {string} req.body.status - Status of the new user (e.g. active, inactive)
+ * @returns {object} - The newly created user object
  * */
-exports.registerUser = async (req, res) => {
-  // TODO: Implement logic to create a new user
-  // Example implementation:
-  //   const { username, password } = req.body;
-  //   if (!username || !password) {
-  //     return res
-  //       .status(400)
-  //       .json({ message: "Username and password are required" });
-  //   }
+exports.createUser = async (req, res) => {
+  const { first_name, last_name, email, client_id, role_id, phone, gender, status } = req.body;
 
-  //   const existingUser = users.find((user) => user.username === username);
+  if (!first_name || !last_name || !email) {
+    return res.status(400).json({ message: "first_name, last_name, and email are required" });
+  }
 
-  //   if (existingUser) {
-  //     return res.status(400).json({ message: "Username already exists" });
-  //   }
-
-  //   const hashedPassword = await bcrypt.hash(password, 10);
-  //   users.push({ username, password: hashedPassword });
-  res.status(201).json({ message: "User registered successfully" });
-};
-
-/**
- * Login a user
- * @param {string} req.body.username The username of the user
- * @param {string} req.body.password The password of the user
- * @return {object} A success message with user details or an error message
- * */
-exports.loginUser = async (req, res) => {
-  const { username, password } = req.body;
-  // TODO: Implement logic to login user by ID
-  res.status(200).json({ message: `${username} successfully logged in.` });
-};
-
-/** Logout a user
- * @param {string} req.params.id The ID of the user to logout
- * @return {object} A success message or an error message
- * */
-exports.logoutUser = (req, res) => {
-  const userId = req.params.id;
-  // TODO: Implement logic to logout user by ID
-  res.status(200).json({ message: `User successfully logged out.` });
+  try {
+    const newUser = await prisma.user.create({
+      data: {
+        first_name,
+        last_name,
+        email,
+        phone,
+        gender,
+        status,
+        client_id: client_id ? BigInt(client_id) : undefined,
+        role_id: role_id ? BigInt(role_id) : undefined,
+      },
+    });
+    res.status(201).json(newUser);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to create user", error });
+  }
 };
 
 ///////////////////////////////  PUT ROUTES ///////////////////////////////
 
 /**
- * Update user profile by ID
- * @param {string} req.params.id The ID of the user to update
- * @param {object} req.body The updated user data
- * @return {object} A success message or an error message
+ * Update a user's profile by ID
+ * @route PUT /users/:userId
+ * @param {string} req.params.userId - The ID of the user to update
+ * @param {string} req.body.first_name - Updated first name
+ * @param {string} req.body.last_name - Updated last name
+ * @param {string} req.body.email - Updated email
+ * @param {number} req.body.client_id - Updated client ID
+ * @param {number} req.body.role_id - Updated role ID
+ * @param {string} req.body.phone - Updated phone number
+ * @param {string} req.body.gender - Updated gender
+ * @param {string} req.body.status - Updated status
+ * @returns {object} - The updated user object
  * */
-exports.updateUserProfile = (req, res) => {
-  // TODO: Implement logic to update user profile by ID
-  const userId = req.params.id;
-  res
-    .status(200)
-    .json({ message: `Profile of User with ID ${userId} updated` });
+exports.updateUser = async (req, res) => {
+  const { userId } = req.params;
+  const { first_name, last_name, email, client_id, role_id, phone, gender, status } = req.body;
+
+  try {
+    const updatedUser = await prisma.user.update({
+      where: { user_id: BigInt(userId) },
+      data: {
+        first_name,
+        last_name,
+        email,
+        phone,
+        gender,
+        status,
+        client_id: client_id ? BigInt(client_id) : undefined,
+        role_id: role_id ? BigInt(role_id) : undefined,
+      },
+    });
+    res.status(200).json(updatedUser);
+  } catch (error) {
+    res.status(500).json({ message: `Failed to update user with ID ${userId}`, error });
+  }
 };
 
-///////////////////////////// DELETE ROUTES ///////////////////////////////
+///////////////////////////////  DELETE ROUTES ///////////////////////////////
 
 /**
- * ### For Admins only ###
+ * ### FOR SUPER ADMIN / ADMIN ONLY ###
  * Delete a user by ID
- * @param {string} req.params.id The ID of the user to delete
- * @return {object} A success message or an error message
+ * @route DELETE /users/:userId
+ * @param {string} req.params.userId - The ID of the user to delete
+ * @returns {object} - A success message
  * */
-exports.deleteUser = (req, res) => {
-  const userId = req.params.id;
-  // TODO: Implement logic to delete user by ID
-  res.status(200).json({ message: `User with ID ${userId} deleted` });
+exports.deleteUser = async (req, res) => {
+  const { userId } = req.params;
+  try {
+    await prisma.user.delete({
+      where: { user_id: BigInt(userId) },
+    });
+    res.status(200).json({ message: `User with ID ${userId} deleted` });
+  } catch (error) {
+    res.status(500).json({ message: `Failed to delete user with ID ${userId}`, error });
+  }
 };

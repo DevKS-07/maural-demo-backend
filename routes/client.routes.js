@@ -1,26 +1,31 @@
 const express = require("express");
 
-const userController = require("../controllers/user.controller");
-
+const clientController = require("../controllers/client.controller");
 const router = express.Router();
 
 // Home route for testing
-router.get("/", userController.user_Testing);
+router.get("/", clientController.clientTesting);
 
-///////////////////////////////  GET ROUTES ///////////////////////////////
+// **************************  GET ROUTES **************************
 
-router.get("/profile/:id", userController.getUserProfile); // Get user's profile by ID
+router.get("/all", clientController.getAllClients); // Get all clients (Super Admin, Admin)
 
-///////////////////////////////  POST ROUTES ///////////////////////////////
+router.get("/:clientId", clientController.getClientById); // Get a client by ID
 
-router.post("/register", userController.registerUser); // Register a new user
+router.get("/:clientId/users", clientController.getClientUsers); // Get all users belonging to a client
 
-///////////////////////////////  PUT ROUTES ///////////////////////////////
+router.get("/:clientId/files", clientController.getClientFiles); // Get all files/documents of a client
 
-router.put("/profile/:id", userController.updateUserProfile); // Update user's profile by ID
+// **************************  POST ROUTES **************************
 
-/////////////////////////////// DELETE ROUTES ///////////////////////////////
+router.post("/", clientController.createClient); // Register/create a new client
 
-router.delete("/profile/:id", userController.deleteUser); // Delete user by ID
+// **************************  PUT ROUTES **************************
+
+router.put("/:clientId", clientController.updateClient); // Update client's profile by ID
+
+// ************************** DELETE ROUTES **************************
+
+router.delete("/:clientId", clientController.deleteClient); // Delete a client by ID
 
 module.exports = router;

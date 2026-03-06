@@ -20,12 +20,11 @@ const fs = require("fs");
 const path = require("path");
 const { createClient } = require("@supabase/supabase-js");
 const { OpenAIEmbeddings } = require("@langchain/openai");
-const { PrismaClient } = require("@prisma/client");
+const prisma = require("../lib/prisma");
 const pdfParse = require("pdf-parse");
 const XLSX = require("xlsx");
 const mammoth = require("mammoth");
 
-const prisma = new PrismaClient();
 const UPLOADS_DIR = path.join(__dirname, "../uploads");
 const CHUNK_SIZE = 1000;
 const CHUNK_OVERLAP = 150;
@@ -33,7 +32,7 @@ const CHUNK_OVERLAP = 150;
 function getSupabase() {
   return createClient(
     process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY,
   );
 }
 
@@ -56,7 +55,11 @@ function resolveFile(diskName) {
   if (raw[0] === 0x7b) {
     try {
       const parsed = JSON.parse(raw.toString("utf8"));
-      if (parsed.buffer && parsed.buffer.type === "Buffer" && Array.isArray(parsed.buffer.data)) {
+      if (
+        parsed.buffer &&
+        parsed.buffer.type === "Buffer" &&
+        Array.isArray(parsed.buffer.data)
+      ) {
         return {
           buffer: Buffer.from(parsed.buffer.data),
           realName: parsed.originalname || diskName,
@@ -85,7 +88,9 @@ async function extractText(buffer, fileName) {
     case "xls": {
       const workbook = XLSX.read(buffer, { type: "buffer" });
       return workbook.SheetNames.map((name) => {
-        const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[name], { skipHidden: true });
+        const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[name], {
+          skipHidden: true,
+        });
         return `[Sheet: ${name}]\n${csv}`;
       }).join("\n\n");
     }
@@ -104,7 +109,10 @@ function chunkText(text) {
   let start = 0;
   let index = 0;
   while (start < text.length) {
-    chunks.push({ content: text.slice(start, Math.min(start + CHUNK_SIZE, text.length)), chunkIndex: index++ });
+    chunks.push({
+      content: text.slice(start, Math.min(start + CHUNK_SIZE, text.length)),
+      chunkIndex: index++,
+    });
     start += CHUNK_SIZE - CHUNK_OVERLAP;
   }
   return chunks;
@@ -136,13 +144,17 @@ async function main() {
     modelName: "text-embedding-ada-002",
   });
 
-  const diskFiles = fs.readdirSync(UPLOADS_DIR).filter((f) => !f.startsWith("."));
+  const diskFiles = fs
+    .readdirSync(UPLOADS_DIR)
+    .filter((f) => !f.startsWith("."));
   if (diskFiles.length === 0) {
     console.log("No files found in uploads/");
     return;
   }
 
-  console.log(`Found ${diskFiles.length} file(s) in uploads/:\n  ${diskFiles.join("\n  ")}\n`);
+  console.log(
+    `Found ${diskFiles.length} file(s) in uploads/:\n  ${diskFiles.join("\n  ")}\n`,
+  );
 
   let totalChunks = 0;
   const errors = [];
@@ -157,7 +169,9 @@ async function main() {
       continue;
     }
 
-    console.log(`\nProcessing: "${realName}" (${(buffer.length / 1024).toFixed(1)} KB)`);
+    console.log(
+      `\nProcessing: "${realName}" (${(buffer.length / 1024).toFixed(1)} KB)`,
+    );
 
     try {
       // 1. Extract text
@@ -177,7 +191,9 @@ async function main() {
       console.log(`[chunk] ${chunks.length} chunks`);
 
       // 4. Embed all chunks in one batch
-      const vectors = await embeddings.embedDocuments(chunks.map((c) => c.content));
+      const vectors = await embeddings.embedDocuments(
+        chunks.map((c) => c.content),
+      );
       console.log(`[embed] ${vectors.length} vectors`);
 
       // 5. Build rows.
@@ -189,15 +205,18 @@ async function main() {
         metadata: {
           file_id: fileId,
           file_name: realName,
-          client_id: null,   // assign after migrating File table
-          ctg_id: null,      // assign after migrating File table (FK → Category)
+          client_id: null, // assign after migrating File table
+          ctg_id: null, // assign after migrating File table (FK → Category)
           chunk_index: chunk.chunkIndex,
         },
         embedding: vectors[i],
       }));
 
       // 6. Delete old chunks for this file
-      await supabase.from("document_embeddings").delete().eq("metadata->>file_id", fileId);
+      await supabase
+        .from("document_embeddings")
+        .delete()
+        .eq("metadata->>file_id", fileId);
 
       // 7. Insert new chunks
       const { error } = await supabase.from("document_embeddings").insert(rows);
@@ -213,7 +232,9 @@ async function main() {
 
   console.log(`\n${"=".repeat(50)}`);
   console.log(`Ingestion complete`);
-  console.log(`Files processed : ${diskFiles.length - errors.length} / ${diskFiles.length}`);
+  console.log(
+    `Files processed : ${diskFiles.length - errors.length} / ${diskFiles.length}`,
+  );
   console.log(`Total chunks    : ${totalChunks}`);
   if (errors.length > 0) {
     console.log(`\nErrors (${errors.length}):`);

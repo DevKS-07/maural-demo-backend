@@ -1,42 +1,36 @@
 require('dotenv').config();
 const express = require("express");
-const bodyParser = require("body-parser");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
-const routes = require("./routes");
 const cookieParser = require("cookie-parser");
-const session = require("express-session");
+const { clerkMiddleware } = require("@clerk/express");
+const routes = require("./routes");
 
 const app = express();
 
-// Middlewares
+// Clerk middleware — must be first so req.auth() is available everywhere
+app.use(clerkMiddleware());
+
+// Raw body parser for Clerk webhook route — must come before express.json()
+// Svix needs the unparsed request body to verify the webhook signature
+app.use("/api/webhooks", express.raw({ type: "application/json" }));
+
+// General middlewares
 app.use(express.urlencoded({ extended: true }));
-app.use(express.json()); // for parsing application/json
-app.use(helmet()); // for setting various HTTP headers for app security
-// app.use(cors()); // Enable CORS for all routes
+app.use(express.json());
+app.use(helmet());
 app.use(
-  // Enable CORS with specific settings
   cors({
-    origin: "http://localhost:3000", // For now, allowing only frontend server
+    origin: "http://localhost:3000",
     credentials: true,
   }),
 );
-
-app.use(cookieParser()); // for parsing cookies
-app.use(morgan("combined")); // for logging HTTP requests
-
-// Use a session to keep track of client IDs (if needed)
-app.use(
-  session({
-    secret: Math.random().toString(36).substring(2),
-    resave: false,
-    saveUninitialized: true,
-  }),
-);
+app.use(cookieParser());
+app.use(morgan("combined"));
 
 // Routes
-app.use("/api", routes); // Use the routes defined in routes.js
+app.use("/api", routes);
 
 // #######################################################
 // ############# 404 & Error Handling Routes #############
