@@ -29,18 +29,18 @@ router.use("/webhooks", authRoutes);
 // ****************************  PROTECTED ROUTES  *************************
 // All routes below require a valid Clerk JWT (returns 401 if missing/invalid)
 
-router.use("/auth", requireAuth, authRoutes);           // GET /api/auth/me
+router.use("/auth", requireAuth, authRoutes); // GET /api/auth/me
 
-router.use("/admin", requireAuth, adminRoutes);         // Admin-only management routes
+router.use("/admin", requireAuth, adminRoutes); // Admin-only management routes
 
-router.use("/user", requireAuth, userRoutes);           // User CRUD + activity/files/comments/permissions
+router.use("/user", requireAuth, userRoutes); // User CRUD + activity/files/comments/permissions
 
-router.use("/client", requireAuth, clientRoutes);       // Client CRUD + users/files
+router.use("/client", requireAuth, clientRoutes); // Client CRUD + users/files
 
-router.use("/docs", requireAuth, docsRoutes);           // Documents + comments + activity
+router.use("/docs", requireAuth, docsRoutes); // Documents + comments + activity
 
 router.use("/integrations", requireAuth, integrations); // HubSpot, QuickBooks, Monday, ClickUp
 
-router.use("/chat", requireAuth, chatRoutes);           // AI chat
+router.use("/chat", requireAuth, chatRoutes); // AI chat
 
 module.exports = router;
