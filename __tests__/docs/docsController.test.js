@@ -8,11 +8,18 @@ const mockStorageFrom = {
   remove: jest.fn(),
 };
 
+const mockEq = jest.fn().mockResolvedValue({ error: null });
+const mockDeleteChain = { eq: mockEq };
+const mockFromTable = jest.fn().mockReturnValue({
+  delete: jest.fn().mockReturnValue(mockDeleteChain),
+});
+
 jest.mock("@supabase/supabase-js", () => ({
   createClient: jest.fn().mockReturnValue({
     storage: {
       from: jest.fn().mockReturnValue(mockStorageFrom),
     },
+    from: mockFromTable,
   }),
 }));
 
@@ -434,7 +441,7 @@ describe("Docs Controller - Unit Tests", () => {
   // DELETE /:id — deleteDocument
   // ========================================================================
   describe("deleteDocument", () => {
-    test("returns 200 and removes file from storage and database", async () => {
+    test("returns 200 and removes file from storage, database, and embeddings", async () => {
       prisma.file.delete.mockResolvedValue(MOCK_FILE_META);
       mockStorageFrom.remove.mockResolvedValue({ error: null });
 
@@ -445,6 +452,8 @@ describe("Docs Controller - Unit Tests", () => {
 
       expect(prisma.file.delete).toHaveBeenCalled();
       expect(mockStorageFrom.remove).toHaveBeenCalledWith(["uploads/report.pdf"]);
+      expect(mockFromTable).toHaveBeenCalledWith("document_embeddings");
+      expect(mockEq).toHaveBeenCalledWith("metadata->>file_id", "abc-123-uuid");
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ message: "Document with ID abc-123-uuid deleted" });
     });

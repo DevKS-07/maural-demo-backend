@@ -7,11 +7,18 @@ const mockStorageFrom = {
   remove: jest.fn(),
 };
 
+const mockEq = jest.fn().mockResolvedValue({ error: null });
+const mockDeleteChain = { eq: mockEq };
+const mockFromTable = jest.fn().mockReturnValue({
+  delete: jest.fn().mockReturnValue(mockDeleteChain),
+});
+
 jest.mock("@supabase/supabase-js", () => ({
   createClient: jest.fn().mockReturnValue({
     storage: {
       from: jest.fn().mockReturnValue(mockStorageFrom),
     },
+    from: mockFromTable,
   }),
 }));
 
@@ -34,6 +41,7 @@ jest.mock("../../lib/prisma", () => ({
 }));
 
 jest.mock("mime-types", () => ({
+  ...jest.requireActual("mime-types"),
   lookup: jest.fn().mockReturnValue("application/pdf"),
 }));
 

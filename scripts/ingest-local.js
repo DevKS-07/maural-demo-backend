@@ -19,12 +19,11 @@ require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
 const { createClient } = require("@supabase/supabase-js");
-const { OpenAIEmbeddings } = require("@langchain/openai");
+const { OllamaEmbeddings } = require("@langchain/ollama");
 const prisma = require("../lib/prisma");
 const pdfParse = require("pdf-parse");
 const XLSX = require("xlsx");
 const mammoth = require("mammoth");
-
 const UPLOADS_DIR = path.join(__dirname, "../uploads");
 const CHUNK_SIZE = 1000;
 const CHUNK_OVERLAP = 150;
@@ -139,9 +138,9 @@ async function upsertFileRecord(realName, fileSize) {
 
 async function main() {
   const supabase = getSupabase();
-  const embeddings = new OpenAIEmbeddings({
-    openAIApiKey: process.env.OPENAI_API_KEY,
-    modelName: "text-embedding-ada-002",
+  const embeddings = new OllamaEmbeddings({
+    baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
+    model: process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text",
   });
 
   const diskFiles = fs

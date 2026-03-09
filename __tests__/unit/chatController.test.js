@@ -1,8 +1,8 @@
 // All mocks must be declared before any require() calls.
 // Paths are relative to this test file (__tests__/unit/).
 
-jest.mock("@langchain/openai", () => ({
-  ChatOpenAI: jest.fn().mockImplementation(() => ({
+jest.mock("@langchain/ollama", () => ({
+  ChatOllama: jest.fn().mockImplementation(() => ({
     invoke: jest.fn().mockResolvedValue({ content: "agent answer" }),
   })),
 }));
@@ -140,8 +140,8 @@ describe("chat controller", () => {
 
       await chat(req, res);
 
-      // retrieveDocuments should be called with "all" as clientIds (the default)
-      expect(retrieveDocuments).toHaveBeenCalledWith("What is the net income?", "all");
+      // retrieveDocuments should be called with "all" as clientIds (the default) and top-k of 5
+      expect(retrieveDocuments).toHaveBeenCalledWith("What is the net income?", "all", 5);
     });
 
     test("returns 500 when orchestrate throws", async () => {

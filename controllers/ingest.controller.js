@@ -11,7 +11,7 @@
  */
 
 const { createClient } = require("@supabase/supabase-js");
-const { OpenAIEmbeddings } = require("@langchain/openai");
+const { OllamaEmbeddings } = require("@langchain/ollama");
 const prisma = require("../lib/prisma");
 const pdfParse = require("pdf-parse");
 const XLSX = require("xlsx");
@@ -120,9 +120,9 @@ function chunkText(text, fileName) {
 // Embed a batch of strings with OpenAI (handles rate limits via batching)
 // ---------------------------------------------------------------------------
 async function embedBatch(texts) {
-  const embeddings = new OpenAIEmbeddings({
-    openAIApiKey: process.env.OPENAI_API_KEY,
-    modelName: "text-embedding-ada-002",
+  const embeddings = new OllamaEmbeddings({
+    baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
+    model: process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text",
   });
   return embeddings.embedDocuments(texts);
 }
@@ -136,7 +136,53 @@ async function upsertChunks(supabase, chunks) {
 }
 
 // ---------------------------------------------------------------------------
-// Main ingestion handler
+// Ingest a single file — reusable by the upload route for auto-ingestion
+// ---------------------------------------------------------------------------
+async function ingestSingleFile(file) {
+  const supabase = getSupabase();
+
+  const buffer = await downloadFile(supabase, file.file_source);
+
+  const rawText = await extractText(buffer, file.file_name);
+  if (!rawText.trim()) {
+    console.log(`[ingest] Skipping "${file.file_name}" — no extractable text.`);
+    return { skipped: true };
+  }
+
+  const chunks = chunkText(rawText, file.file_name);
+  if (chunks.length === 0) return { skipped: true };
+
+  const vectors = await embedBatch(chunks.map((c) => c.content));
+
+  const rows = chunks.map((chunk, i) => ({
+    content: chunk.content,
+    metadata: {
+      file_id: String(file.file_id),
+      file_name: file.file_name,
+      client_id: file.client_id ? Number(file.client_id) : null,
+      ctg_id: file.ctg_id ? Number(file.ctg_id) : null,
+      chunk_index: chunk.chunkIndex,
+    },
+    embedding: vectors[i],
+  }));
+
+  await supabase
+    .from("document_embeddings")
+    .delete()
+    .eq("metadata->>file_id", String(file.file_id));
+
+  await upsertChunks(supabase, rows);
+
+  console.log(
+    `[ingest] ✓ "${file.file_name}" — ${rows.length} chunks ingested.`,
+  );
+  return { chunks: rows.length };
+}
+
+exports.ingestSingleFile = ingestSingleFile;
+
+// ---------------------------------------------------------------------------
+// Main ingestion handler (bulk — all files)
 // ---------------------------------------------------------------------------
 exports.ingest = async (req, res) => {
   try {

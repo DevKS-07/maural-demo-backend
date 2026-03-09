@@ -268,6 +268,12 @@ exports.deleteDocument = async (req, res) => {
     const filePath = file.file_source.split("file_storage/")[1];
     await supabase.storage.from("file_storage").remove([filePath]);
 
+    // Remove all embedding chunks for this file so the AI no longer sees it
+    await supabase
+      .from("document_embeddings")
+      .delete()
+      .eq("metadata->>file_id", String(id));
+
     res.status(200).json({ message: `Document with ID ${id} deleted` });
   } catch (error) {
     res

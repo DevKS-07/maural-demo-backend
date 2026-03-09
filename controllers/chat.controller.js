@@ -16,7 +16,7 @@
  *   data: [DONE]
  */
 
-const { ChatOpenAI } = require("@langchain/openai");
+const { ChatOllama } = require("@langchain/ollama");
 const { detectIntents } = require("../services/intentRouter");
 const { getSystemPrompt } = require("../services/promptTemplates");
 const {
@@ -29,11 +29,12 @@ const { checkAndRefine } = require("../services/guardrail");
 // ---------------------------------------------------------------------------
 // LLM factory
 // ---------------------------------------------------------------------------
-function getLLM({ model = "gpt-4o", temperature = 0.3 } = {}) {
-  return new ChatOpenAI({
-    openAIApiKey: process.env.OPENAI_API_KEY,
-    modelName: model,
+function getLLM({ temperature = 0.3 } = {}) {
+  return new ChatOllama({
+    baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
+    model: process.env.OLLAMA_CHAT_MODEL || "qwen3.5:9b",
     temperature,
+    numCtx: 8192,
   });
 }
 
@@ -46,7 +47,7 @@ async function runAgent(intent, message, docs, history) {
 
   // Temperature varies by intent: predictions slightly higher, factual QA lower
   const temperature =
-    intent === "predict" ? 0.4 : intent === "explain" ? 0.35 : 0.2;
+    intent === "predict" ? 0.4 : intent === "reason" ? 0.3 : 0.2;
   const llm = getLLM({ temperature });
   const response = await llm.invoke(messages);
   return response.content || "";
@@ -71,7 +72,7 @@ async function combineAnswers(intents, answers, question) {
     )
     .join("\n\n");
 
-  const llm = getLLM({ model: "gpt-4o-mini", temperature: 0.1 });
+  const llm = getLLM({ temperature: 0.1 });
   const response = await llm.invoke([
     { role: "system", content: COMBINER_PROMPT },
     {
@@ -110,7 +111,7 @@ async function orchestrate(message, clientIds, history) {
   // Step 1 — intent detection and document retrieval run in parallel
   const [intents, docs] = await Promise.all([
     detectIntents(message),
-    retrieveDocuments(message, clientIds),
+    retrieveDocuments(message, clientIds, 5),
   ]);
 
   console.log(`[chat] Detected intents: [${intents.join(", ")}]`);
