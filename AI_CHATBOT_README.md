@@ -2,7 +2,9 @@
 
 ## Overview
 
-The Maural KMS AI Chatbot is a multi-agent RAG (Retrieval-Augmented Generation) pipeline built on top of OpenAI and Supabase pgvector. It answers questions about uploaded documents with high accuracy, streaming responses to the frontend in real time.
+The Maural KMS AI Chatbot is a multi-agent RAG (Retrieval-Augmented Generation) pipeline built on top of **Ollama (local LLM)** and Supabase pgvector. It answers questions about uploaded documents with high accuracy, streaming responses to the frontend in real time.
+
+All AI inference runs **100% locally** — no data is sent to any third-party AI service. Models are served by Ollama running on `http://localhost:11434`.
 
 ---
 
@@ -11,35 +13,50 @@ The Maural KMS AI Chatbot is a multi-agent RAG (Retrieval-Augmented Generation) 
 | Layer | Technology | Purpose |
 |---|---|---|
 | Runtime | Node.js (Express 5) | API server |
-| LLM | OpenAI `gpt-4o` | Specialized agent responses |
-| LLM (light tasks) | OpenAI `gpt-4o-mini` | Intent routing, combining, guardrails |
-| Embeddings | OpenAI `text-embedding-ada-002` | Converts text to 1536-dimensional vectors |
+| LLM | Ollama `qwen3.5:9b` | Specialized agent responses, intent routing, combining, guardrails |
+| Embeddings | Ollama `nomic-embed-text` | Converts text to 768-dimensional vectors |
 | Vector Database | Supabase pgvector (PostgreSQL) | Stores and searches document embeddings |
 | ORM | Prisma | File metadata queries (File table) |
-| LLM SDK | LangChain (`@langchain/openai`) | ChatOpenAI and OpenAIEmbeddings wrappers |
+| LLM SDK | LangChain (`@langchain/ollama`) | ChatOllama and OllamaEmbeddings wrappers |
 | File Storage | Supabase Storage (`file_storage` bucket) | Stores the original uploaded files |
 | PDF Parsing | `pdf-parse` v1 | Extracts text from PDF files |
 | Excel Parsing | `xlsx` (SheetJS) | Extracts text from `.xlsx` / `.xls` files |
+| Word Parsing | `mammoth` | Extracts text from `.docx` files |
 | Streaming | SSE (Server-Sent Events) | Streams answer chunks to the frontend |
 
 ---
 
-## Dependencies to Install
+## Prerequisites
 
-Run the following command to install all AI chatbot dependencies:
+### 1. Install Ollama
+
+Download and install Ollama from [https://ollama.com](https://ollama.com), then pull the required models:
 
 ```bash
-npm install @langchain/openai @langchain/core langchain @supabase/supabase-js pdf-parse@1 xlsx mammoth
+ollama pull qwen3.5:9b
+ollama pull nomic-embed-text
+```
+
+Verify Ollama is running:
+
+```bash
+curl http://localhost:11434/api/tags
+```
+
+### 2. Install Node dependencies
+
+```bash
+npm install @langchain/ollama @langchain/core langchain @supabase/supabase-js pdf-parse@1 xlsx mammoth
 ```
 
 ### Full dependency list (relevant to AI chatbot)
 
 ```json
-"@langchain/core": "^1.1.29",
-"@langchain/openai": "^1.2.11",
-"langchain": "^1.2.28",
+"@langchain/core": "^0.3.x",
+"@langchain/ollama": "^0.2.x",
+"langchain": "^0.3.x",
 "@supabase/supabase-js": "^2.76.0",
-"@prisma/client": "^6.18.0",
+"@prisma/client": "^6.x",
 "pdf-parse": "^1.1.4",
 "xlsx": "^0.18.5",
 "mammoth": "^1.11.0"
@@ -50,10 +67,70 @@ npm install @langchain/openai @langchain/core langchain @supabase/supabase-js pd
 ### Required environment variables
 
 ```env
-OPENAI_API_KEY=sk-proj-...
+# Ollama (local model — no data leaves the machine)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_CHAT_MODEL=qwen3.5:9b
+OLLAMA_EMBED_MODEL=nomic-embed-text
+
+# Supabase
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
+DATABASE_URL=postgresql://...
+DIRECT_URL=postgresql://...
+```
+
+---
+
+## Supabase Database Setup
+
+The `document_embeddings` table must use `vector(768)` dimensions to match `nomic-embed-text` output.
+
+Run the following in your Supabase SQL Editor:
+
+```sql
+-- Enable pgvector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Create embeddings table
+CREATE TABLE IF NOT EXISTS document_embeddings (
+  id        bigserial PRIMARY KEY,
+  content   text,
+  metadata  jsonb,
+  embedding vector(768)
+);
+
+-- Create similarity search function
+CREATE OR REPLACE FUNCTION match_documents(
+  query_embedding vector(768),
+  match_count     int DEFAULT 15,
+  filter          jsonb DEFAULT '{}'
+)
+RETURNS TABLE (
+  id         bigint,
+  content    text,
+  metadata   jsonb,
+  similarity float
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    document_embeddings.id,
+    document_embeddings.content,
+    document_embeddings.metadata,
+    1 - (document_embeddings.embedding <=> query_embedding) AS similarity
+  FROM document_embeddings
+  ORDER BY document_embeddings.embedding <=> query_embedding
+  LIMIT match_count;
+END;
+$$;
+
+-- Grant access to service role
+GRANT ALL ON TABLE document_embeddings TO service_role;
+GRANT ALL ON SEQUENCE document_embeddings_id_seq TO service_role;
+ALTER TABLE document_embeddings DISABLE ROW LEVEL SECURITY;
 ```
 
 ---
@@ -70,24 +147,30 @@ SUPABASE_SERVICE_ROLE_KEY=eyJ...
 
 ## Document Ingestion Pipeline
 
-Before the chatbot can answer questions, documents must be ingested. Call `POST /api/chat/ingest` after uploading files to Supabase Storage.
+Before the chatbot can answer questions, documents must be ingested. Call `POST /api/chat/ingest` after uploading files to Supabase Storage. For local development, use the ingestion script:
+
+```bash
+node scripts/ingest-local.js
+```
+
+Place files in the `uploads/` folder before running the script.
 
 ```
-Upload file to Supabase Storage
+Upload file to Supabase Storage (or place in uploads/)
          ↓
   Register in File table (Prisma)
          ↓
-  POST /api/chat/ingest
+  POST /api/chat/ingest  (or run ingest-local.js)
          ↓
-  Download file from Supabase Storage
+  Download/read file buffer
          ↓
-  Extract text (PDF / XLSX / TXT / CSV / JSON)
+  Extract text (PDF / XLSX / DOCX / TXT / CSV / JSON)
          ↓
   Sanitize text (strip null bytes, lone surrogates)
          ↓
   Chunk text (1000 chars, 150-char overlap)
          ↓
-  Embed chunks with text-embedding-ada-002
+  Embed chunks with nomic-embed-text (via Ollama, local)
          ↓
   Delete old chunks for this file (idempotent)
          ↓
@@ -120,7 +203,8 @@ Each chunk stores:
 - `content` — the raw text slice
 - `metadata.file_id` — UUID of the source file
 - `metadata.file_name` — original filename
-- `metadata.folder_id` — folder association (nullable)
+- `metadata.client_id` — client association (nullable)
+- `metadata.ctg_id` — category association, FK → Category table (nullable)
 - `metadata.chunk_index` — position of chunk within the document
 
 **Why overlap?** The 150-character overlap ensures that sentences or ideas that span a chunk boundary are captured in at least one chunk, preventing context loss at cut points.
@@ -129,13 +213,13 @@ Each chunk stores:
 
 ## Embedding
 
-**Model:** `text-embedding-ada-002` (OpenAI)
-**Dimensions:** 1536
-**Provider:** OpenAI via LangChain `OpenAIEmbeddings`
+**Model:** `nomic-embed-text` (Ollama, local)
+**Dimensions:** 768
+**Provider:** Ollama via LangChain `OllamaEmbeddings`
 
-Each chunk's text is converted to a 1536-dimensional float vector and stored in the `embedding` column of the `document_embeddings` table in Supabase (pgvector).
+Each chunk's text is converted to a 768-dimensional float vector and stored in the `embedding` column of the `document_embeddings` table in Supabase (pgvector).
 
-The same model is used at query time to embed the user's question, producing a comparable vector for similarity search.
+The same model is used at query time to embed the user's question, producing a comparable vector for similarity search. Since Ollama runs locally, no data leaves the machine during embedding.
 
 ---
 
@@ -144,7 +228,6 @@ The same model is used at query time to embed the user's question, producing a c
 **Default:** `topK = 15`
 
 When a user sends a message, the query is embedded and compared against all stored chunk vectors using cosine similarity via Supabase's `match_documents` RPC function. The **15 most similar chunks** are returned.
-
 
 ### Document coverage guarantee
 
@@ -159,15 +242,13 @@ Additionally, a **document index** (list of all file names from the File table) 
 **Metric:** Cosine similarity
 **Range:** 0.0 (unrelated) → 1.0 (identical)
 
-Cosine similarity measures the angle between two vectors in 1536-dimensional space. It is direction-sensitive (meaning matters) rather than magnitude-sensitive (length of text doesn't skew results).
+Cosine similarity measures the angle between two vectors in 768-dimensional space. It is direction-sensitive (meaning matters) rather than magnitude-sensitive (length of text doesn't skew results).
 
 ```
 similarity = (A · B) / (|A| × |B|)
 ```
 
 Supabase pgvector uses the `<=>` operator for cosine distance. The `match_documents` function converts this to similarity (`1 - distance`) and returns results ordered from most to least relevant.
-
-Chunks with similarity above the threshold set in the `match_documents` function (typically `0.0` — no minimum, all top-K returned) are passed to the LLM as context.
 
 ---
 
@@ -201,22 +282,22 @@ User Message
      ├────────────────────────────┐
      ▓                            ▓
 [Intent Router]          [Document Retrieval]
-gpt-4o-mini, temp=0      pgvector top-15 chunks
+qwen3.5:9b, temp=0       pgvector top-15 chunks
 → ["summarize","predict"] → relevant document text
      │                            │
      └──────────┬─────────────────┘
                 ▓
      [Parallel Specialized Agents]
-      One gpt-4o agent per detected intent
+      One qwen3.5:9b agent per detected intent
       ┌──────────┬──────────┬──────────┬──────────┬──────────┐
       summarize  analyze    predict    explain    qa
       └──────────┴──────────┴──────────┴──────────┴──────────┘
                 ▓
      [Response Combiner]  ← only if more than 1 intent
-      gpt-4o-mini: merges sections into one coherent answer
+      qwen3.5:9b: merges sections into one coherent answer
                 ▓
      [Guardrail Agent]
-      gpt-4o-mini, temp=0, JSON output
+      qwen3.5:9b, temp=0, JSON output
       • Checks every claim against source documents
       • Labels unlabeled general knowledge
       • Revises hallucinated claims
@@ -227,11 +308,13 @@ gpt-4o-mini, temp=0      pgvector top-15 chunks
 
 ### LLM calls per request
 
-| Scenario | Total LLM calls | Models used |
+| Scenario | Total LLM calls | Model used |
 |---|---|---|
-| Single intent (e.g. `qa`) | 3 | mini + gpt-4o + mini |
-| Two intents (e.g. `summarize + predict`) | 4 | mini + 2× gpt-4o + mini |
-| Three intents | 5 | mini + 3× gpt-4o + mini |
+| Single intent (e.g. `qa`) | 3 | 3× qwen3.5:9b |
+| Two intents (e.g. `summarize + predict`) | 4 | 4× qwen3.5:9b |
+| Three intents | 5 | 5× qwen3.5:9b |
+
+All calls go to the local Ollama server — zero external API calls.
 
 ---
 
@@ -261,6 +344,17 @@ The guardrail runs on every response before it reaches the user.
 
 ---
 
+## Privacy Guarantee
+
+Since all AI inference runs locally via Ollama:
+
+- No user queries leave the machine
+- No document content is sent to OpenAI or any cloud AI provider
+- The only external service used is Supabase (for storing document metadata and vectors in your own project)
+- Ollama models (`qwen3.5:9b`, `nomic-embed-text`) run entirely on local hardware
+
+---
+
 ## File Structure (AI Chatbot related files)
 
 ```
@@ -270,9 +364,9 @@ maural-kms-api/
 │   └── ingest.controller.js     # Document ingestion pipeline (Supabase Storage)
 ├── services/
 │   ├── ragService.js            # Document retrieval + prompt construction
-│   ├── intentRouter.js          # Multi-intent detection (gpt-4o-mini)
+│   ├── intentRouter.js          # Multi-intent detection (qwen3.5:9b, local)
 │   ├── promptTemplates.js       # Per-intent system prompts
-│   └── guardrail.js             # Answer accuracy verification
+│   └── guardrail.js             # Answer accuracy verification (qwen3.5:9b, local)
 ├── routes/
 │   └── chatRoutes.js            # /stream, /, /ingest routes
 ├── scripts/

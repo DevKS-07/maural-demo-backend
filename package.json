@@ -15,8 +15,8 @@
   "license": "ISC",
   "dependencies": {
     "@clerk/express": "^1.7.64",
-    "@langchain/core": "^1.1.29",
-    "@langchain/openai": "^1.2.11",
+    "@langchain/core": "^1.1.31",
+    "@langchain/ollama": "^1.2.6",
     "@prisma/adapter-pg": "^7.4.0",
     "@prisma/client": "^7.4.0",
     "@supabase/supabase-js": "^2.91.0",

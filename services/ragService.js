@@ -21,7 +21,7 @@
  *   ctg_id can be used to further narrow results to a specific document category.
  */
 
-const { OpenAIEmbeddings } = require("@langchain/openai");
+const { OllamaEmbeddings } = require("@langchain/ollama");
 const { createClient } = require("@supabase/supabase-js");
 const prisma = require("../lib/prisma");
 
@@ -33,7 +33,7 @@ function getSupabase() {
   if (!_supabase) {
     _supabase = createClient(
       process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY,
     );
   }
   return _supabase;
@@ -45,9 +45,9 @@ function getSupabase() {
 let _embeddings = null;
 function getEmbeddings() {
   if (!_embeddings) {
-    _embeddings = new OpenAIEmbeddings({
-      openAIApiKey: process.env.OPENAI_API_KEY,
-      modelName: "text-embedding-ada-002",
+    _embeddings = new OllamaEmbeddings({
+      baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
+      model: process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text",
     });
   }
   return _embeddings;
@@ -144,7 +144,7 @@ async function retrieveDocuments(query, clientIds, topK = 15) {
   if (error) {
     console.warn(
       "[ragService] match_documents RPC warning (table may be empty or not yet created):",
-      error.message
+      error.message,
     );
     return [];
   }
@@ -163,9 +163,11 @@ async function retrieveDocuments(query, clientIds, topK = 15) {
   // least one chunk visible to the model, even if it scored outside topK.
   // -------------------------------------------------------------------------
   const representedFileIds = new Set(
-    chunks.map((c) => c.metadata?.file_id).filter(Boolean)
+    chunks.map((c) => c.metadata?.file_id).filter(Boolean),
   );
-  const missingFiles = allFiles.filter((f) => !representedFileIds.has(f.file_id));
+  const missingFiles = allFiles.filter(
+    (f) => !representedFileIds.has(f.file_id),
+  );
 
   if (missingFiles.length > 0) {
     const missingIds = missingFiles.map((f) => f.file_id);
@@ -240,8 +242,8 @@ ${context}
 
   const messages = [{ role: "system", content: fullSystemPrompt }];
 
-  // Include conversation history (last 10 turns to stay within token budget)
-  const trimmed = (history || []).slice(-10);
+  // Include conversation history (last 5 turns to stay within token budget)
+  const trimmed = (history || []).slice(-5);
   for (const turn of trimmed) {
     if (turn.role && turn.content) {
       messages.push({ role: turn.role, content: turn.content });
@@ -289,4 +291,9 @@ function mapSources(docs) {
   return sources;
 }
 
-module.exports = { retrieveDocuments, buildMessages, buildMessagesForIntent, mapSources };
+module.exports = {
+  retrieveDocuments,
+  buildMessages,
+  buildMessagesForIntent,
+  mapSources,
+};

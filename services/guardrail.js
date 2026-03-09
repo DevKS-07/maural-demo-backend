@@ -12,7 +12,7 @@
  * This NEVER blocks a response — it always returns something useful.
  */
 
-const { ChatOpenAI } = require("@langchain/openai");
+const { ChatOllama } = require("@langchain/ollama");
 
 const GUARDRAIL_SYSTEM_PROMPT = `You are an accuracy verifier for a Knowledge Management System (KMS) chatbot.
 
@@ -45,11 +45,12 @@ Rules for your revision:
 let _guardrailLLM = null;
 function getGuardrailLLM() {
   if (!_guardrailLLM) {
-    _guardrailLLM = new ChatOpenAI({
-      openAIApiKey: process.env.OPENAI_API_KEY,
-      modelName: "gpt-4o-mini",
+    _guardrailLLM = new ChatOllama({
+      baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
+      model: process.env.OLLAMA_CHAT_MODEL || "qwen3.5:9b",
       temperature: 0,
-      modelKwargs: { response_format: { type: "json_object" } },
+      format: "json",
+      numCtx: 8192,
     });
   }
   return _guardrailLLM;
@@ -92,7 +93,8 @@ async function checkAndRefine(answer, docs, question) {
     ]);
 
     const result = JSON.parse(response.content);
-    const confidence = typeof result.confidence === "number" ? result.confidence : 75;
+    const confidence =
+      typeof result.confidence === "number" ? result.confidence : 75;
     const issues = Array.isArray(result.issues) ? result.issues : [];
 
     // Decide which answer to use
@@ -113,7 +115,10 @@ async function checkAndRefine(answer, docs, question) {
     return { validatedAnswer, confidence, issues };
   } catch (err) {
     // Guardrail failed — return original answer rather than blocking
-    console.warn("[guardrail] Verification failed, returning original answer:", err.message);
+    console.warn(
+      "[guardrail] Verification failed, returning original answer:",
+      err.message,
+    );
     return {
       validatedAnswer: answer,
       confidence: 70,
