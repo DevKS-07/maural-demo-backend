@@ -9,6 +9,7 @@ const aiRoutes = require("./routes/ai.routes");
 const chatRoutes = require("./routes/chat.routes");
 const uploadRoutes = require("./routes/upload.routes");
 const integrations = require("./routes/integrations.routes");
+const summaryRoutes = require("./routes/summary.routes");
 const {
   loginUser,
   logoutUser,
@@ -27,6 +28,8 @@ router.use("/upload", uploadRoutes);
 router.post("/signup", registerUser);
 
 router.use("/chat", chatRoutes);
+
+router.use("/summary", summaryRoutes);
 
 // Login route (Open to all users; Restrict access for logged in users)
 router.post("/login", loginUser);

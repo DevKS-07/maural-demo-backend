@@ -1,8 +1,8 @@
 
 
-const { getFinancialKPIsService } = require("../services/financial.service");
+const { getFinancialKPIsService } = require("../services/finance.service");
 const { getLeadsKPIsService }     = require("../services/leads.service");
-const { getLaborKPIsService }     = require("../services/labor.service");
+const { getLaborKPIsService }     = require("../services/labour.service");
 const prisma                              = require("../lib/prisma");
 
 
