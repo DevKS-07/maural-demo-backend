@@ -27,15 +27,22 @@ const {
 const { checkAndRefine } = require("../services/guardrail");
 
 // ---------------------------------------------------------------------------
-// LLM factory
+// LLM singleton — keyed by temperature to avoid creating a new instance per call
 // ---------------------------------------------------------------------------
+const _llmCache = new Map();
 function getLLM({ temperature = 0.3 } = {}) {
-  return new ChatOllama({
-    baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
-    model: process.env.OLLAMA_CHAT_MODEL || "qwen3.5:9b",
-    temperature,
-    numCtx: 8192,
-  });
+  if (!_llmCache.has(temperature)) {
+    _llmCache.set(
+      temperature,
+      new ChatOllama({
+        baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
+        model: process.env.OLLAMA_CHAT_MODEL || "qwen3.5:9b",
+        temperature,
+        numCtx: 8192,
+      }),
+    );
+  }
+  return _llmCache.get(temperature);
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +112,25 @@ function streamFromBuffer(text, sendEvent, chunkSize = 4) {
 }
 
 // ---------------------------------------------------------------------------
+// Pre-confidence heuristic — skips the guardrail LLM call when grounding is
+// already strong enough. Score breakdown:
+//   +10 per retrieved chunk with real similarity (up to 60 pts)
+//   -15 per extra intent beyond the first (multi-intent = higher hallucination risk)
+// Threshold is configurable via GUARDRAIL_CONFIDENCE_THRESHOLD (default 80).
+// ---------------------------------------------------------------------------
+const GUARDRAIL_THRESHOLD = parseInt(
+  process.env.GUARDRAIL_CONFIDENCE_THRESHOLD || "90",
+  10,
+);
+
+function estimatePreConfidence(docs, intents) {
+  const groundedChunks = docs.filter((d) => d.similarity > 0).length;
+  const docScore = Math.min(groundedChunks * 10, 60);
+  const intentPenalty = (intents.length - 1) * 15;
+  return Math.max(0, 40 + docScore - intentPenalty);
+}
+
+// ---------------------------------------------------------------------------
 // Shared orchestration logic (used by both streaming + non-streaming)
 // ---------------------------------------------------------------------------
 async function orchestrate(message, clientIds, history) {
@@ -129,12 +155,27 @@ async function orchestrate(message, clientIds, history) {
     combinedAnswer = await combineAnswers(intents, agentAnswers, message);
   }
 
-  // Step 4 — guardrail: verify grounding, fix hallucinations
-  const { validatedAnswer, confidence, issues } = await checkAndRefine(
-    combinedAnswer,
-    docs,
-    message,
-  );
+  // Step 4 — guardrail: skip if pre-confidence is already high enough
+  const preConfidence = estimatePreConfidence(docs, intents);
+  let validatedAnswer, confidence, issues;
+
+  if (preConfidence >= GUARDRAIL_THRESHOLD) {
+    console.log(
+      `[chat] Guardrail skipped — pre-confidence ${preConfidence} >= threshold ${GUARDRAIL_THRESHOLD}`,
+    );
+    validatedAnswer = combinedAnswer;
+    confidence = preConfidence;
+    issues = [];
+  } else {
+    console.log(
+      `[chat] Running guardrail — pre-confidence ${preConfidence} < threshold ${GUARDRAIL_THRESHOLD}`,
+    );
+    ({ validatedAnswer, confidence, issues } = await checkAndRefine(
+      combinedAnswer,
+      docs,
+      message,
+    ));
+  }
 
   // Step 5 — map sources for frontend citation chips
   const sources = mapSources(docs);

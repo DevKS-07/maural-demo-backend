@@ -16,6 +16,12 @@ const prisma = require("../lib/prisma");
 const pdfParse = require("pdf-parse");
 const XLSX = require("xlsx");
 const mammoth = require("mammoth");
+const { createWorker } = require("tesseract.js");
+// Polyfill DOMMatrix and Path2D before loading pdfjs-dist so it can render pages correctly
+const { createCanvas, DOMMatrix, Path2D } = require("@napi-rs/canvas");
+globalThis.DOMMatrix = DOMMatrix;
+globalThis.Path2D = Path2D;
+const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
 
 // ---------------------------------------------------------------------------
 // Supabase client (same project as the rest of the app)
@@ -25,6 +31,66 @@ function getSupabase() {
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY,
   );
+}
+
+// ---------------------------------------------------------------------------
+// OCR helpers — used when pdf-parse finds no selectable text (image-based PDF)
+// ---------------------------------------------------------------------------
+
+class NodeCanvasFactory {
+  create(width, height) {
+    const canvas = createCanvas(width, height);
+    return { canvas, context: canvas.getContext("2d") };
+  }
+  reset({ canvas }, width, height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  destroy(canvasAndContext) {
+    canvasAndContext.canvas = null;
+    canvasAndContext.context = null;
+  }
+}
+
+async function ocrImageBuffer(imageBuffer) {
+  const worker = await createWorker("eng");
+  try {
+    const {
+      data: { text },
+    } = await worker.recognize(imageBuffer);
+    return sanitizeText(text || "");
+  } finally {
+    await worker.terminate();
+  }
+}
+
+async function ocrPdf(pdfBuffer) {
+  const canvasFactory = new NodeCanvasFactory();
+  const pdfDoc = await pdfjsLib
+    .getDocument({ data: new Uint8Array(pdfBuffer), verbosity: 0 })
+    .promise;
+  const pageTexts = [];
+
+  for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+    const page = await pdfDoc.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 2.0 });
+    const canvasAndContext = canvasFactory.create(
+      viewport.width,
+      viewport.height,
+    );
+    await page.render({
+      canvasContext: canvasAndContext.context,
+      viewport,
+      canvasFactory,
+    }).promise;
+    const text = await ocrImageBuffer(
+      canvasAndContext.canvas.toBuffer("image/png"),
+    );
+    if (text.trim()) pageTexts.push(`[Page ${pageNum}]\n${text}`);
+    page.cleanup();
+  }
+
+  return pageTexts.join("\n\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -69,12 +135,21 @@ async function extractText(buffer, fileName) {
   switch (ext) {
     case "pdf": {
       const result = await pdfParse(buffer);
-      return sanitizeText(result.text || "");
+      const text = sanitizeText(result.text || "");
+      if (text.trim().length > 50) return text;
+      console.log(`[ingest] No selectable text in "${fileName}" — running OCR...`);
+      return await ocrPdf(buffer);
     }
+    case "png":
+    case "jpg":
+    case "jpeg":
+    case "tiff":
+    case "bmp":
+    case "gif":
+      return await ocrImageBuffer(buffer);
     case "xlsx":
     case "xls": {
       const workbook = XLSX.read(buffer, { type: "buffer" });
-      // Concatenate all sheets: each sheet becomes a CSV-like block of text
       return workbook.SheetNames.map((name) => {
         const sheet = workbook.Sheets[name];
         const csv = XLSX.utils.sheet_to_csv(sheet, { skipHidden: true });

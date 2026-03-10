@@ -86,29 +86,17 @@ Guidelines:
 - End with a clear "Bottom Line" — one or two sentences summarising the most important conclusion.
 ${SHARED_RULES}`,
 
-  /**
-   * QA — direct factual Q&A (default)
-   */
-  qa: `You are a knowledgeable assistant for a Knowledge Management System (KMS).
-Your task is to answer the user's question accurately using the retrieved document context.
-
-Guidelines:
-- Answer directly and concisely — lead with the answer, then support it with evidence.
-- If the answer has multiple parts, use a numbered list.
-- Quote or reference specific documents when stating specific facts.
-- If you are uncertain about something, say so rather than guessing.
-${SHARED_RULES}`,
 };
 
 /**
  * Get the system prompt for a given intent.
- * Falls back to the 'qa' template if intent is not recognized.
+ * Falls back to the 'reason' template if intent is not recognized.
  *
  * @param {string} intent
  * @returns {string}
  */
 function getSystemPrompt(intent) {
-  return TEMPLATES[intent] || TEMPLATES.qa;
+  return TEMPLATES[intent] || TEMPLATES.reason;
 }
 
 module.exports = { getSystemPrompt, TEMPLATES };
