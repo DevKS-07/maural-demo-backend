@@ -18,7 +18,9 @@ jest.mock("../../services/promptTemplates", () => ({
 jest.mock("../../services/ragService", () => ({
   retrieveDocuments: jest.fn(),
   buildMessagesForIntent: jest.fn().mockReturnValue([]),
-  mapSources: jest.fn().mockReturnValue([{ file_id: "abc", file_name: "report.pdf" }]),
+  mapSources: jest
+    .fn()
+    .mockReturnValue([{ file_id: "abc", file_name: "report.pdf" }]),
 }));
 
 jest.mock("../../services/guardrail", () => ({
@@ -34,7 +36,11 @@ const { checkAndRefine } = require("../../services/guardrail");
 // Shared fixtures
 // ---------------------------------------------------------------------------
 const DOCS = [{ file_id: "abc", content: "quarterly report content" }];
-const GUARDRAIL = { validatedAnswer: "The answer.", confidence: 88, issues: [] };
+const GUARDRAIL = {
+  validatedAnswer: "The answer.",
+  confidence: 88,
+  issues: [],
+};
 
 /** Wire up the three async services used by orchestrate(). */
 function mockOrchestrate({ intents = ["summarize"] } = {}) {
@@ -129,7 +135,10 @@ describe("chat controller", () => {
         answer: GUARDRAIL.validatedAnswer,
         sources: [{ file_id: "abc", file_name: "report.pdf" }],
         intents: ["summarize"],
-        guardrail: { confidence: GUARDRAIL.confidence, issues: GUARDRAIL.issues },
+        guardrail: {
+          confidence: GUARDRAIL.confidence,
+          issues: GUARDRAIL.issues,
+        },
       });
     });
 
@@ -141,7 +150,11 @@ describe("chat controller", () => {
       await chat(req, res);
 
       // retrieveDocuments should be called with "all" as clientIds (the default) and top-k of 5
-      expect(retrieveDocuments).toHaveBeenCalledWith("What is the net income?", "all", 5);
+      expect(retrieveDocuments).toHaveBeenCalledWith(
+        "What is the net income?",
+        "all",
+        5,
+      );
     });
 
     test("returns 500 when orchestrate throws", async () => {
@@ -183,7 +196,10 @@ describe("chat controller", () => {
 
       await streamChat(req, res);
 
-      expect(res.setHeader).toHaveBeenCalledWith("Content-Type", "text/event-stream");
+      expect(res.setHeader).toHaveBeenCalledWith(
+        "Content-Type",
+        "text/event-stream",
+      );
       expect(res.setHeader).toHaveBeenCalledWith("Cache-Control", "no-cache");
       expect(res.setHeader).toHaveBeenCalledWith("Connection", "keep-alive");
       expect(res.setHeader).toHaveBeenCalledWith("X-Accel-Buffering", "no");
@@ -202,7 +218,12 @@ describe("chat controller", () => {
         .filter((e) => typeof e === "string" || e.type !== "chunk")
         .map((e) => (typeof e === "string" ? e : e.type));
 
-      expect(nonChunkTypes).toEqual(["intent", "sources", "guardrail", "[DONE]"]);
+      expect(nonChunkTypes).toEqual([
+        "intent",
+        "sources",
+        "guardrail",
+        "[DONE]",
+      ]);
     });
 
     test("intent event carries the detected intents array", async () => {
@@ -238,7 +259,9 @@ describe("chat controller", () => {
 
       await streamChat(req, res);
 
-      const guardrailEvent = parseSseEvents(res).find((e) => e.type === "guardrail");
+      const guardrailEvent = parseSseEvents(res).find(
+        (e) => e.type === "guardrail",
+      );
       expect(guardrailEvent).toEqual({
         type: "guardrail",
         confidence: GUARDRAIL.confidence,
