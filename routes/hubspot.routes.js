@@ -16,11 +16,15 @@ router.get("/success", hubspotController.connectionSuccessHandler);
 
 router.get("/status", hubspotController.connectionStatus);
 
+
+/**
 router.get("/contacts", hubspotController.getContacts);
 
 router.get("/carts", hubspotController.getCarts);
 
 router.get("/companies", hubspotController.getCompanies);
+
+*/
 
 /**
  *

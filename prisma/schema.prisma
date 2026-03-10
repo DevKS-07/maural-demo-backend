@@ -40,8 +40,8 @@ model Client {
   File               File[]
 
   financeKpis FinanceKpi[]
-
   leadsKpis LeadsKpi[]
+  laborKpis LaborKpi[]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -157,7 +157,7 @@ model MondayToken {
   id                       Int      @id @default(autoincrement())
   user_id                  String   @unique
   access_token             String
-  refresh_token            String
+  refresh_token            String?
   token_type               String?
   realm_id                 String?
   expires_in               Int?
@@ -307,4 +307,49 @@ model LeadsKpi {
   @@unique([client_id, periodStart, periodEnd])
   @@index([client_id, lastFetchedAt])
   @@map("leads_kpis")
+}
+
+model LaborKpi {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Client scoping
+  client_id    String
+  client      Client @relation(fields: [client_id], references: [client_id])
+
+  // Period
+  periodStart DateTime
+  periodEnd   DateTime
+
+  // Source — "monday" | "clickup"
+  laborSource String
+
+  // ── LABOR-3: Direct labor hours
+  directLaborHours Float?
+
+  // ── LABOR-4 / LABOR-5: Headcount
+  billableFTEs    Int?
+  nonBillableFTEs Int?
+
+  // ── LABOR-6: Utilization
+  billableUtilization Float? // percentage 0–100
+
+  // ── LABOR-2: Cost per hour (cross-source — needs QB labor cost)
+  laborCostPerHour Float?
+
+  // ── LABOR-7: Revenue per billable FTE (cross-source — needs QB revenue)
+  revenuePerBillableFTE Float?
+
+  // ── PS-15: Founder dependency on service delivery
+  founderDependencyService Float? // percentage 0–100
+
+  // UI flags
+  hasBillableColumn Boolean @default(false) // false = show "set up billable column" prompt
+  isStale           Boolean @default(false) // true = background refresh in progress
+
+  // One row per client per period
+  @@unique([client_id, periodStart, periodEnd])
+  @@index([client_id])
+  @@map("labor_kpis")
 }
