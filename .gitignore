@@ -26,6 +26,9 @@ next-env.d.ts
 # jest
 /coverage/
 
+# Tesseract OCR language data (downloaded at runtime)
+*.traineddata
+
 # IDEs and editors
 .vscode/
 

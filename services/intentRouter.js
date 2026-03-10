@@ -8,14 +8,13 @@
  * Valid intents:
  *   summarize — condense a document or topic into key points
  *   analyze   — trends, comparisons, data insights
+ *   reason    — cross-document inference, root cause, risk, direct Q&A (default)
  *   predict   — forecasts, projections, future scenarios
- *   explain   — plain-language breakdown of a concept
- *   qa        — direct factual question/answer (default)
  */
 
 const { ChatOllama } = require("@langchain/ollama");
 
-const VALID_INTENTS = ["summarize", "analyze", "reason", "predict", "qa"];
+const VALID_INTENTS = ["summarize", "analyze", "reason", "predict"];
 
 const ROUTER_SYSTEM_PROMPT = `You are an intent classifier for a Knowledge Management System (KMS) chatbot.
 
@@ -24,20 +23,19 @@ Your job is to identify ALL intents present in the user's message. A single mess
 Valid intents:
 - summarize: User wants a summary, overview, condensed version, or key takeaways
 - analyze: User wants data analysis, trends, comparisons, patterns, KPIs, or bottlenecks
-- reason: User wants cross-document inference, root cause analysis, risk identification, alignment checks, dependency mapping, or "what would happen if" scenarios
+- reason: User wants cross-document inference, root cause analysis, risk identification, alignment checks, dependency mapping, "what would happen if" scenarios, or is asking any direct factual question
 - predict: User wants forecasts, projections, growth ceilings, churn risk, or future scenarios
-- qa: User is asking a direct factual question (use this when none of the above fit)
 
 Rules:
 1. Return a JSON object with a single key "intents" containing an array of intent strings.
 2. Include only intents that are clearly present — do not over-detect.
 3. Maximum 3 intents per message.
-4. If nothing specific matches, return ["qa"].
+4. If nothing specific matches, return ["reason"].
 5. Never return an empty array.
-6. Prefer "reason" over "qa" when the question requires connecting multiple documents or inferring something not stated directly.
+6. Use "reason" for all direct factual questions — it handles both simple lookups and complex inference.
 
 Examples:
-- "What is the revenue?" → {"intents": ["qa"]}
+- "What is the revenue?" → {"intents": ["reason"]}
 - "Summarize the Q3 report" → {"intents": ["summarize"]}
 - "Summarize Q3 results and predict what Q4 will look like" → {"intents": ["summarize", "predict"]}
 - "Where is the founder spending most time on tactical tasks?" → {"intents": ["reason", "analyze"]}
@@ -78,13 +76,13 @@ async function detectIntents(message) {
       .filter((i) => VALID_INTENTS.includes(i))
       .slice(0, 3);
 
-    return intents.length > 0 ? intents : ["qa"];
+    return intents.length > 0 ? intents : ["reason"];
   } catch (err) {
     console.warn(
-      "[intentRouter] Failed to parse intent, defaulting to qa:",
+      "[intentRouter] Failed to parse intent, defaulting to reason:",
       err.message,
     );
-    return ["qa"];
+    return ["reason"];
   }
 }
 
