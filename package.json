@@ -52,6 +52,9 @@
     "xlsx": "^0.18.5",
     "zod": "^4.1.12"
   },
+  "jest": {
+    "setupFiles": ["./jest.setup.js"]
+  },
   "devDependencies": {
     "@types/pg": "^8.16.0",
     "baseline-browser-mapping": "^2.9.15",
