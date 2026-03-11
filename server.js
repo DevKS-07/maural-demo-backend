@@ -5,6 +5,7 @@ require("dotenv").config({
 // Centralized env validation — will exit with a clear error if required vars are missing
 const { PORT, HOST } = require("./config/env");
 const app = require("./app");
+const prisma = require("./lib/prisma");
 
 /* Start the server */
 const server = app.listen(PORT, HOST, () => {
@@ -12,18 +13,21 @@ const server = app.listen(PORT, HOST, () => {
 });
 
 /* Graceful shutdown — Railway/Docker sends SIGTERM before stopping the container */
-const shutdown = (signal) => {
+const shutdown = async (signal) => {
   console.log(`${signal} received. Shutting down gracefully...`);
-  server.close(() => {
-    console.log("HTTP server closed.");
-    process.exit(0);
-  });
 
   // Force exit if graceful shutdown takes too long
   setTimeout(() => {
     console.error("Forcefully shutting down.");
     process.exit(1);
   }, 10_000);
+
+  server.close(async () => {
+    console.log("HTTP server closed.");
+    await prisma.$disconnect();
+    console.log("Database connections closed.");
+    process.exit(0);
+  });
 };
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));

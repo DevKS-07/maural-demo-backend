@@ -2,13 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { createClient } = require("@supabase/supabase-js");
 const multer = require("multer");
-const { PrismaClient } = require("@prisma/client");
-const { PrismaPg } = require("@prisma/adapter-pg");
-const { DATABASE_URL, SUPABASE_URL, SUPABASE_ANON_KEY } = require("../config/env");
-const adapter = new PrismaPg({
-  connectionString: DATABASE_URL,
-});
-const prisma = new PrismaClient({ adapter });
+const { SUPABASE_URL, SUPABASE_ANON_KEY } = require("../config/env");
 
 const storage = multer.memoryStorage();
 const upload = multer({
