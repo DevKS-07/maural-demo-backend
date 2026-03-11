@@ -105,10 +105,9 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler for undefined routes
+// 404 handler for undefined routes — JSON for API consistency
 app.use((req, res) => {
-  console.log("Error 404: Not Found");
-  res.status(404).send("Error 404: Not Found");
+  res.status(404).json({ message: "Not Found" });
 });
 
 module.exports = app;
