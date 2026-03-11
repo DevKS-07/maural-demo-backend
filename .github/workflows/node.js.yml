@@ -22,7 +22,10 @@ jobs:
       - run: npm ci
 
       # Generate Prisma client — needed if any test imports the real client
+      # DIRECT_URL is required by prisma.config.js but not used during generate
       - run: npx prisma generate
+        env:
+          DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
 
       - name: Lint
         run: npm run lint
