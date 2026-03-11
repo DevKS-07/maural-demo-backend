@@ -3,8 +3,8 @@ const router = express.Router();
 
 const hubspotRoutes = require("./hubspot.routes");
 const quickbooksRoutes = require("./quickbooks.routes");
-const mondayRoutes = require("./monday.Routes");
-const clickupRoutes = require("./clickup.Routes");
+const mondayRoutes = require("./monday.routes");
+const clickupRoutes = require("./clickup.routes");
 
 // External API Routes
 router.get("/", (req, res) => {

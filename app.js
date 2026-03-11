@@ -15,7 +15,22 @@ const app = express();
 // Trust the first proxy (Railway, AWS ALB, nginx) so req.ip is the real client IP
 app.set("trust proxy", 1);
 
-// Clerk middleware — must be first so req.auth() is available everywhere
+// Health check — before any auth middleware so Docker/Railway probes always work
+app.get("/api/health", (req, res) => {
+  const mem = process.memoryUsage();
+  res.status(200).json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    uptime: Math.floor(process.uptime()),
+    memory: {
+      rss: Math.round(mem.rss / 1024 / 1024),       // total allocated (MB)
+      heapUsed: Math.round(mem.heapUsed / 1024 / 1024), // JS heap in use (MB)
+    },
+    environment: process.env.NODE_ENV || "development",
+  });
+});
+
+// Clerk middleware — must be before routes so req.auth() is available everywhere
 app.use(clerkMiddleware());
 
 // Raw body parser for Clerk webhook route — must come before express.json()
@@ -71,21 +86,6 @@ if (isProduction) {
 } else {
   app.use(morgan("dev"));
 }
-
-// Health check — used by Docker HEALTHCHECK and Railway deploy checks
-app.get("/api/health", (req, res) => {
-  const mem = process.memoryUsage();
-  res.status(200).json({
-    status: "ok",
-    timestamp: new Date().toISOString(),
-    uptime: Math.floor(process.uptime()),
-    memory: {
-      rss: Math.round(mem.rss / 1024 / 1024),       // total allocated (MB)
-      heapUsed: Math.round(mem.heapUsed / 1024 / 1024), // JS heap in use (MB)
-    },
-    environment: process.env.NODE_ENV || "development",
-  });
-});
 
 // Routes
 app.use("/api", routes);

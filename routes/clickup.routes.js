@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const clickupController = require("../controllers/clickup.Controller");
+const clickupController = require("../controllers/clickup.controller");
 
 // External API Routes
 router.get("/", (req, res) => {
