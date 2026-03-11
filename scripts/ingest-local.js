@@ -116,7 +116,7 @@ function getSupabase() {
 
 function sanitizeText(text) {
   return text
-    .replace(/\u0000/g, "")
+    .replace(/\u0000/g, "") // eslint-disable-line no-control-regex -- intentional null byte strip
     .replace(/[\uD800-\uDFFF]/g, "")
     .replace(/\uFFFD/g, "");
 }

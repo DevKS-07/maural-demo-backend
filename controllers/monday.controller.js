@@ -7,7 +7,6 @@
 // });
 // const prisma = new PrismaClient({ adapter });
 
-const { createClient } = require("@supabase/supabase-js");
 const prisma = require("../lib/prisma");
 const {
   MONDAY_CLIENT_ID,
@@ -70,7 +69,7 @@ const connectionSuccessHandler = (req, res) => {
   const user_id = req.session.user_id;
   console.log(`User: ${user_id}`);
 
-  const token = prisma.mondayToken.findUnique({
+  const _token = prisma.mondayToken.findUnique({
     where: { user_id: user_id },
   });
 
@@ -102,7 +101,7 @@ const connectionStatus = async (req, res) => {
 //
 // Utility Functions
 
-async function mondayQuery(accessToken, query, variables = {}) {
+async function _mondayQuery(accessToken, query, variables = {}) {
   const response = await axios.post(
     "https://api.monday.com/v2",
     { query, variables },
@@ -212,7 +211,7 @@ const getTokenRecord = async (user_id) => {
   });
 };
 
-const checkAndRefreshToken = async (user_id) => {
+const _checkAndRefreshToken = async (user_id) => {
   const tokenRecord = await getTokenRecord(user_id);
   if (!tokenRecord) {
     throw new Error("No token record found for user");

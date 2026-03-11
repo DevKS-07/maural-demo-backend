@@ -182,7 +182,7 @@ exports.updateClient = async (req, res) => {
       },
     });
     res.status(200).json(updatedClient);
-  } catch (error) {
+  } catch (_error) {
     res
       .status(500)
       .json({ message: `Failed to update client with ID ${clientId}` });
@@ -205,7 +205,7 @@ exports.deleteClient = async (req, res) => {
       where: { client_id: BigInt(clientId) },
     });
     res.status(200).json({ message: `Client with ID ${clientId} deleted` });
-  } catch (error) {
+  } catch (_error) {
     res
       .status(500)
       .json({ message: `Failed to delete client with ID ${clientId}` });

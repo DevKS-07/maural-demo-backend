@@ -7,7 +7,6 @@
 // });
 // const prisma = new PrismaClient({ adapter });
 
-const { createClient } = require("@supabase/supabase-js");
 const prisma = require("../lib/prisma");
 const {
   CLICKUP_CLIENT_ID,
@@ -16,7 +15,7 @@ const {
 } = require("../config/env");
 
 const axios = require("axios");
-const e = require("express");
+const _e = require("express");
 
 const CLIENT_ID = CLICKUP_CLIENT_ID;
 const CLIENT_SECRET = CLICKUP_CLIENT_SECRET;
@@ -139,8 +138,8 @@ const exchangeAuthCodeForTokens = async (exchangeProof) => {
       new URLSearchParams(exchangeProof),
     );
 
-    const { access_token, refresh_token, expires_in } = response.data;
-    const expires_at = new Date(Date.now() + expires_in * 1000);
+    const { access_token, _refresh_token, expires_in } = response.data;
+    const _expires_at = new Date(Date.now() + expires_in * 1000);
 
     // Fetching user metadata using access token
     const userMetadataRes = await axios.get(
@@ -212,7 +211,7 @@ const getTokenRecord = async (user_id) => {
   });
 };
 
-const checkAndRefreshToken = async (user_id) => {
+const _checkAndRefreshToken = async (user_id) => {
   const tokenRecord = await getTokenRecord(user_id);
   if (!tokenRecord) {
     throw new Error("No token record found for user");

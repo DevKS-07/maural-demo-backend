@@ -132,7 +132,7 @@ async function downloadFile(supabase, fileSource) {
 // Strip characters that Supabase/Postgres can't store as valid JSON text
 function sanitizeText(text) {
   return text
-    .replace(/\u0000/g, "") // null bytes
+    .replace(/\u0000/g, "") // eslint-disable-line no-control-regex -- intentional null byte strip
     .replace(/[\uD800-\uDFFF]/g, "") // lone surrogates (invalid Unicode)
     .replace(/\uFFFD/g, ""); // replacement character from bad decoding
 }
@@ -183,7 +183,7 @@ async function extractText(buffer, fileName) {
 const CHUNK_SIZE = 1000; // characters per chunk
 const CHUNK_OVERLAP = 150; // overlap between consecutive chunks
 
-function chunkText(text, fileName) {
+function chunkText(text, _fileName) {
   const chunks = [];
   let start = 0;
   let index = 0;

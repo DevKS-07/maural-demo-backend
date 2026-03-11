@@ -1,5 +1,4 @@
 const axios = require("axios");
-const express = require("express");
 
 //* TODO: Remove this import if not needed, instead import prisma client directly from lib/prisma.js
 // const { createClient } = require("@supabase/supabase-js");
@@ -10,7 +9,6 @@ const express = require("express");
 // });
 // const prisma = new PrismaClient({ adapter });
 
-const { createClient } = require("@supabase/supabase-js");
 const prisma = require("../lib/prisma");
 const {
   QUICKBOOKS_CLIENT_ID,
@@ -22,7 +20,6 @@ const {
 
 const OAuthClient = require("intuit-oauth");
 const crypto = require("crypto");
-const uuid = require("uuid");
 
 const CLIENT_ID = QUICKBOOKS_CLIENT_ID;
 const CLIENT_SECRET = QUICKBOOKS_CLIENT_SECRET;
@@ -231,7 +228,7 @@ const refreshAccessToken = (req, res) => {
       console.log(
         `\n The Refresh Token is  ${JSON.stringify(authResponse.json)}`,
       );
-      oauth2_token_json = JSON.stringify(authResponse.json, null, 2);
+      const oauth2_token_json = JSON.stringify(authResponse.json, null, 2);
       // TODO: update access_token in db.
       res.send(oauth2_token_json);
     })
