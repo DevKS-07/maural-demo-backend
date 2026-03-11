@@ -198,6 +198,7 @@ async function embedBatch(texts) {
   const embeddings = new OllamaEmbeddings({
     baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
     model: process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text",
+    headers: { "ngrok-skip-browser-warning": "true" },
   });
   return embeddings.embedDocuments(texts);
 }
