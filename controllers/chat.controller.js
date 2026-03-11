@@ -37,7 +37,6 @@ function getLLM({ temperature = 0.3 } = {}) {
       new ChatOllama({
         baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
         model: process.env.OLLAMA_CHAT_MODEL || "qwen3.5:9b",
-        headers: { "ngrok-skip-browser-warning": "true" },
         temperature,
         numCtx: 8192,
       }),
