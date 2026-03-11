@@ -6,7 +6,7 @@ const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
 const rateLimit = require("express-rate-limit");
 const { clerkMiddleware } = require("@clerk/express");
-const { ALLOWED_ORIGINS } = require("./config/env");
+const { ALLOWED_ORIGINS, isProduction } = require("./config/env");
 const routes = require("./routes");
 
 const app = express();
@@ -52,11 +52,37 @@ app.use(
   }),
 );
 app.use(cookieParser());
-app.use(morgan("combined"));
+// Request logging — JSON in production (machine-parseable), dev format locally (colorized)
+if (isProduction) {
+  app.use(
+    morgan((tokens, req, res) =>
+      JSON.stringify({
+        method: tokens.method(req, res),
+        url: tokens.url(req, res),
+        status: Number(tokens.status(req, res)),
+        responseTime: Number(tokens["response-time"](req, res)),
+        contentLength: tokens.res(req, res, "content-length"),
+        timestamp: new Date().toISOString(),
+      }),
+    ),
+  );
+} else {
+  app.use(morgan("dev"));
+}
 
 // Health check — used by Docker HEALTHCHECK and Railway deploy checks
 app.get("/api/health", (req, res) => {
-  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  const mem = process.memoryUsage();
+  res.status(200).json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    uptime: Math.floor(process.uptime()),
+    memory: {
+      rss: Math.round(mem.rss / 1024 / 1024),       // total allocated (MB)
+      heapUsed: Math.round(mem.heapUsed / 1024 / 1024), // JS heap in use (MB)
+    },
+    environment: process.env.NODE_ENV || "development",
+  });
 });
 
 // Routes
