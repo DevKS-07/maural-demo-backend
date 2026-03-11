@@ -17,6 +17,13 @@ const pdfParse = require("pdf-parse");
 const XLSX = require("xlsx");
 const mammoth = require("mammoth");
 const { createWorker } = require("tesseract.js");
+const {
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY,
+  SUPABASE_ANON_KEY,
+  OLLAMA_BASE_URL,
+  OLLAMA_EMBED_MODEL,
+} = require("../config/env");
 // Polyfill DOMMatrix and Path2D before loading pdfjs-dist so it can render pages correctly
 const { createCanvas, DOMMatrix, Path2D } = require("@napi-rs/canvas");
 globalThis.DOMMatrix = DOMMatrix;
@@ -28,8 +35,8 @@ const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
 // ---------------------------------------------------------------------------
 function getSupabase() {
   return createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY,
+    SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY,
   );
 }
 
@@ -196,8 +203,8 @@ function chunkText(text, fileName) {
 // ---------------------------------------------------------------------------
 async function embedBatch(texts) {
   const embeddings = new OllamaEmbeddings({
-    baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
-    model: process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text",
+    baseUrl: OLLAMA_BASE_URL,
+    model: OLLAMA_EMBED_MODEL,
   });
   return embeddings.embedDocuments(texts);
 }

@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log*
+.git
+.gitignore
+.github
+.vscode
+.env*
+coverage
+__tests__
+uploads/*
+!uploads/.gitkeep
+*.md
+*.traineddata
+hubspot.config.yml
+generate-routes-docs.js

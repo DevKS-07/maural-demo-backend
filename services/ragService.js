@@ -24,6 +24,13 @@
 const { OllamaEmbeddings } = require("@langchain/ollama");
 const { createClient } = require("@supabase/supabase-js");
 const prisma = require("../lib/prisma");
+const {
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY,
+  SUPABASE_ANON_KEY,
+  OLLAMA_BASE_URL,
+  OLLAMA_EMBED_MODEL,
+} = require("../config/env");
 
 // ---------------------------------------------------------------------------
 // Supabase client — same project the rest of the app uses
@@ -32,8 +39,8 @@ let _supabase = null;
 function getSupabase() {
   if (!_supabase) {
     _supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY,
+      SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY,
     );
   }
   return _supabase;
@@ -46,8 +53,8 @@ let _embeddings = null;
 function getEmbeddings() {
   if (!_embeddings) {
     _embeddings = new OllamaEmbeddings({
-      baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
-      model: process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text",
+      baseUrl: OLLAMA_BASE_URL,
+      model: OLLAMA_EMBED_MODEL,
     });
   }
   return _embeddings;

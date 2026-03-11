@@ -12,16 +12,23 @@ const express = require("express");
 
 const { createClient } = require("@supabase/supabase-js");
 const prisma = require("../lib/prisma");
+const {
+  QUICKBOOKS_CLIENT_ID,
+  QUICKBOOKS_CLIENT_SECRET,
+  QUICKBOOKS_REDIRECT_URI,
+  QUICKBOOKS_ENVIRONMENT,
+  QUICKBOOKS_BASE_URL,
+} = require("../config/env");
 
 const OAuthClient = require("intuit-oauth");
 const crypto = require("crypto");
 const uuid = require("uuid");
 
-const CLIENT_ID = process.env.QUICKBOOKS_CLIENT_ID;
-const CLIENT_SECRET = process.env.QUICKBOOKS_CLIENT_SECRET;
-const REDIRECT_URI = process.env.QUICKBOOKS_REDIRECT_URI;
-const ENVIRONMENT = process.env.QUICKBOOKS_ENVIRONMENT || "sandbox";
-const baseURL = process.env.QUICKBOOKS_BASE_URL;
+const CLIENT_ID = QUICKBOOKS_CLIENT_ID;
+const CLIENT_SECRET = QUICKBOOKS_CLIENT_SECRET;
+const REDIRECT_URI = QUICKBOOKS_REDIRECT_URI;
+const ENVIRONMENT = QUICKBOOKS_ENVIRONMENT;
+const baseURL = QUICKBOOKS_BASE_URL;
 
 let oauthClient = null;
 

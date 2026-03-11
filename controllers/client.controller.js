@@ -24,7 +24,8 @@ exports.getAllClients = async (req, res) => {
     const clients = await prisma.client.findMany();
     res.status(200).json(clients);
   } catch (error) {
-    res.status(500).json({ message: "Failed to retrieve clients", error });
+    console.error("Failed to retrieve clients:", error.message);
+    res.status(500).json({ message: "Failed to retrieve clients" });
   }
 };
 
@@ -47,7 +48,8 @@ exports.getClientById = async (req, res) => {
     }
     res.status(200).json(client);
   } catch (error) {
-    res.status(500).json({ message: "Failed to retrieve client", error });
+    console.error("Failed to retrieve client:", error.message);
+    res.status(500).json({ message: "Failed to retrieve client" });
   }
 };
 
@@ -65,7 +67,8 @@ exports.getClientUsers = async (req, res) => {
     });
     res.status(200).json(users);
   } catch (error) {
-    res.status(500).json({ message: "Failed to retrieve client users", error });
+    console.error("Failed to retrieve client users:", error.message);
+    res.status(500).json({ message: "Failed to retrieve client users" });
   }
 };
 
@@ -83,7 +86,8 @@ exports.getClientFiles = async (req, res) => {
     });
     res.status(200).json(files);
   } catch (error) {
-    res.status(500).json({ message: "Failed to retrieve client files", error });
+    console.error("Failed to retrieve client files:", error.message);
+    res.status(500).json({ message: "Failed to retrieve client files" });
   }
 };
 
@@ -131,7 +135,8 @@ exports.createClient = async (req, res) => {
     });
     res.status(201).json(newClient);
   } catch (error) {
-    res.status(500).json({ message: "Failed to create client", error });
+    console.error("Failed to create client:", error.message);
+    res.status(500).json({ message: "Failed to create client" });
   }
 };
 
@@ -180,7 +185,7 @@ exports.updateClient = async (req, res) => {
   } catch (error) {
     res
       .status(500)
-      .json({ message: `Failed to update client with ID ${clientId}`, error });
+      .json({ message: `Failed to update client with ID ${clientId}` });
   }
 };
 
@@ -203,6 +208,6 @@ exports.deleteClient = async (req, res) => {
   } catch (error) {
     res
       .status(500)
-      .json({ message: `Failed to delete client with ID ${clientId}`, error });
+      .json({ message: `Failed to delete client with ID ${clientId}` });
   }
 };

@@ -2,21 +2,16 @@ const express = require("express");
 const router = express.Router();
 const { createClient } = require("@supabase/supabase-js");
 const multer = require("multer");
-const { PrismaClient } = require("@prisma/client");
-const { PrismaPg } = require("@prisma/adapter-pg");
-const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL,
-});
-const prisma = new PrismaClient({ adapter });
+const { SUPABASE_URL, SUPABASE_ANON_KEY } = require("../config/env");
 
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB max per file
+});
 
 // Create Supabase client
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY,
-);
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Upload file using standard upload
 async function uploadFile(file) {

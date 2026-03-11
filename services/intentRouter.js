@@ -13,6 +13,7 @@
  */
 
 const { ChatOllama } = require("@langchain/ollama");
+const { OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL } = require("../config/env");
 
 const VALID_INTENTS = ["summarize", "analyze", "reason", "predict"];
 
@@ -47,8 +48,8 @@ let _routerLLM = null;
 function getRouterLLM() {
   if (!_routerLLM) {
     _routerLLM = new ChatOllama({
-      baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
-      model: process.env.OLLAMA_CHAT_MODEL || "qwen3.5:9b",
+      baseUrl: OLLAMA_BASE_URL,
+      model: OLLAMA_CHAT_MODEL,
       temperature: 0,
       format: "json",
       numCtx: 4096,

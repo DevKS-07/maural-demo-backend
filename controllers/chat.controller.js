@@ -25,6 +25,11 @@ const {
   mapSources,
 } = require("../services/ragService");
 const { checkAndRefine } = require("../services/guardrail");
+const {
+  OLLAMA_BASE_URL,
+  OLLAMA_CHAT_MODEL,
+  GUARDRAIL_CONFIDENCE_THRESHOLD,
+} = require("../config/env");
 
 // ---------------------------------------------------------------------------
 // LLM singleton — keyed by temperature to avoid creating a new instance per call
@@ -35,8 +40,8 @@ function getLLM({ temperature = 0.3 } = {}) {
     _llmCache.set(
       temperature,
       new ChatOllama({
-        baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
-        model: process.env.OLLAMA_CHAT_MODEL || "qwen3.5:9b",
+        baseUrl: OLLAMA_BASE_URL,
+        model: OLLAMA_CHAT_MODEL,
         temperature,
         numCtx: 8192,
       }),
@@ -118,10 +123,7 @@ function streamFromBuffer(text, sendEvent, chunkSize = 4) {
 //   -15 per extra intent beyond the first (multi-intent = higher hallucination risk)
 // Threshold is configurable via GUARDRAIL_CONFIDENCE_THRESHOLD (default 80).
 // ---------------------------------------------------------------------------
-const GUARDRAIL_THRESHOLD = parseInt(
-  process.env.GUARDRAIL_CONFIDENCE_THRESHOLD || "90",
-  10,
-);
+const GUARDRAIL_THRESHOLD = parseInt(GUARDRAIL_CONFIDENCE_THRESHOLD, 10);
 
 function estimatePreConfidence(docs, intents) {
   const groundedChunks = docs.filter((d) => d.similarity > 0).length;
