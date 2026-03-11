@@ -47,7 +47,7 @@ exports.getDocumentsByCategory = async (req, res) => {
       include: { Category: true },
     });
     res.status(200).json(documents);
-  } catch (error) {
+  } catch (_error) {
     res
       .status(500)
       .json({ message: "Failed to retrieve documents by category" });
@@ -109,7 +109,7 @@ exports.getDocumentComments = async (req, res) => {
       where: { file_id: id },
     });
     res.status(200).json(comments);
-  } catch (error) {
+  } catch (_error) {
     res
       .status(500)
       .json({ message: "Failed to retrieve document comments" });
@@ -130,7 +130,7 @@ exports.getDocumentActivity = async (req, res) => {
       include: { ActivityType: true },
     });
     res.status(200).json(activity);
-  } catch (error) {
+  } catch (_error) {
     res
       .status(500)
       .json({ message: "Failed to retrieve document activity" });
@@ -245,7 +245,7 @@ exports.updateDocument = async (req, res) => {
       },
     });
     res.status(200).json(updatedFile);
-  } catch (error) {
+  } catch (_error) {
     res
       .status(500)
       .json({ message: `Failed to update document with ID ${id}` });
@@ -277,7 +277,7 @@ exports.deleteDocument = async (req, res) => {
       .eq("metadata->>file_id", String(id));
 
     res.status(200).json({ message: `Document with ID ${id} deleted` });
-  } catch (error) {
+  } catch (_error) {
     res
       .status(500)
       .json({ message: `Failed to delete document with ID ${id}` });

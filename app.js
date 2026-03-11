@@ -95,7 +95,7 @@ app.use("/api", routes);
 // #######################################################
 
 // 500 handler for server errors — never leak internals to the client
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   console.error(err.stack);
   const status = err.status || 500;
   res.status(status).json({

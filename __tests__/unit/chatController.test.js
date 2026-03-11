@@ -29,7 +29,7 @@ jest.mock("../../services/guardrail", () => ({
 
 const { streamChat, chat } = require("../../controllers/chat.controller");
 const { detectIntents } = require("../../services/intentRouter");
-const { retrieveDocuments, mapSources } = require("../../services/ragService");
+const { retrieveDocuments, mapSources: _mapSources } = require("../../services/ragService");
 const { checkAndRefine } = require("../../services/guardrail");
 
 // ---------------------------------------------------------------------------

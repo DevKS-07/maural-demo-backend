@@ -1,5 +1,4 @@
 const axios = require("axios");
-const express = require("express");
 
 //* TODO: Remove this import if not needed, instead import prisma client directly from lib/prisma.js
 // const { createClient } = require("@supabase/supabase-js");
@@ -10,7 +9,6 @@ const express = require("express");
 // });
 // const prisma = new PrismaClient({ adapter });
 
-const { createClient } = require("@supabase/supabase-js");
 const prisma = require("../lib/prisma");
 const {
   HUBSPOT_CLIENT_ID,
@@ -146,7 +144,7 @@ const getContacts = async (req, res) => {
     } else {
       res.status(400).send("No access token found for the user");
     }
-  } catch (error) {
+  } catch (_error) {
     res.status(500).send("Error fetching contacts");
   }
 };
@@ -174,7 +172,7 @@ const getCarts = async (req, res) => {
     } else {
       res.status(400).send("No access token found for user");
     }
-  } catch (error) {
+  } catch (_error) {
     res.status(500).send("Error fetching contacts");
   }
 };
@@ -202,13 +200,13 @@ const getCompanies = async (req, res) => {
     } else {
       res.status(400).send("No access token found for user");
     }
-  } catch (error) {
+  } catch (_error) {
     res.status(500).send("Error fetching contacts");
   }
 };
 
 // SUMMARY ENGINE UTILITIES
-const getCRMSummary = async (req, res) => {
+const _getCRMSummary = async (req, res) => {
   const user_id = req.session.user_id;
   const tokenRecord = await getTokenRecord(user_id);
   const { access_token } = tokenRecord; // HubSpot uses access_token (no realmId)
@@ -323,7 +321,7 @@ const getCRMSummary = async (req, res) => {
 
     // Deal Stage Conversion: Fetch pipelines, then deals to count transitions
     const pipelinesData = await fetchHubSpot("/crm/v3/pipelines/deals");
-    const stages = pipelinesData.results[0]?.stages || []; // Assume first pipeline
+    const _stages = pipelinesData.results[0]?.stages || []; // Assume first pipeline
     // Fetch deals for stage counts (simplified; use analytics API for better)
     const dealStagesData = await fetchHubSpot("/crm/v3/objects/deals", {
       properties: "dealstage",
@@ -487,7 +485,7 @@ const getTokenRecord = async (user_id) => {
   });
 };
 
-const checkAndRefreshToken = async (user_id) => {
+const _checkAndRefreshToken = async (user_id) => {
   const tokenRecord = await getTokenRecord(user_id);
   if (!tokenRecord) {
     throw new Error("No token record found for user");
