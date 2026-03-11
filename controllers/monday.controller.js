@@ -9,11 +9,16 @@
 
 const { createClient } = require("@supabase/supabase-js");
 const prisma = require("../lib/prisma");
+const {
+  MONDAY_CLIENT_ID,
+  MONDAY_CLIENT_SECRET,
+  MONDAY_REDIRECT_URI,
+} = require("../config/env");
 
 const axios = require("axios");
-const CLIENT_ID = process.env.MONDAY_CLIENT_ID;
-const CLIENT_SECRET = process.env.MONDAY_CLIENT_SECRET;
-const REDIRECT_URI = process.env.MONDAY_REDIRECT_URI;
+const CLIENT_ID = MONDAY_CLIENT_ID;
+const CLIENT_SECRET = MONDAY_CLIENT_SECRET;
+const REDIRECT_URI = MONDAY_REDIRECT_URI;
 
 let SCOPES = [
   "boards:read account:read assets:read teams:read workspaces:read tags:read me:read",

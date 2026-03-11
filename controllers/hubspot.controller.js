@@ -12,10 +12,15 @@ const express = require("express");
 
 const { createClient } = require("@supabase/supabase-js");
 const prisma = require("../lib/prisma");
+const {
+  HUBSPOT_CLIENT_ID,
+  HUBSPOT_CLIENT_SECRET,
+  HUBSPOT_REDIRECT_URI,
+} = require("../config/env");
 
-const CLIENT_ID = process.env.HUBSPOT_CLIENT_ID;
-const CLIENT_SECRET = process.env.HUBSPOT_CLIENT_SECRET;
-const REDIRECT_URI = process.env.HUBSPOT_REDIRECT_URI;
+const CLIENT_ID = HUBSPOT_CLIENT_ID;
+const CLIENT_SECRET = HUBSPOT_CLIENT_SECRET;
+const REDIRECT_URI = HUBSPOT_REDIRECT_URI;
 
 // TODO: Adjust scopes as needed
 // TODO: Implement refresh token logic

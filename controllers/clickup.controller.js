@@ -9,13 +9,18 @@
 
 const { createClient } = require("@supabase/supabase-js");
 const prisma = require("../lib/prisma");
+const {
+  CLICKUP_CLIENT_ID,
+  CLICKUP_CLIENT_SECRET,
+  CLICKUP_REDIRECT_URI,
+} = require("../config/env");
 
 const axios = require("axios");
 const e = require("express");
 
-const CLIENT_ID = process.env.CLICKUP_CLIENT_ID;
-const CLIENT_SECRET = process.env.CLICKUP_CLIENT_SECRET;
-const REDIRECT_URI = process.env.CLICKUP_REDIRECT_URI;
+const CLIENT_ID = CLICKUP_CLIENT_ID;
+const CLIENT_SECRET = CLICKUP_CLIENT_SECRET;
+const REDIRECT_URI = CLICKUP_REDIRECT_URI;
 
 // TODO: Adjust scopes as needed
 // TODO: Implement refresh token logic

@@ -5,6 +5,7 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
 const { clerkMiddleware } = require("@clerk/express");
+const { ALLOWED_ORIGINS } = require("./config/env");
 const routes = require("./routes");
 
 const app = express();
@@ -22,12 +23,17 @@ app.use(express.json());
 app.use(helmet());
 app.use(
   cors({
-    origin: ["http://localhost:3000", "http://localhost:5173"],
+    origin: ALLOWED_ORIGINS,
     credentials: true,
   }),
 );
 app.use(cookieParser());
 app.use(morgan("combined"));
+
+// Health check — used by Docker HEALTHCHECK and Railway deploy checks
+app.get("/api/health", (req, res) => {
+  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+});
 
 // Routes
 app.use("/api", routes);

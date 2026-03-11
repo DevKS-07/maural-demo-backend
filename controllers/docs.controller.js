@@ -1,11 +1,9 @@
 const { createClient } = require("@supabase/supabase-js");
 const prisma = require("../lib/prisma");
 const mime = require("mime-types");
+const { SUPABASE_URL, SUPABASE_ANON_KEY } = require("../config/env");
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY,
-);
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 ///////////////////////////////  HOME ROUTE (Test Route) ///////////////////////////////
 

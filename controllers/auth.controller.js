@@ -1,5 +1,6 @@
 const { Webhook } = require("svix");
 const prisma = require("../lib/prisma");
+const { CLERK_WEBHOOK_SECRET } = require("../config/env");
 
 // ---------------------------------------------------------------------------
 // Clerk role name → DB role_name mapping
@@ -27,9 +28,7 @@ const CLERK_ROLE_TO_DB_ROLE = {
 // @access Public (no auth — must be verified via Svix signature)
 // ---------------------------------------------------------------------------
 exports.handleClerkWebhook = async (req, res) => {
-  const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
-
-  if (!webhookSecret) {
+  if (!CLERK_WEBHOOK_SECRET) {
     console.error("CLERK_WEBHOOK_SECRET is not set");
     return res.status(500).json({ message: "Webhook secret not configured" });
   }
@@ -47,7 +46,7 @@ exports.handleClerkWebhook = async (req, res) => {
   // express.raw() middleware applied to /api/webhooks in app.js
   let event;
   try {
-    const wh = new Webhook(webhookSecret);
+    const wh = new Webhook(CLERK_WEBHOOK_SECRET);
     event = wh.verify(req.body, {
       "svix-id": svixId,
       "svix-timestamp": svixTimestamp,

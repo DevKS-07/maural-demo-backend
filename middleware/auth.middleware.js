@@ -1,11 +1,12 @@
 const { requireAuth: clerkRequireAuth } = require("@clerk/express");
+const { DISABLE_AUTH } = require("../config/env");
 
 // ---------------------------------------------------------------------------
 // Auth toggle — set DISABLE_AUTH=true in .env.development.local or
 // .env.test.local to bypass all auth checks during development/testing.
-// Never set this in production.
+// Blocked in production by config/env.js.
 // ---------------------------------------------------------------------------
-const AUTH_DISABLED = process.env.DISABLE_AUTH === "true";
+const AUTH_DISABLED = DISABLE_AUTH;
 
 if (AUTH_DISABLED) {
   console.warn(
