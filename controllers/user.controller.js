@@ -24,7 +24,8 @@ exports.getAllUsers = async (req, res) => {
     const users = await prisma.user.findMany();
     res.status(200).json(users);
   } catch (error) {
-    res.status(500).json({ message: "Failed to retrieve users", error });
+    console.error("Failed to retrieve users:", error.message);
+    res.status(500).json({ message: "Failed to retrieve users" });
   }
 };
 
@@ -45,7 +46,8 @@ exports.getUserById = async (req, res) => {
     }
     res.status(200).json(user);
   } catch (error) {
-    res.status(500).json({ message: "Failed to retrieve user", error });
+    console.error("Failed to retrieve user:", error.message);
+    res.status(500).json({ message: "Failed to retrieve user" });
   }
 };
 
@@ -64,7 +66,8 @@ exports.getUserActivity = async (req, res) => {
     });
     res.status(200).json(activity);
   } catch (error) {
-    res.status(500).json({ message: "Failed to retrieve user activity", error });
+    console.error("Failed to retrieve user activity:", error.message);
+    res.status(500).json({ message: "Failed to retrieve user activity" });
   }
 };
 
@@ -82,7 +85,8 @@ exports.getUserFiles = async (req, res) => {
     });
     res.status(200).json(files);
   } catch (error) {
-    res.status(500).json({ message: "Failed to retrieve user files", error });
+    console.error("Failed to retrieve user files:", error.message);
+    res.status(500).json({ message: "Failed to retrieve user files" });
   }
 };
 
@@ -100,7 +104,8 @@ exports.getUserComments = async (req, res) => {
     });
     res.status(200).json(comments);
   } catch (error) {
-    res.status(500).json({ message: "Failed to retrieve user comments", error });
+    console.error("Failed to retrieve user comments:", error.message);
+    res.status(500).json({ message: "Failed to retrieve user comments" });
   }
 };
 
@@ -131,7 +136,8 @@ exports.getUserPermissions = async (req, res) => {
     const permissions = user.Role?.RolePermission.map((rp) => rp.Permission) ?? [];
     res.status(200).json(permissions);
   } catch (error) {
-    res.status(500).json({ message: "Failed to retrieve user permissions", error });
+    console.error("Failed to retrieve user permissions:", error.message);
+    res.status(500).json({ message: "Failed to retrieve user permissions" });
   }
 };
 
@@ -173,7 +179,8 @@ exports.createUser = async (req, res) => {
     });
     res.status(201).json(newUser);
   } catch (error) {
-    res.status(500).json({ message: "Failed to create user", error });
+    console.error("Failed to create user:", error.message);
+    res.status(500).json({ message: "Failed to create user" });
   }
 };
 
@@ -213,7 +220,8 @@ exports.updateUser = async (req, res) => {
     });
     res.status(200).json(updatedUser);
   } catch (error) {
-    res.status(500).json({ message: `Failed to update user with ID ${userId}`, error });
+    console.error(`Failed to update user with ID ${userId}:`, error.message);
+    res.status(500).json({ message: `Failed to update user with ID ${userId}` });
   }
 };
 
@@ -234,6 +242,7 @@ exports.deleteUser = async (req, res) => {
     });
     res.status(200).json({ message: `User with ID ${userId} deleted` });
   } catch (error) {
-    res.status(500).json({ message: `Failed to delete user with ID ${userId}`, error });
+    console.error(`Failed to delete user with ID ${userId}:`, error.message);
+    res.status(500).json({ message: `Failed to delete user with ID ${userId}` });
   }
 };

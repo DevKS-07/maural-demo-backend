@@ -3,7 +3,10 @@ const multer = require("multer");
 const docsController = require("../controllers/docs.controller");
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB max per file
+});
 
 // Home route for testing
 router.get("/", docsController.docs_Testing);

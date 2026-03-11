@@ -11,7 +11,10 @@ const adapter = new PrismaPg({
 const prisma = new PrismaClient({ adapter });
 
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB max per file
+});
 
 // Create Supabase client
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);

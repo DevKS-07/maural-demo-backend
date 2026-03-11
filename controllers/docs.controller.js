@@ -28,7 +28,8 @@ exports.getAllDocuments = async (req, res) => {
     const documents = await prisma.file.findMany();
     res.status(200).json(documents);
   } catch (error) {
-    res.status(500).json({ message: "Failed to retrieve documents", error });
+    console.error("Failed to retrieve documents:", error.message);
+    res.status(500).json({ message: "Failed to retrieve documents" });
   }
 };
 
@@ -49,7 +50,7 @@ exports.getDocumentsByCategory = async (req, res) => {
   } catch (error) {
     res
       .status(500)
-      .json({ message: "Failed to retrieve documents by category", error });
+      .json({ message: "Failed to retrieve documents by category" });
   }
 };
 
@@ -79,7 +80,7 @@ exports.getDocumentById = async (req, res) => {
     if (error) {
       return res
         .status(500)
-        .json({ message: "Failed to download file from storage", error });
+        .json({ message: "Failed to download file from storage" });
     }
 
     const buffer = Buffer.from(await fileBlob.arrayBuffer());
@@ -90,7 +91,8 @@ exports.getDocumentById = async (req, res) => {
     res.setHeader("Content-Length", buffer.length);
     res.end(buffer);
   } catch (error) {
-    res.status(500).json({ message: "Failed to retrieve document", error });
+    console.error("Failed to retrieve document:", error.message);
+    res.status(500).json({ message: "Failed to retrieve document" });
   }
 };
 
@@ -110,7 +112,7 @@ exports.getDocumentComments = async (req, res) => {
   } catch (error) {
     res
       .status(500)
-      .json({ message: "Failed to retrieve document comments", error });
+      .json({ message: "Failed to retrieve document comments" });
   }
 };
 
@@ -131,7 +133,7 @@ exports.getDocumentActivity = async (req, res) => {
   } catch (error) {
     res
       .status(500)
-      .json({ message: "Failed to retrieve document activity", error });
+      .json({ message: "Failed to retrieve document activity" });
   }
 };
 
@@ -165,7 +167,7 @@ exports.createDocument = async (req, res) => {
     if (error) {
       return res
         .status(500)
-        .json({ message: "Failed to upload file to storage", error });
+        .json({ message: "Failed to upload file to storage" });
     }
 
     const newFile = await prisma.file.create({
@@ -181,7 +183,8 @@ exports.createDocument = async (req, res) => {
 
     res.status(201).json(newFile);
   } catch (error) {
-    res.status(500).json({ message: "Failed to create document", error });
+    console.error("Failed to create document:", error.message);
+    res.status(500).json({ message: "Failed to create document" });
   }
 };
 
@@ -212,7 +215,8 @@ exports.addDocumentComment = async (req, res) => {
     });
     res.status(201).json(newComment);
   } catch (error) {
-    res.status(500).json({ message: "Failed to add comment", error });
+    console.error("Failed to add comment:", error.message);
+    res.status(500).json({ message: "Failed to add comment" });
   }
 };
 
@@ -244,7 +248,7 @@ exports.updateDocument = async (req, res) => {
   } catch (error) {
     res
       .status(500)
-      .json({ message: `Failed to update document with ID ${id}`, error });
+      .json({ message: `Failed to update document with ID ${id}` });
   }
 };
 
@@ -276,7 +280,7 @@ exports.deleteDocument = async (req, res) => {
   } catch (error) {
     res
       .status(500)
-      .json({ message: `Failed to delete document with ID ${id}`, error });
+      .json({ message: `Failed to delete document with ID ${id}` });
   }
 };
 
@@ -295,9 +299,9 @@ exports.deleteDocumentComment = async (req, res) => {
     });
     res.status(200).json({ message: `Comment with ID ${commentId} deleted` });
   } catch (error) {
+    console.error(`Failed to delete comment with ID ${commentId}:`, error.message);
     res.status(500).json({
       message: `Failed to delete comment with ID ${commentId}`,
-      error,
     });
   }
 };
