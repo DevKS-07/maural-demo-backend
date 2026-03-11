@@ -24,9 +24,88 @@ const prisma = require("../lib/prisma");
 const pdfParse = require("pdf-parse");
 const XLSX = require("xlsx");
 const mammoth = require("mammoth");
+const { createWorker } = require("tesseract.js");
+// Polyfill DOMMatrix and Path2D before loading pdfjs-dist so it can render pages correctly
+const { createCanvas, DOMMatrix, Path2D } = require("@napi-rs/canvas");
+globalThis.DOMMatrix = DOMMatrix;
+globalThis.Path2D = Path2D;
+const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
 const UPLOADS_DIR = path.join(__dirname, "../uploads");
 const CHUNK_SIZE = 1000;
 const CHUNK_OVERLAP = 150;
+
+// ---------------------------------------------------------------------------
+// OCR helpers — used when pdf-parse finds no selectable text (image-based PDF)
+// ---------------------------------------------------------------------------
+
+// pdfjs-dist requires a canvas factory to render pages server-side.
+// We provide one backed by @napi-rs/canvas (prebuilt binaries, no native compile).
+class NodeCanvasFactory {
+  create(width, height) {
+    const canvas = createCanvas(width, height);
+    return { canvas, context: canvas.getContext("2d") };
+  }
+  reset({ canvas }, width, height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  destroy(canvasAndContext) {
+    canvasAndContext.canvas = null;
+    canvasAndContext.context = null;
+  }
+}
+
+/**
+ * OCR an image buffer (PNG/JPG/TIFF) via Tesseract.
+ */
+async function ocrImageBuffer(imageBuffer) {
+  const worker = await createWorker("eng");
+  try {
+    const {
+      data: { text },
+    } = await worker.recognize(imageBuffer);
+    return sanitizeText(text || "");
+  } finally {
+    await worker.terminate();
+  }
+}
+
+/**
+ * Render every page of an image-based PDF to PNG and OCR each page.
+ * Scale = 2.0 gives ~144 dpi which is enough for reliable OCR.
+ */
+async function ocrPdf(pdfBuffer) {
+  const canvasFactory = new NodeCanvasFactory();
+  const loadingTask = pdfjsLib.getDocument({
+    data: new Uint8Array(pdfBuffer),
+    // Suppress pdfjs console warnings about missing CMap / standard fonts
+    verbosity: 0,
+  });
+  const pdfDoc = await loadingTask.promise;
+  const pageTexts = [];
+
+  for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+    const page = await pdfDoc.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 2.0 });
+    const canvasAndContext = canvasFactory.create(
+      viewport.width,
+      viewport.height,
+    );
+
+    await page.render({
+      canvasContext: canvasAndContext.context,
+      viewport,
+      canvasFactory,
+    }).promise;
+
+    const pngBuffer = canvasAndContext.canvas.toBuffer("image/png");
+    const text = await ocrImageBuffer(pngBuffer);
+    if (text.trim()) pageTexts.push(`[Page ${pageNum}]\n${text}`);
+    page.cleanup();
+  }
+
+  return pageTexts.join("\n\n");
+}
 
 function getSupabase() {
   return createClient(
@@ -77,8 +156,20 @@ async function extractText(buffer, fileName) {
   switch (ext) {
     case "pdf": {
       const result = await pdfParse(buffer);
-      return sanitizeText(result.text || "");
+      const text = sanitizeText(result.text || "");
+      // If pdf-parse found meaningful text, use it.
+      // Otherwise the PDF is image-based — fall back to OCR.
+      if (text.trim().length > 50) return text;
+      console.log(`  [ocr] No selectable text found — running OCR...`);
+      return await ocrPdf(buffer);
     }
+    case "png":
+    case "jpg":
+    case "jpeg":
+    case "tiff":
+    case "bmp":
+    case "gif":
+      return await ocrImageBuffer(buffer);
     case "docx": {
       const result = await mammoth.extractRawText({ buffer });
       return sanitizeText(result.value || "");
@@ -119,8 +210,6 @@ function chunkText(text) {
 
 // Use raw SQL to insert/find File records, bypassing the Prisma schema/DB column mismatch.
 async function upsertFileRecord(realName, fileSize) {
-  const ext = realName.includes(".") ? realName.split(".").pop() : null;
-
   const existing = await prisma.$queryRaw`
     SELECT file_id FROM "File" WHERE file_name = ${realName} LIMIT 1
   `;
@@ -129,8 +218,8 @@ async function upsertFileRecord(realName, fileSize) {
   }
 
   const inserted = await prisma.$queryRaw`
-    INSERT INTO "File" (file_name, file_size, file_source, file_extension)
-    VALUES (${realName}, ${fileSize}, ${"local/" + realName}, ${ext})
+    INSERT INTO "File" (file_name, file_size, file_source)
+    VALUES (${realName}, ${fileSize}, ${"local/" + realName})
     RETURNING file_id
   `;
   return inserted[0].file_id;

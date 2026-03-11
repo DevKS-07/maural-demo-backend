@@ -257,7 +257,12 @@ ${context}
 // Keep legacy export for any existing callers
 function buildMessages(message, docs, history = []) {
   const { getSystemPrompt } = require("./promptTemplates");
-  return buildMessagesForIntent(message, docs, history, getSystemPrompt("qa"));
+  return buildMessagesForIntent(
+    message,
+    docs,
+    history,
+    getSystemPrompt("reason"),
+  );
 }
 
 // ---------------------------------------------------------------------------
