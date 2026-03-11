@@ -4,6 +4,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
+const compression = require("compression");
 const rateLimit = require("express-rate-limit");
 const { clerkMiddleware } = require("@clerk/express");
 const { ALLOWED_ORIGINS, isProduction } = require("./config/env");
@@ -25,6 +26,7 @@ app.use("/api/webhooks", express.raw({ type: "application/json" }));
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 app.use(express.json({ limit: "10kb" }));
 app.use(helmet());
+app.use(compression());
 
 // Rate limiting — protects against brute-force and denial-of-service
 const globalLimiter = rateLimit({
