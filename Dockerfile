@@ -14,7 +14,7 @@ COPY prisma ./prisma/
 RUN npm ci
 
 # Generate Prisma client
-RUN DIRECT_URL=postgresql://build:build@localhost:5432/build npx prisma generate
+RUN npx prisma generate
 
 # ---- Production Stage ----
 FROM node:22-alpine
@@ -27,15 +27,13 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /app
 
-# Copy dependency manifests and install production-only deps
-COPY package.json package-lock.json* ./
-COPY prisma ./prisma/
-RUN npm ci --omit=dev
+# Copy node_modules from build stage (includes compiled native modules + generated Prisma client)
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/package-lock.json* ./
 
-# Overwrite @prisma/client with the build stage version (includes generated client)
-# Prisma 7 generates into both .prisma/client and @prisma/client — they must match
-COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=build /app/node_modules/@prisma/client ./node_modules/@prisma/client
+# Prune dev dependencies (generated .prisma files are not npm packages, so they survive)
+RUN npm prune --omit=dev
 
 # Copy application source
 COPY . .
