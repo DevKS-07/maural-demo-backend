@@ -32,8 +32,11 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/package-lock.json* ./
 
-# Prune dev dependencies (generated .prisma files are not npm packages, so they survive)
+# Prune dev dependencies
 RUN npm prune --omit=dev
+
+# Re-copy generated Prisma client — npm prune removes .prisma as "extraneous"
+COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 
 # Copy application source
 COPY . .
