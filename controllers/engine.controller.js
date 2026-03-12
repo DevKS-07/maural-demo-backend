@@ -105,20 +105,21 @@ const getFullDashboardSummary = async (req, res) => {
   }
 };
 
+
 /**
  * GET /api/summary/scorecard
- * Aggregates 6 headline KPIs across ALL clients for Fintelligent's overview.
+ * Returns a scorecard entry for each client — DB first, API fallback if stale/missing.
  *
- * Returned metrics:
- *   totalPipelineValue      — sum of all client pipeline values (HubSpot)
- *   pipelineCoverageRatio   — totalPipelineValue / totalRevenue (target: 2:1)
- *   totalRevenue            — sum of all client revenue (QuickBooks)
- *   ebitdaPct               — weighted avg EBITDA % across clients (QuickBooks)
- *   revenuePerHead          — totalRevenue / totalHeadcount (QB + labor)
- *   workingCapital          — sum of all client working capital in months (QuickBooks)
- *   billableUtilization     — weighted avg billable utilization % (ClickUp/Monday)
- *
- * Each client runs in parallel. Failures are skipped — partial results returned.
+ * Response:
+ * {
+ *   clients: [
+ *     {
+ *       clientId, name,
+ *       score: { totalPipelineValue, pipelineCoverageRatio, totalRevenue,
+ *                ebitdaPct, revenuePerHead, workingCapital, billableUtilization }
+ *     }
+ *   ]
+ * }
  */
 const getScorecardSummary = async (req, res) => {
   if (!req.session.user_id) return res.status(401).json({ error: "Not authenticated" });
@@ -126,48 +127,33 @@ const getScorecardSummary = async (req, res) => {
   const { startDate, endDate, asOfDate } = req.query;
 
   try {
-    // Fetch all clients Fintelligent manages
     const clients = await prisma.client.findMany({
-      select: { id: true, name: true },
+      select: { client_id: true, client_name: true },
     });
 
     if (!clients.length) {
-      return res.status(200).json({
-        scorecard: buildEmptyScorecard(),
-        clientCount: 0,
-        fetchedAt: new Date().toISOString(),
-      });
+      return res.status(200).json({ clients: [], fetchedAt: new Date().toISOString() });
     }
 
-    // Run all three services for every client in parallel
-    // Promise.allSettled means one client failing won't block others
-    const clientResults = await Promise.allSettled(
+    const results = await Promise.allSettled(
       clients.map((client) => fetchClientScorecardData(client, { startDate, endDate, asOfDate }))
     );
 
-    // Separate successful results from failures
-    const successful = [];
-    const failed     = [];
-
-    clientResults.forEach((result, i) => {
+    const clientScores = results.map((result, i) => {
       if (result.status === "fulfilled") {
-        successful.push(result.value);
-      } else {
-        failed.push({ clientId: clients[i].id, name: clients[i].name, error: result.reason?.message });
-        console.warn(`[Scorecard] Skipping client ${clients[i].name}: ${result.reason?.message}`);
+        const { client_id, name, financial, leads, labor } = result.value;
+        return { client_id: client_id, name, score: buildClientScore({ financial, leads, labor }) };
       }
+      console.warn(`[Scorecard] Failed for ${clients[i].name}: ${result.reason?.message}`);
+      return {
+        client_id: clients[i].client_id,
+        name:     clients[i].client_name,
+        score:    buildEmptyScorecard(),
+        error:    result.reason?.message,
+      };
     });
 
-    // Aggregate across all successful clients
-    const scorecard = aggregateScorecardMetrics(successful);
-
-    return res.status(200).json({
-      scorecard,
-      clientCount:      clients.length,
-      successfulClients: successful.length,
-      skippedClients:   failed.length > 0 ? failed : undefined,
-      fetchedAt:        new Date().toISOString(),
-    });
+    return res.status(200).json({ clients: clientScores, fetchedAt: new Date().toISOString() });
 
   } catch (error) {
     console.error("[SummaryEngine] getScorecardSummary error:", error.message);
@@ -317,97 +303,60 @@ const mapLaborToSchema = (l) => ({
 });
 
 /**
- * Aggregate individual client data into the 6 scorecard metrics.
+ * Build the scorecard score object for a single client.
  */
-const aggregateScorecardMetrics = (clientDataArray) => {
-  let totalRevenue        = 0;
-  let totalPipelineValue  = 0;
-  let totalEbitda         = 0;
-  let totalHeadcount      = 0;
-  let totalWorkingCapital = 0;
-  let totalBillableHours  = 0;
-  let totalLaborHours     = 0;
-  let clientsWithRevenue  = 0;
+const buildClientScore = ({ financial, leads, labor }) => {
+  const totalRevenue       = financial?.totalIncome     ?? null;
+  const netRevenue         = financial?.netIncome       ?? null;
+  const ebitda             = financial?.ebitda          ?? null;
+  const totalPipelineValue = leads?.pipelineCoverage    ?? null;
+  const headcount          = ((labor?.billableFTEs ?? 0) + (labor?.nonBillableFTEs ?? 0)) || null;
 
-  for (const { financial, leads, labor } of clientDataArray) {
-    // Revenue (QB)
-    const revenue = financial?.totalIncome ?? 0;
-    totalRevenue += revenue;
-    if (revenue > 0) clientsWithRevenue++;
-
-    // Pipeline (HubSpot)
-    totalPipelineValue += leads?.pipelineCoverage ?? 0;
-
-    // EBITDA — accumulate raw EBITDA value for weighted avg
-    totalEbitda += financial?.ebitda ?? 0;
-
-    // Headcount — billable + non-billable FTEs from labor
-    const billable    = labor?.billableFTEs    ?? 0;
-    const nonBillable = labor?.nonBillableFTEs ?? 0;
-    totalHeadcount += billable + nonBillable;
-
-    // Working capital — sum in dollars, convert to months at the end
-    // workingCapital from QB is already in months — sum and average
-    totalWorkingCapital += financial?.workingCapital ?? 0;
-
-    // Billable utilization — accumulate hours for weighted avg
-    // weighted by directLaborHours so larger clients count more
-    const laborHours    = labor?.directLaborHours    ?? 0;
-    const billableHours = laborHours * ((labor?.billableUtilization ?? 0) / 100);
-    totalBillableHours += billableHours;
-    totalLaborHours    += laborHours;
-  }
-
-  const count = clientDataArray.length || 1; // avoid divide-by-zero
-
-  // EBITDA % — total EBITDA / total revenue
-  const ebitdaPct = totalRevenue > 0
-    ? parseFloat(((totalEbitda / totalRevenue) * 100).toFixed(1))
+  // EBITDA % = EBITDA / net revenue
+  const ebitdaPct = (ebitda !== null && netRevenue)
+    ? parseFloat(((ebitda / netRevenue) * 100).toFixed(1))
     : null;
 
-  // Revenue per head — total revenue / total headcount
-  const revenuePerHead = totalHeadcount > 0
-    ? parseFloat((totalRevenue / totalHeadcount).toFixed(0))
+  // Revenue per head = total revenue / total headcount
+  const revenuePerHead = (totalRevenue && headcount)
+    ? parseFloat((totalRevenue / headcount).toFixed(0))
     : null;
 
-  // Pipeline coverage ratio — total pipeline / total revenue (target 2:1)
-  const pipelineCoverageRatio = totalRevenue > 0
+  // Pipeline coverage ratio = pipeline / revenue (target >= 2)
+  const pipelineCoverageRatio = (totalPipelineValue !== null && totalRevenue)
     ? parseFloat((totalPipelineValue / totalRevenue).toFixed(2))
     : null;
 
-  // Working capital — average months across clients
-  const workingCapital = clientsWithRevenue > 0
-    ? parseFloat((totalWorkingCapital / clientsWithRevenue).toFixed(1))
-    : null;
-
-  // Billable utilization — weighted average across all labor hours
-  const billableUtilization = totalLaborHours > 0
-    ? parseFloat(((totalBillableHours / totalLaborHours) * 100).toFixed(1))
-    : null;
-
   return {
-    totalPipelineValue:   parseFloat(totalPipelineValue.toFixed(2)),
-    pipelineCoverageRatio,                    // e.g. 2.1 = 2.1:1 (target ≥ 2)
-    totalRevenue:         parseFloat(totalRevenue.toFixed(2)),
-    ebitdaPct,                                // e.g. 20 = 20%
-    revenuePerHead,                           // e.g. 200000 = $200,000
-    workingCapital,                           // avg months across clients
-    billableUtilization,                      // weighted avg % e.g. 78.5
+    totalPipelineValue:    totalPipelineValue !== null ? parseFloat(totalPipelineValue.toFixed(2)) : null,
+    pipelineCoverageRatio,
+    totalRevenue:          totalRevenue       !== null ? parseFloat(totalRevenue.toFixed(2))       : null,
+    netRevenue:            netRevenue         !== null ? parseFloat(netRevenue.toFixed(2))         : null,
+    ebitda:                ebitda             !== null ? parseFloat(ebitda.toFixed(2))             : null,
+    ebitdaPct,
+    revenuePerHead,
+    headcount,
+    workingCapital:        financial?.workingCapital  ?? null,
+    billableUtilization:   labor?.billableUtilization ?? null,
   };
 };
 
 /**
- * Empty scorecard shape — returned when no clients exist yet.
+ * Empty scorecard shape — returned when a client has no data yet.
  */
 const buildEmptyScorecard = () => ({
-  totalPipelineValue:   null,
+  totalPipelineValue:    null,
   pipelineCoverageRatio: null,
-  totalRevenue:         null,
-  ebitdaPct:            null,
-  revenuePerHead:       null,
-  workingCapital:       null,
-  billableUtilization:  null,
+  totalRevenue:          null,
+  netRevenue:            null,
+  ebitda:                null,
+  ebitdaPct:             null,
+  revenuePerHead:        null,
+  headcount:             null,
+  workingCapital:        null,
+  billableUtilization:   null,
 });
+
 
 module.exports = {
   getFinancialSummary,
