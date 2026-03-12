@@ -33,8 +33,7 @@ app.get("/api/health", (req, res) => {
 // CORS — must be before Clerk so preflight OPTIONS requests get proper headers
 app.use(
   cors({
-    // origin: ALLOWED_ORIGINS,
-    origin: "http://localhost:5173",
+    origin: ALLOWED_ORIGINS,
     credentials: true,
   }),
 );
