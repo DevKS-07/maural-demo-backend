@@ -1,6 +1,9 @@
 const { Webhook } = require("svix");
+const { clerkClient } = require("@clerk/express");
 const prisma = require("../lib/prisma");
 const { CLERK_WEBHOOK_SECRET } = require("../config/env");
+
+const DEFAULT_CLERK_ROLE = "client_staff";
 
 // ---------------------------------------------------------------------------
 // Clerk role name → DB role_name mapping
@@ -63,14 +66,23 @@ exports.handleClerkWebhook = async (req, res) => {
   try {
     switch (type) {
       case "user.created": {
-        const clerkRole = data.public_metadata?.role;
+        const clerkRole = data.public_metadata?.role || DEFAULT_CLERK_ROLE;
         let role_id = undefined;
 
-        if (clerkRole && CLERK_ROLE_TO_DB_ROLE[clerkRole]) {
+        if (CLERK_ROLE_TO_DB_ROLE[clerkRole]) {
           const dbRole = await prisma.role.findFirst({
             where: { role_name: CLERK_ROLE_TO_DB_ROLE[clerkRole] },
           });
           if (dbRole) role_id = dbRole.role_id;
+        }
+
+        // If the user signed up without a role in public_metadata,
+        // sync the default role back to Clerk so sessionClaims stay in sync
+        if (!data.public_metadata?.role) {
+          await clerkClient.users.updateUserMetadata(data.id, {
+            publicMetadata: { role: clerkRole },
+          });
+          console.log(`[Clerk Webhook] Set default role "${clerkRole}" on Clerk user: ${data.id}`);
         }
 
         const primaryEmail = data.email_addresses?.find(
