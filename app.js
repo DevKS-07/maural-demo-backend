@@ -34,12 +34,10 @@ app.get("/api/health", (req, res) => {
 app.use(
   cors({
     // origin: ALLOWED_ORIGINS,
-    origin: "localhost:5173",
+    origin: "http://localhost:5173",
     credentials: true,
   }),
 );
-
-console.log(ALLOWED_ORIGINS);
 
 // Clerk middleware — must be before routes so req.auth() is available everywhere
 app.use(clerkMiddleware());
