@@ -10,6 +10,11 @@ const { clerkMiddleware } = require("@clerk/express");
 const { ALLOWED_ORIGINS, isProduction } = require("./config/env");
 const routes = require("./routes");
 
+// Allow JSON.stringify() to serialize Prisma BigInt fields
+BigInt.prototype.toJSON = function () {
+  return Number(this);
+};
+
 const app = express();
 
 // Trust the first proxy (Railway, AWS ALB, nginx) so req.ip is the real client IP

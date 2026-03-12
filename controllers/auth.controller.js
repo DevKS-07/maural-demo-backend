@@ -133,11 +133,15 @@ exports.handleClerkWebhook = async (req, res) => {
       }
 
       case "user.deleted": {
-        await prisma.user.delete({
+        const deleted = await prisma.user.deleteMany({
           where: { clerk_id: data.id },
         });
 
-        console.log(`[Clerk Webhook] Deleted user: ${data.id}`);
+        if (deleted.count === 0) {
+          console.warn(`[Clerk Webhook] User not found in DB, skipping delete: ${data.id}`);
+        } else {
+          console.log(`[Clerk Webhook] Deleted user: ${data.id}`);
+        }
         break;
       }
 
