@@ -1,0 +1,1806 @@
+# Maural KMS API Reference
+
+> **Base URL:** `http://localhost:<PORT>/api`
+> **Version:** 1.0.0
+> **Authentication:** [Clerk](https://clerk.com/) JWT Bearer tokens
+> **Content-Type:** `application/json` (unless otherwise noted)
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Authentication & Authorization](#authentication--authorization)
+- [Rate Limiting](#rate-limiting)
+- [Error Responses](#error-responses)
+- [Endpoints](#endpoints)
+  - [Health](#health)
+  - [Home](#home)
+  - [Webhooks](#webhooks)
+  - [Auth](#auth)
+  - [Users](#users)
+  - [Clients](#clients)
+  - [Documents](#documents)
+  - [Chat / AI](#chat--ai)
+  - [Integrations — HubSpot](#integrations--hubspot)
+  - [Integrations — QuickBooks](#integrations--quickbooks)
+  - [Integrations — Monday.com](#integrations--mondaycom)
+  - [Integrations — ClickUp](#integrations--clickup)
+- [Data Models](#data-models)
+
+---
+
+## Overview
+
+The Maural KMS (Knowledge Management System) API is a Node.js/Express backend that provides:
+
+- **Document management** — upload, download, and organize files stored in Supabase Storage.
+- **AI-powered chat** — multi-intent RAG (Retrieval-Augmented Generation) pipeline with guardrails.
+- **User & client management** — CRUD with role-based access control.
+- **Third-party integrations** — OAuth 2.0 connections to HubSpot, QuickBooks, Monday.com, and ClickUp.
+
+### Global Middleware
+
+| Middleware | Description |
+|---|---|
+| **Helmet** | Sets security-related HTTP headers |
+| **CORS** | Restricts origins to `ALLOWED_ORIGINS` env var |
+| **Compression** | gzip response compression |
+| **Morgan** | Request logging (JSON in production, `dev` format locally) |
+| **cookie-parser** | Parses cookies from incoming requests |
+
+---
+
+## Authentication & Authorization
+
+### Clerk JWT
+
+All protected endpoints require a valid Clerk JWT passed as a **Bearer token** in the `Authorization` header:
+
+```
+Authorization: Bearer <clerk_jwt_token>
+```
+
+The `requireAuth` middleware (in `middleware/auth.middleware.js`) validates the token using the Clerk SDK. Authentication can be disabled in development by setting `DISABLE_AUTH=true`.
+
+### Role-Based Access Control (RBAC)
+
+The `requireRole(minRole)` middleware enforces a role hierarchy:
+
+| Role | Level | Description |
+|---|---|---|
+| `super_admin` | 4 | Full system access |
+| `admin` | 3 | Administrative access |
+| `client_executive` | 2 | Client-level management |
+| `client_staff` | 1 | Basic client access |
+
+A user must have a role level **≥ the minimum required level** to access the endpoint.
+
+---
+
+## Rate Limiting
+
+| Scope | Window | Max Requests |
+|---|---|---|
+| **Global** (all `/api/*`) | 15 minutes | 100 |
+| **Chat** (`/api/chat/*`) | 15 minutes | 20 |
+
+When rate-limited, the API responds with `429 Too Many Requests`.
+
+---
+
+## Error Responses
+
+All errors follow a consistent JSON structure:
+
+```json
+{
+  "message": "Human-readable error description"
+}
+```
+
+### Standard HTTP Status Codes
+
+| Code | Meaning |
+|---|---|
+| `200` | OK — Request succeeded |
+| `201` | Created — Resource created successfully |
+| `204` | No Content — Request succeeded with no body |
+| `400` | Bad Request — Validation error or missing required fields |
+| `401` | Unauthorized — Missing or invalid JWT |
+| `403` | Forbidden — Insufficient role/permissions |
+| `404` | Not Found — Resource does not exist |
+| `429` | Too Many Requests — Rate limit exceeded |
+| `500` | Internal Server Error — Unexpected server failure |
+
+> In **production**, 500 errors return `"Something went wrong..."` to avoid leaking internals.
+
+---
+
+## Endpoints
+
+---
+
+### Health
+
+#### `GET /api/health`
+
+Returns the health status of the API server. **No authentication required.**
+
+**Response `200 OK`**
+
+```json
+{
+  "status": "ok",
+  "timestamp": "2026-03-11T12:00:00.000Z",
+  "uptime": 3600.5,
+  "memory": {
+    "rss": 85.2,
+    "heapUsed": 42.1
+  },
+  "environment": "production"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `status` | `string` | Always `"ok"` |
+| `timestamp` | `string` (ISO 8601) | Server time |
+| `uptime` | `number` | Server uptime in seconds |
+| `memory.rss` | `number` | Resident Set Size in MB |
+| `memory.heapUsed` | `number` | V8 heap usage in MB |
+| `environment` | `string` | `NODE_ENV` value |
+
+---
+
+### Home
+
+#### `GET /api/`
+
+**Auth:** None
+
+**Response `200 OK`**
+
+```
+Welcome to the Maural KMS API
+```
+
+---
+
+#### `GET /api/favicon.ico`
+
+**Auth:** None
+
+**Response `204 No Content`**
+
+---
+
+### Webhooks
+
+#### `POST /api/webhooks/clerk`
+
+Receives webhook events from Clerk for user lifecycle management. Verified using **Svix** signature headers.
+
+**Auth:** Svix signature verification (not JWT)
+
+**Headers Required:**
+
+| Header | Description |
+|---|---|
+| `svix-id` | Svix event ID |
+| `svix-timestamp` | Event timestamp |
+| `svix-signature` | HMAC signature |
+
+**Request Body:** Raw JSON payload from Clerk
+
+**Supported Events:**
+
+| Event | Action |
+|---|---|
+| `user.created` | Creates a new user in the database. Maps Clerk public metadata role to a DB role. |
+| `user.updated` | Updates user fields (name, email, phone, etc.) based on Clerk data. |
+| `user.deleted` | Deletes user from the database by `clerk_id`. |
+
+**Role Mapping (Clerk → Database):**
+
+| Clerk Role (`publicMetadata.role`) | DB Role Name |
+|---|---|
+| `super_admin` | Super Admin |
+| `admin` | Admin |
+| `client_executive` | Client Executive |
+| `client_staff` | Client Staff |
+
+**Response `200 OK`**
+
+```json
+{
+  "message": "Webhook processed"
+}
+```
+
+**Error `400 Bad Request`** — Invalid Svix signature
+
+---
+
+### Auth
+
+#### `GET /api/auth/me`
+
+Returns the profile of the currently authenticated user.
+
+**Auth:** Required (Clerk JWT)
+
+**Response `200 OK`**
+
+```json
+{
+  "user_id": "1",
+  "clerk_id": "user_2abc123",
+  "first_name": "Jane",
+  "last_name": "Doe",
+  "email": "jane@example.com",
+  "phone": "+1234567890",
+  "gender": "female",
+  "status": "active",
+  "role_id": "2",
+  "client_id": "1",
+  "Role": {
+    "role_id": "2",
+    "role_name": "Admin",
+    "RolePermission": [
+      {
+        "Permission": {
+          "permission_id": "1",
+          "permission_name": "read:documents"
+        }
+      }
+    ]
+  },
+  "Client": {
+    "client_id": "1",
+    "client_name": "Acme Corp"
+  }
+}
+```
+
+> **Note:** BigInt fields are serialized as strings.
+
+**Error `404 Not Found`** — User not found in database
+
+---
+
+### Users
+
+All user endpoints require authentication (`requireAuth`).
+
+---
+
+#### `GET /api/user/`
+
+**Response `200 OK`**
+
+```
+User API is working
+```
+
+---
+
+#### `GET /api/user/all`
+
+Returns all users in the system.
+
+**Auth:** Required
+
+**Response `200 OK`**
+
+```json
+[
+  {
+    "user_id": "1",
+    "clerk_id": "user_2abc123",
+    "first_name": "Jane",
+    "last_name": "Doe",
+    "email": "jane@example.com",
+    "phone": "+1234567890",
+    "gender": "female",
+    "status": "active",
+    "role_id": "2",
+    "client_id": "1",
+    "last_login": "2026-03-10T08:30:00.000Z"
+  }
+]
+```
+
+---
+
+#### `GET /api/user/:userId`
+
+Returns a single user by ID.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `userId` | `BigInt` (string) | The user's ID |
+
+**Response `200 OK`** — User object (same shape as above)
+
+**Error `404 Not Found`** — User does not exist
+
+---
+
+#### `GET /api/user/:userId/activity`
+
+Returns the activity log for a user.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `userId` | `BigInt` (string) | The user's ID |
+
+**Response `200 OK`**
+
+```json
+[
+  {
+    "activity_id": "1",
+    "file_id": "a1b2c3d4-...",
+    "activity_type": "1",
+    "activity_datetime": "2026-03-10T10:00:00.000Z",
+    "user_id": "1",
+    "ActivityType": {
+      "activity_type_id": "1",
+      "activity_name": "Viewed"
+    }
+  }
+]
+```
+
+---
+
+#### `GET /api/user/:userId/files`
+
+Returns all files uploaded by a user.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `userId` | `BigInt` (string) | The user's ID |
+
+**Response `200 OK`**
+
+```json
+[
+  {
+    "file_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "file_name": "report.pdf",
+    "file_size": "2048",
+    "file_source": "client-bucket/report.pdf",
+    "ctg_id": "1",
+    "client_id": "1",
+    "user_id": "1",
+    "created_at": "2026-03-01T12:00:00.000Z",
+    "updated_at": "2026-03-01T12:00:00.000Z"
+  }
+]
+```
+
+---
+
+#### `GET /api/user/:userId/comments`
+
+Returns all comments made by a user.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `userId` | `BigInt` (string) | The user's ID |
+
+**Response `200 OK`**
+
+```json
+[
+  {
+    "comment_id": "1",
+    "file_id": "a1b2c3d4-...",
+    "comment": "This section needs revision.",
+    "created_at": "2026-03-10T15:00:00.000Z",
+    "user_id": "1"
+  }
+]
+```
+
+---
+
+#### `GET /api/user/:userId/permissions`
+
+Returns all permissions associated with a user's role.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `userId` | `BigInt` (string) | The user's ID |
+
+**Response `200 OK`**
+
+```json
+[
+  {
+    "permission_id": "1",
+    "permission_name": "read:documents"
+  },
+  {
+    "permission_id": "2",
+    "permission_name": "write:documents"
+  }
+]
+```
+
+---
+
+#### `POST /api/user/`
+
+Creates a new user.
+
+**Auth:** Required
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `first_name` | `string` | Yes | User's first name |
+| `last_name` | `string` | Yes | User's last name |
+| `email` | `string` | Yes | User's email address |
+| `client_id` | `BigInt` | No | Associated client ID |
+| `role_id` | `BigInt` | No | Role ID to assign |
+| `phone` | `string` | No | Phone number |
+| `gender` | `string` | No | Gender |
+| `status` | `string` | No | Account status |
+
+**Response `201 Created`** — The created User object
+
+**Error `400 Bad Request`** — Missing required fields
+
+---
+
+#### `PUT /api/user/:userId`
+
+Updates an existing user.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `userId` | `BigInt` (string) | The user's ID |
+
+**Request Body:** Any subset of the fields from `POST /api/user/`
+
+**Response `200 OK`** — The updated User object
+
+**Error `404 Not Found`** — User does not exist
+
+---
+
+#### `DELETE /api/user/:userId`
+
+Deletes a user.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `userId` | `BigInt` (string) | The user's ID |
+
+**Response `200 OK`**
+
+```json
+{
+  "message": "User with ID 1 deleted"
+}
+```
+
+---
+
+### Clients
+
+All client endpoints require authentication (`requireAuth`).
+
+---
+
+#### `GET /api/client/`
+
+**Response `200 OK`**
+
+```
+Client API is working
+```
+
+---
+
+#### `GET /api/client/all`
+
+Returns all clients in the system.
+
+**Auth:** Required
+
+**Response `200 OK`**
+
+```json
+[
+  {
+    "client_id": "1",
+    "client_name": "Acme Corp",
+    "industry": "Technology",
+    "founded": "2010-01-15T00:00:00.000Z",
+    "key_contacts": "5",
+    "company_location": "New York, NY",
+    "organization_chart": "https://...",
+    "gpt_types": "general",
+    "storage_bucket": "a1b2c3d4-..."
+  }
+]
+```
+
+---
+
+#### `GET /api/client/:clientId`
+
+Returns a single client by ID.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `clientId` | `BigInt` (string) | The client's ID |
+
+**Response `200 OK`** — Client object
+
+**Error `404 Not Found`** — Client does not exist
+
+---
+
+#### `GET /api/client/:clientId/users`
+
+Returns all users belonging to a client.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `clientId` | `BigInt` (string) | The client's ID |
+
+**Response `200 OK`** — Array of User objects
+
+---
+
+#### `GET /api/client/:clientId/files`
+
+Returns all files belonging to a client.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `clientId` | `BigInt` (string) | The client's ID |
+
+**Response `200 OK`** — Array of File objects
+
+---
+
+#### `POST /api/client/`
+
+Creates a new client.
+
+**Auth:** Required
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `client_name` | `string` | Yes | Client/company name |
+| `industry` | `string` | No | Industry sector |
+| `founded` | `string` (ISO date) | No | Date founded |
+| `key_contacts` | `BigInt` | No | Primary contact user ID |
+| `company_location` | `string` | No | Headquarters location |
+| `organization_chart` | `string` | No | URL to org chart |
+| `gpt_types` | `string` | No | AI model preferences |
+
+**Response `201 Created`** — The created Client object
+
+**Error `400 Bad Request`** — Missing `client_name`
+
+---
+
+#### `PUT /api/client/:clientId`
+
+Updates an existing client.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `clientId` | `BigInt` (string) | The client's ID |
+
+**Request Body:** Any subset of the fields from `POST /api/client/`
+
+**Response `200 OK`** — The updated Client object
+
+---
+
+#### `DELETE /api/client/:clientId`
+
+Deletes a client.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `clientId` | `BigInt` (string) | The client's ID |
+
+**Response `200 OK`**
+
+```json
+{
+  "message": "Client with ID 1 deleted"
+}
+```
+
+---
+
+### Documents
+
+All document endpoints require authentication (`requireAuth`).
+
+File uploads use `multipart/form-data` with a **50 MB** size limit (via Multer).
+
+---
+
+#### `GET /api/docs/`
+
+**Response `200 OK`**
+
+```
+Docs API is working
+```
+
+---
+
+#### `GET /api/docs/all`
+
+Returns metadata for all documents.
+
+**Auth:** Required
+
+**Response `200 OK`**
+
+```json
+[
+  {
+    "file_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "file_name": "report.pdf",
+    "file_size": "2048576",
+    "file_source": "client-bucket/report.pdf",
+    "ctg_id": "1",
+    "client_id": "1",
+    "user_id": "1",
+    "created_at": "2026-03-01T12:00:00.000Z",
+    "updated_at": "2026-03-01T12:00:00.000Z"
+  }
+]
+```
+
+---
+
+#### `GET /api/docs/category/:ctgId`
+
+Returns all documents in a specific category.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `ctgId` | `BigInt` (string) | Category ID |
+
+**Response `200 OK`**
+
+```json
+[
+  {
+    "file_id": "a1b2c3d4-...",
+    "file_name": "report.pdf",
+    "file_size": "2048576",
+    "file_source": "client-bucket/report.pdf",
+    "ctg_id": "1",
+    "client_id": "1",
+    "user_id": "1",
+    "Category": {
+      "ctg_id": "1",
+      "ctg_name": "Financial Reports"
+    }
+  }
+]
+```
+
+---
+
+#### `GET /api/docs/:id`
+
+Downloads/streams a document file from Supabase Storage.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `id` | `string` (UUID) | The file's UUID |
+
+**Response `200 OK`**
+
+- **Content-Type:** Set based on file extension (e.g., `application/pdf`, `image/png`)
+- **Body:** Binary file stream
+
+**Error `404 Not Found`** — File not found in storage or database
+
+---
+
+#### `POST /api/docs/`
+
+Uploads a new document to Supabase Storage and creates metadata in the database.
+
+**Auth:** Required
+
+**Content-Type:** `multipart/form-data`
+
+**Form Fields:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `file` | `File` | Yes | The file to upload (max 50 MB) |
+| `ctg_id` | `BigInt` | No | Category ID |
+| `client_id` | `BigInt` | No | Client owner ID |
+| `user_id` | `BigInt` | No | Uploader user ID |
+
+**Response `201 Created`**
+
+```json
+{
+  "file_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "file_name": "report.pdf",
+  "file_size": "2048576",
+  "file_source": "documents/a1b2c3d4-.../report.pdf",
+  "ctg_id": "1",
+  "client_id": "1",
+  "user_id": "1",
+  "created_at": "2026-03-11T12:00:00.000Z",
+  "updated_at": "2026-03-11T12:00:00.000Z"
+}
+```
+
+**Error `400 Bad Request`** — No file provided
+
+---
+
+#### `PUT /api/docs/:id`
+
+Updates document metadata (does not replace the file itself).
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `id` | `string` (UUID) | The file's UUID |
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `file_name` | `string` | No | New file name |
+| `ctg_id` | `BigInt` | No | New category ID |
+| `client_id` | `BigInt` | No | New client owner |
+
+**Response `200 OK`** — The updated File metadata object
+
+---
+
+#### `DELETE /api/docs/:id`
+
+Deletes a document from both Supabase Storage and the database. Also removes all associated embeddings.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `id` | `string` (UUID) | The file's UUID |
+
+**Response `200 OK`**
+
+```json
+{
+  "message": "Document with ID a1b2c3d4-... deleted"
+}
+```
+
+---
+
+#### `GET /api/docs/:id/comments`
+
+Returns all comments on a document.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `id` | `string` (UUID) | The file's UUID |
+
+**Response `200 OK`**
+
+```json
+[
+  {
+    "comment_id": "1",
+    "file_id": "a1b2c3d4-...",
+    "comment": "This section needs revision.",
+    "created_at": "2026-03-10T15:00:00.000Z",
+    "user_id": "1"
+  }
+]
+```
+
+---
+
+#### `POST /api/docs/:id/comments`
+
+Adds a comment to a document.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `id` | `string` (UUID) | The file's UUID |
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `comment` | `string` | Yes | Comment text |
+| `user_id` | `BigInt` | No | Author's user ID |
+
+**Response `201 Created`** — The created Comment object
+
+**Error `400 Bad Request`** — Missing `comment` field
+
+---
+
+#### `DELETE /api/docs/:id/comments/:commentId`
+
+Deletes a comment from a document.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `id` | `string` (UUID) | The file's UUID |
+| `commentId` | `BigInt` (string) | The comment's ID |
+
+**Response `200 OK`**
+
+```json
+{
+  "message": "Comment with ID 1 deleted"
+}
+```
+
+---
+
+#### `GET /api/docs/:id/activity`
+
+Returns the activity log for a document.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `id` | `string` (UUID) | The file's UUID |
+
+**Response `200 OK`**
+
+```json
+[
+  {
+    "activity_id": "1",
+    "file_id": "a1b2c3d4-...",
+    "activity_type": "1",
+    "activity_datetime": "2026-03-10T10:00:00.000Z",
+    "user_id": "1",
+    "ActivityType": {
+      "activity_type_id": "1",
+      "activity_name": "Viewed"
+    }
+  }
+]
+```
+
+---
+
+### Chat / AI
+
+All chat endpoints require authentication (`requireAuth`) and are subject to the **stricter rate limit** of 20 requests per 15 minutes.
+
+---
+
+#### `GET /api/chat/`
+
+**Response `200 OK`**
+
+```
+Welcome to the ChatBot!
+```
+
+---
+
+#### `POST /api/chat/`
+
+Sends a message to the AI chatbot. The pipeline:
+
+1. Detects user intents (summarize, predict, reason, compare, etc.)
+2. Retrieves relevant document chunks via pgvector semantic search
+3. Runs specialized agents per detected intent
+4. Combines multi-intent answers
+5. Runs guardrail checks for confidence and hallucination
+
+**Auth:** Required
+**Rate Limit:** 20 requests / 15 minutes
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `message` | `string` | Yes | The user's question or prompt |
+| `clientIds` | `string` or `"all"` | No | Comma-separated client IDs to scope document search, or `"all"` (default: `"all"`) |
+| `history` | `array` | No | Previous conversation history for context |
+
+**Response `200 OK`**
+
+```json
+{
+  "answer": "Based on the Q3 financial reports, revenue increased by 15%...",
+  "sources": [
+    {
+      "file_id": "a1b2c3d4-...",
+      "file_name": "Q3-report.pdf",
+      "similarity": 0.89
+    }
+  ],
+  "intents": ["summarize", "reason"],
+  "guardrail": {
+    "confidence": 0.92,
+    "issues": []
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `answer` | `string` | The AI-generated response |
+| `sources` | `array` | Documents used to generate the answer |
+| `sources[].file_id` | `string` (UUID) | Source document ID |
+| `sources[].file_name` | `string` | Source document name |
+| `sources[].similarity` | `number` | Cosine similarity score (0–1) |
+| `intents` | `string[]` | Detected user intents |
+| `guardrail.confidence` | `number` | Confidence score (0–1) |
+| `guardrail.issues` | `string[]` | Any flagged issues (e.g., potential hallucination) |
+
+---
+
+#### `POST /api/chat/stream`
+
+Same as `POST /api/chat/` but returns a **Server-Sent Events (SSE)** stream for real-time token delivery.
+
+**Auth:** Required
+**Rate Limit:** 20 requests / 15 minutes
+
+**Request Body:** Same as `POST /api/chat/`
+
+**Response `200 OK`**
+
+**Headers:**
+
+| Header | Value |
+|---|---|
+| `Content-Type` | `text/event-stream` |
+| `Cache-Control` | `no-cache` |
+| `Connection` | `keep-alive` |
+| `X-Accel-Buffering` | `no` |
+
+**SSE Event Sequence:**
+
+```
+data: {"type":"intent","intents":["summarize","reason"]}
+
+data: {"type":"chunk","text":"Base"}
+
+data: {"type":"chunk","text":"d on"}
+
+data: {"type":"chunk","text":" the"}
+
+...
+
+data: {"type":"sources","sources":[{"file_id":"...","file_name":"...","similarity":0.89}]}
+
+data: {"type":"guardrail","confidence":0.92,"issues":[]}
+
+data: [DONE]
+```
+
+| Event Type | Description |
+|---|---|
+| `intent` | Detected intents for the query |
+| `chunk` | Incremental text (≈4 characters per chunk) |
+| `sources` | Source documents used |
+| `guardrail` | Confidence and issue report |
+| `[DONE]` | Stream complete signal |
+
+---
+
+#### `POST /api/chat/ingest`
+
+Triggers the document ingestion pipeline. Processes **all** files in the database:
+
+1. Downloads files from Supabase Storage
+2. Extracts text (supports PDF with OCR fallback, XLSX, DOCX, TXT, MD, CSV, JSON, images)
+3. Splits into chunks (1000 characters, 150-character overlap)
+4. Generates embeddings via Ollama (`nomic-embed-text`)
+5. Upserts into Supabase `document_embeddings` table (pgvector)
+
+**Auth:** Required
+
+**Request Body:** Empty (`{}`)
+
+**Response `200 OK`**
+
+```json
+{
+  "message": "Ingestion complete",
+  "totalFiles": 25,
+  "successFiles": 23,
+  "totalChunks": 412,
+  "errors": [
+    {
+      "file": "corrupted.pdf",
+      "error": "Failed to extract text"
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `totalFiles` | `number` | Total files found in database |
+| `successFiles` | `number` | Files successfully processed |
+| `totalChunks` | `number` | Total chunks created and embedded |
+| `errors` | `array` | Files that failed processing (omitted if none) |
+
+---
+
+### Integrations — HubSpot
+
+All integration endpoints (except OAuth callbacks and redirects) require authentication (`requireAuth`).
+
+**Database Table:** `hubspot_tokens`
+
+---
+
+#### `GET /api/integrations/hubspot/`
+
+**Response `200 OK`**
+
+```
+This is the HubSpot API.
+```
+
+---
+
+#### `GET /api/integrations/hubspot/install`
+
+Initiates the HubSpot OAuth 2.0 flow. Redirects the browser to HubSpot's authorization page.
+
+**Auth:** Required
+
+**OAuth Scopes:** `crm.objects.contacts.read` (configurable)
+
+**Response:** `302 Redirect` → HubSpot OAuth authorize URL
+
+---
+
+#### `GET /api/integrations/hubspot/oauth-callback`
+
+OAuth callback handler. Exchanges the authorization code for access/refresh tokens and stores them.
+
+**Auth:** None (OAuth callback)
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `code` | `string` | Authorization code from HubSpot |
+| `state` | `string` | State parameter for CSRF protection |
+
+**Response:** `302 Redirect` → `/api/integrations/hubspot/success`
+
+---
+
+#### `GET /api/integrations/hubspot/success`
+
+Post-OAuth success redirect.
+
+**Auth:** None
+
+**Response:** `302 Redirect` → Frontend URL (`http://localhost:3000/hubspot`)
+
+---
+
+#### `GET /api/integrations/hubspot/status`
+
+Checks whether the user has an active HubSpot connection.
+
+**Auth:** Required
+
+**Response `200 OK`**
+
+```json
+{
+  "connected": true
+}
+```
+
+---
+
+#### `GET /api/integrations/hubspot/contacts`
+
+Returns contacts from the connected HubSpot account.
+
+**Auth:** Required
+
+**Response `200 OK`** — HubSpot contacts array (limit 50)
+
+---
+
+#### `GET /api/integrations/hubspot/carts`
+
+Returns carts from the connected HubSpot account.
+
+**Auth:** Required
+
+**Response `200 OK`** — HubSpot carts array (limit 50)
+
+---
+
+#### `GET /api/integrations/hubspot/companies`
+
+Returns companies from the connected HubSpot account.
+
+**Auth:** Required
+
+**Response `200 OK`** — HubSpot companies array (limit 50)
+
+---
+
+### Integrations — QuickBooks
+
+**Database Table:** `quickbooks_tokens`
+
+---
+
+#### `GET /api/integrations/quickbooks/`
+
+**Response `200 OK`**
+
+```
+This is the QuickBooks API.
+```
+
+---
+
+#### `GET /api/integrations/quickbooks/install`
+
+Initiates the QuickBooks OAuth 2.0 flow with a generated state secret for CSRF protection.
+
+**Auth:** Required
+
+**OAuth Scopes:** `com.intuit.quickbooks.accounting`
+
+**Response:** `302 Redirect` → QuickBooks OAuth authorize URL
+
+---
+
+#### `GET /api/integrations/quickbooks/oauth-callback`
+
+OAuth callback handler. Validates state, exchanges code for tokens, stores tokens.
+
+**Auth:** None (OAuth callback)
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `code` | `string` | Authorization code |
+| `state` | `string` | State for CSRF validation |
+| `realmId` | `string` | QuickBooks company realm ID |
+
+**Response:** `302 Redirect` → `/api/integrations/quickbooks/success`
+
+---
+
+#### `GET /api/integrations/quickbooks/success`
+
+Post-OAuth redirect.
+
+**Auth:** None
+
+**Response:** `302 Redirect` → `/api/integrations/quickbooks/status`
+
+---
+
+#### `GET /api/integrations/quickbooks/status`
+
+**Auth:** Required
+
+**Response `200 OK`**
+
+```json
+{
+  "connected": true
+}
+```
+
+---
+
+#### `GET /api/integrations/quickbooks/company-info`
+
+Returns company information from QuickBooks.
+
+**Auth:** Required
+
+**Response `200 OK`** — QuickBooks CompanyInfo object
+
+---
+
+#### `GET /api/integrations/quickbooks/accounts`
+
+Returns all accounts from QuickBooks (paginated internally, up to 1000 per request).
+
+**Auth:** Required
+
+**Response `200 OK`** — Array of QuickBooks Account objects
+
+---
+
+#### `GET /api/integrations/quickbooks/accounts/:accountId`
+
+Returns a single account by ID.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `accountId` | `integer` | QuickBooks account ID |
+
+**Response `200 OK`** — QuickBooks Account object
+
+**Error `404 Not Found`** — Account does not exist
+
+---
+
+#### `GET /api/integrations/quickbooks/bills`
+
+Returns all bills from QuickBooks (paginated internally, up to 1000 per request).
+
+**Auth:** Required
+
+**Response `200 OK`** — Array of QuickBooks Bill objects
+
+---
+
+#### `GET /api/integrations/quickbooks/bills/:billId`
+
+Returns a single bill by ID.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `billId` | `integer` | QuickBooks bill ID |
+
+**Response `200 OK`** — QuickBooks Bill object
+
+**Error `404 Not Found`** — Bill does not exist
+
+---
+
+#### `GET /api/integrations/quickbooks/invoices`
+
+Returns all invoices from QuickBooks (paginated internally, up to 1000 per request).
+
+**Auth:** Required
+
+**Response `200 OK`** — Array of QuickBooks Invoice objects
+
+---
+
+#### `GET /api/integrations/quickbooks/invoices/:invoiceId`
+
+Returns a single invoice by ID.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `invoiceId` | `integer` | QuickBooks invoice ID |
+
+**Response `200 OK`** — QuickBooks Invoice object
+
+**Error `404 Not Found`** — Invoice does not exist
+
+---
+
+#### `GET /api/integrations/quickbooks/invoices/:invoiceId/pdf`
+
+Downloads an invoice as a PDF file.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `invoiceId` | `integer` | QuickBooks invoice ID |
+
+**Response `200 OK`**
+
+- **Content-Type:** `application/pdf`
+- **Body:** PDF binary stream
+
+---
+
+#### `GET /api/integrations/quickbooks/customers`
+
+Returns all customers from QuickBooks (paginated internally).
+
+**Auth:** Required
+
+**Response `200 OK`** — Array of QuickBooks Customer objects
+
+---
+
+#### `GET /api/integrations/quickbooks/customers/:customerId`
+
+Returns a single customer by ID.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `customerId` | `integer` | QuickBooks customer ID |
+
+**Response `200 OK`** — QuickBooks Customer object
+
+**Error `404 Not Found`** — Customer does not exist
+
+---
+
+#### `GET /api/integrations/quickbooks/tax-agency`
+
+Returns all tax agencies from QuickBooks (paginated internally).
+
+**Auth:** Required
+
+**Response `200 OK`** — Array of QuickBooks TaxAgency objects
+
+---
+
+#### `GET /api/integrations/quickbooks/tax-agency/:taxId`
+
+Returns a single tax agency by ID.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `taxId` | `integer` | QuickBooks tax agency ID |
+
+**Response `200 OK`** — QuickBooks TaxAgency object
+
+**Error `404 Not Found`** — Tax agency does not exist
+
+---
+
+### Integrations — Monday.com
+
+**Database Table:** `monday_tokens`
+
+---
+
+#### `GET /api/integrations/monday/`
+
+**Response `200 OK`**
+
+```
+This is the Monday API.
+```
+
+---
+
+#### `GET /api/integrations/monday/install`
+
+Initiates Monday.com OAuth 2.0 flow.
+
+**Auth:** Required
+
+**OAuth Scopes:** `boards:read`, `account:read`, `assets:read`, `teams:read`, `workspaces:read`, `tags:read`, `me:read`
+
+**Response:** `302 Redirect` → Monday.com OAuth authorize URL
+
+---
+
+#### `GET /api/integrations/monday/oauth-callback`
+
+OAuth callback handler.
+
+**Auth:** None (OAuth callback)
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `code` | `string` | Authorization code from Monday.com |
+
+**Response:** `302 Redirect` → `/api/integrations/monday/success`
+
+---
+
+#### `GET /api/integrations/monday/success`
+
+**Auth:** None
+
+**Response:** `302 Redirect` → Frontend (`http://localhost:3000/integrations`)
+
+---
+
+#### `GET /api/integrations/monday/status`
+
+**Auth:** Required
+
+**Response `200 OK`**
+
+```json
+{
+  "connected": true
+}
+```
+
+---
+
+### Integrations — ClickUp
+
+**Database Table:** `clickup_tokens`
+
+> **Note:** This integration is partially implemented. Token storage is commented out in the codebase.
+
+---
+
+#### `GET /api/integrations/clickup/`
+
+**Response `200 OK`**
+
+```
+This is the ClickUp API.
+```
+
+---
+
+#### `GET /api/integrations/clickup/install`
+
+Initiates ClickUp OAuth 2.0 flow.
+
+**Auth:** Required
+
+**Response:** `302 Redirect` → ClickUp OAuth authorize URL
+
+---
+
+#### `GET /api/integrations/clickup/oauth-callback`
+
+OAuth callback handler. Exchanges code for token and fetches the ClickUp user ID.
+
+**Auth:** None (OAuth callback)
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `code` | `string` | Authorization code from ClickUp |
+
+**Response:** `302 Redirect` → `/api/integrations/clickup/success`
+
+---
+
+#### `GET /api/integrations/clickup/success`
+
+**Auth:** None
+
+**Response:** `302 Redirect` → Frontend (`http://localhost:3000/integrations`)
+
+---
+
+#### `GET /api/integrations/clickup/status`
+
+**Auth:** Required
+
+**Response `200 OK`**
+
+```json
+{
+  "connected": true
+}
+```
+
+---
+
+## Data Models
+
+### User
+
+| Field | Type | Description |
+|---|---|---|
+| `user_id` | `BigInt` (PK, auto-increment) | Unique identifier |
+| `clerk_id` | `String` (unique) | Clerk authentication ID |
+| `first_name` | `String` | First name |
+| `last_name` | `String` | Last name |
+| `email` | `String` | Email address |
+| `phone` | `String?` | Phone number |
+| `gender` | `String?` | Gender |
+| `status` | `String?` | Account status |
+| `role_id` | `BigInt?` (FK → Role) | Assigned role |
+| `client_id` | `BigInt?` (FK → Client) | Associated client |
+| `last_login` | `DateTime?` | Last login timestamp |
+
+**Relations:** `Role`, `Client`, `Activity_Log[]`, `Comment[]`, `File[]`
+
+---
+
+### Client
+
+| Field | Type | Description |
+|---|---|---|
+| `client_id` | `BigInt` (PK, auto-increment) | Unique identifier |
+| `client_name` | `String` | Company name |
+| `industry` | `String?` | Industry sector |
+| `founded` | `DateTime?` | Date founded |
+| `key_contacts` | `BigInt?` | Primary contact user ID |
+| `company_location` | `String?` | Headquarters |
+| `organization_chart` | `String?` | Org chart URL |
+| `gpt_types` | `String?` | AI model preferences |
+| `storage_bucket` | `String?` (UUID) | Supabase storage bucket |
+
+**Relations:** `User[]`, `File[]`
+
+---
+
+### File
+
+| Field | Type | Description |
+|---|---|---|
+| `file_id` | `String` (PK, UUID) | Unique identifier |
+| `file_name` | `String` | Original file name |
+| `file_size` | `BigInt?` | File size in bytes |
+| `file_source` | `String?` | Supabase storage path |
+| `ctg_id` | `BigInt?` (FK → Category) | Category |
+| `client_id` | `BigInt?` (FK → Client) | Owning client |
+| `user_id` | `BigInt?` (FK → User) | Uploader |
+| `created_at` | `DateTime` | Upload timestamp |
+| `updated_at` | `DateTime` | Last modified timestamp |
+
+**Relations:** `Category`, `Client`, `User`, `Activity_Log[]`, `Comment[]`
+
+---
+
+### Comment
+
+| Field | Type | Description |
+|---|---|---|
+| `comment_id` | `BigInt` (PK, auto-increment) | Unique identifier |
+| `file_id` | `String` (FK → File, UUID) | Associated document |
+| `comment` | `String` | Comment text |
+| `created_at` | `DateTime` | Creation timestamp |
+| `user_id` | `BigInt?` (FK → User) | Author |
+
+**Relations:** `File`, `User`
+
+---
+
+### Activity_Log
+
+| Field | Type | Description |
+|---|---|---|
+| `activity_id` | `BigInt` (PK, auto-increment) | Unique identifier |
+| `file_id` | `String?` (FK → File, UUID) | Associated document |
+| `activity_type` | `BigInt?` (FK → ActivityType) | Type of activity |
+| `activity_datetime` | `DateTime?` | When the activity occurred |
+| `user_id` | `BigInt?` (FK → User) | User who performed action |
+
+**Relations:** `ActivityType`, `File`, `User`
+
+---
+
+### ActivityType
+
+| Field | Type | Description |
+|---|---|---|
+| `activity_type_id` | `BigInt` (PK, auto-increment) | Unique identifier |
+| `activity_name` | `String?` | Activity label (e.g., "Viewed", "Downloaded") |
+
+---
+
+### Role
+
+| Field | Type | Description |
+|---|---|---|
+| `role_id` | `BigInt` (PK, auto-increment) | Unique identifier |
+| `role_name` | `String?` | Role label |
+
+**Predefined Roles:** Super Admin, Admin, Client Executive, Client Staff
+
+**Relations:** `User[]`, `RolePermission[]`
+
+---
+
+### Permission
+
+| Field | Type | Description |
+|---|---|---|
+| `permission_id` | `BigInt` (PK, auto-increment) | Unique identifier |
+| `permission_name` | `String?` | Permission label |
+
+**Relations:** `RolePermission[]`
+
+---
+
+### RolePermission
+
+| Field | Type | Description |
+|---|---|---|
+| `role_id` | `BigInt` (PK, FK → Role) | Role |
+| `permission_id` | `BigInt` (PK, FK → Permission) | Permission |
+
+**Composite Primary Key:** (`role_id`, `permission_id`)
+
+---
+
+### Category
+
+| Field | Type | Description |
+|---|---|---|
+| `ctg_id` | `BigInt` (PK, auto-increment) | Unique identifier |
+| `ctg_name` | `String?` | Category label |
+
+**Relations:** `File[]`
+
+---
+
+### Integration Token Tables
+
+#### HubspotToken
+
+| Field | Type |
+|---|---|
+| `user_id` | `String` (PK) |
+| `access_token` | `String` |
+| `refresh_token` | `String` |
+| `expires_at` | `BigInt` |
+| `created_at` | `DateTime` |
+| `updated_at` | `DateTime` |
+
+#### QuickbooksToken
+
+| Field | Type |
+|---|---|
+| `user_id` | `String` (PK) |
+| `access_token` | `String` |
+| `refresh_token` | `String` |
+| `token_type` | `String` |
+| `realmId` | `String` |
+| `expires_in` | `Int` |
+| `x_refresh_token_expires_in` | `Int` |
+
+#### MondayToken
+
+| Field | Type |
+|---|---|
+| `id` | `Int` (PK, auto-increment) |
+| `user_id` | `String` |
+| `access_token` | `String` |
+| `refresh_token` | `String?` |
+| `token_type` | `String` |
+| `realm_id` | `String?` |
+| `expires_in` | `Int?` |
+| `refresh_token_expires_in` | `Int?` |
+| `created_at` | `DateTime` |
+| `updated_at` | `DateTime` |
+
+#### ClickUpToken
+
+| Field | Type |
+|---|---|
+| `user_id` | `String` (PK) |
+| `access_token` | `String` |
+| `refresh_token` | `String?` |
+| `token_type` | `String?` |
+| `expires_at` | `BigInt?` |
+| `created_at` | `DateTime` |
+| `updated_at` | `DateTime` |
+
+---
+
+### document_embeddings (Supabase / pgvector)
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `BigInt` (PK) | Unique identifier |
+| `content` | `Text` | Chunk of document text |
+| `metadata` | `JSON` | File ID, file name, chunk index, etc. |
+| `embedding` | `vector` | Embedding vector (generated by Ollama `nomic-embed-text`) |
+
+Used for semantic similarity search in the RAG chat pipeline.
