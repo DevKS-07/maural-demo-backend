@@ -23,7 +23,7 @@ app.get("/api/health", (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: Math.floor(process.uptime()),
     memory: {
-      rss: Math.round(mem.rss / 1024 / 1024),       // total allocated (MB)
+      rss: Math.round(mem.rss / 1024 / 1024), // total allocated (MB)
       heapUsed: Math.round(mem.heapUsed / 1024 / 1024), // JS heap in use (MB)
     },
     environment: process.env.NODE_ENV || "development",
@@ -33,10 +33,13 @@ app.get("/api/health", (req, res) => {
 // CORS — must be before Clerk so preflight OPTIONS requests get proper headers
 app.use(
   cors({
-    origin: ALLOWED_ORIGINS,
+    // origin: ALLOWED_ORIGINS,
+    origin: "localhost:5173",
     credentials: true,
   }),
 );
+
+console.log(ALLOWED_ORIGINS);
 
 // Clerk middleware — must be before routes so req.auth() is available everywhere
 app.use(clerkMiddleware());
@@ -55,9 +58,9 @@ app.use(cookieParser());
 // Rate limiting — protects against brute-force and denial-of-service
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,                  // 100 requests per window per IP
-  standardHeaders: true,     // Return rate limit info in RateLimit-* headers
-  legacyHeaders: false,      // Disable X-RateLimit-* headers
+  max: 100, // 100 requests per window per IP
+  standardHeaders: true, // Return rate limit info in RateLimit-* headers
+  legacyHeaders: false, // Disable X-RateLimit-* headers
   message: { error: "Too many requests, please try again later." },
 });
 app.use(globalLimiter);
@@ -101,9 +104,10 @@ app.use((err, req, res, _next) => {
   console.error(err.stack);
   const status = err.status || 500;
   res.status(status).json({
-    message: status === 500
-      ? "Something went wrong on our side. We're working to fix it!"
-      : err.message,
+    message:
+      status === 500
+        ? "Something went wrong on our side. We're working to fix it!"
+        : err.message,
   });
 });
 

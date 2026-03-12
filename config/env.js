@@ -37,8 +37,7 @@ module.exports = {
     : ["http://localhost:3000", "http://localhost:5173"],
 
   // Auth
-  DISABLE_AUTH:
-    !isProduction && process.env.DISABLE_AUTH === "true",
+  DISABLE_AUTH: !isProduction && process.env.DISABLE_AUTH === "true",
   CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
   CLERK_PUBLISHABLE_KEY: process.env.CLERK_PUBLISHABLE_KEY,
   CLERK_WEBHOOK_SECRET: process.env.CLERK_WEBHOOK_SECRET,
