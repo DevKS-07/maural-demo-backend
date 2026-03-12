@@ -30,6 +30,14 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+// CORS — must be before Clerk so preflight OPTIONS requests get proper headers
+app.use(
+  cors({
+    origin: ALLOWED_ORIGINS,
+    credentials: true,
+  }),
+);
+
 // Clerk middleware — must be before routes so req.auth() is available everywhere
 app.use(clerkMiddleware());
 
@@ -42,6 +50,7 @@ app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 app.use(express.json({ limit: "10kb" }));
 app.use(helmet());
 app.use(compression());
+app.use(cookieParser());
 
 // Rate limiting — protects against brute-force and denial-of-service
 const globalLimiter = rateLimit({
@@ -62,13 +71,6 @@ const chatLimiter = rateLimit({
   message: { error: "Chat rate limit exceeded, please try again later." },
 });
 app.use("/api/chat", chatLimiter);
-app.use(
-  cors({
-    origin: ALLOWED_ORIGINS,
-    credentials: true,
-  }),
-);
-app.use(cookieParser());
 // Request logging — JSON in production (machine-parseable), dev format locally (colorized)
 if (isProduction) {
   app.use(
