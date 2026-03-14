@@ -3,7 +3,6 @@ const router = express.Router();
 
 const quickbooksController = require("../controllers/quickbooks.controller");
 
-
 // External API Routes
 router.get("/", (req, res) => {
   res.send("This is the QuickBooks API.");
@@ -17,6 +16,7 @@ router.get("/success", quickbooksController.connectionSuccessHandler);
 
 router.get("/status", quickbooksController.connectionStatus);
 
+/** 
 router.get("/accounts", quickbooksController.getAccounts); // Get All accounts in a company
 
 router.get("/accounts/:accountId", quickbooksController.getAccountById); // Get a specific account (Try these id's for testing: 33, 30, 90)
@@ -40,6 +40,8 @@ router.get("/tax-agency/:taxId", quickbooksController.getTaxAgencyById); // Get 
 router.get("/customers", quickbooksController.getCustomers); // Get All customers in a company
 
 router.get("/customers/:customerId", quickbooksController.getCustomerById); // Get a specific customer object by id (Try 61, 1, 58, 59)
+
+*/
 
 /**
  **Online Accounting API endpoint format

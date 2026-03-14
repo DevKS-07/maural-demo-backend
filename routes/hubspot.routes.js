@@ -16,15 +16,18 @@ router.get("/success", hubspotController.connectionSuccessHandler);
 
 router.get("/status", hubspotController.connectionStatus);
 
+/**
 router.get("/contacts", hubspotController.getContacts);
 
 router.get("/carts", hubspotController.getCarts);
 
 router.get("/companies", hubspotController.getCompanies);
 
+*/
+
 /**
  *
- * TODO: Implement token refresh logic to maintain access.
+ * TODO:
  *
  * TODO ------- Interacting with HubSpot's API -------
  * - Use the access token to make authenticated requests to HubSpot's API.

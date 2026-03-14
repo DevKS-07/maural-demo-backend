@@ -27,7 +27,7 @@ model Activity_Log {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model Client {
-    client_id          BigInt    @id @default(autoincrement())
+    client_id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
     client_name        String
     industry           String?
     founded            DateTime? @db.Date
@@ -38,6 +38,10 @@ model Client {
     storage_bucket     String    @default(dbgenerated("gen_random_uuid()")) @db.Uuid
     User               User[]
     File               File[]
+
+    financeKpis FinanceKpi[]
+    leadsKpis   LeadsKpi[]
+    laborKpis   LaborKpi[]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -75,7 +79,7 @@ model File {
     file_size    Float
     file_source  String
     ctg_id       BigInt? // Document category FK → Category (e.g. legal, financial, hr)
-    client_id    BigInt? // Which client owns this file (FK → Client)
+    client_id    String? // Which client owns this file (FK → Client)
     user_id      BigInt? // Which user uploaded it (FK → User)
     activityLogs Activity_Log[]
     Category     Category?      @relation(fields: [ctg_id], references: [ctg_id])
@@ -101,7 +105,7 @@ model Role {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model User {
-    client_id    BigInt?
+    client_id    String?
     role_id      BigInt?
     clerk_id     String?        @unique
     first_name   String
@@ -154,7 +158,7 @@ model MondayToken {
     id                       Int      @id @default(autoincrement())
     user_id                  String   @unique
     access_token             String
-    refresh_token            String
+    refresh_token            String?
     token_type               String?
     realm_id                 String?
     expires_in               Int?
@@ -194,4 +198,159 @@ model document_embeddings {
     embedding Unsupported("vector")
 
     @@index([embedding])
+}
+
+model FinanceKpi {
+    id        String @id @default(cuid())
+    client_id String
+    client    Client @relation(fields: [client_id], references: [client_id])
+
+    // Period this snapshot covers
+    periodStart DateTime
+    periodEnd   DateTime
+    asOfDate    DateTime? // for balance sheet point-in-time
+
+    // ── Profit & Loss (FIN-1 to FIN-4) ───────────────────
+    totalIncome   Float? // FIN-1
+    cogs          Float?
+    grossProfit   Float? // FIN-2
+    grossMargin   Float? // grossProfit / totalIncome %
+    totalExpenses Float?
+    netIncome     Float? // FIN-4
+    netMargin     Float? // netIncome / totalIncome %
+
+    // ── EBITDA (FIN-3, PS-3) ──────────────────────────────
+    ebitda       Float? // FIN-3
+    ebitdaMargin Float? // PS-3 target: 20–40%
+
+    // ── Balance Sheet (FIN-5) ─────────────────────────────
+    cashPosition            Float? // FIN-5
+    accountsReceivable      Float?
+    totalCurrentAssets      Float?
+    totalCurrentLiabilities Float?
+
+    // ── Cash KPIs (CASH-1, CASH-2) ───────────────────────
+    monthlyBurn  Float? // CASH-1: COGS + OpEx + Owner Distributions
+    netBurnRate  Float?
+    runwayMonths Float? // CASH-2: cashPosition / monthlyBurn
+
+    // ── Prof Svcs KPIs ────────────────────────────────────
+    workingCapital Float? // PS-4: current assets - current liabilities
+    dso            Float? // PS-5: days sales outstanding
+
+    // ── Valuation (VALUE-1, VALUE-2) ─────────────────────
+    ruleOf40        Float? // VALUE-1: 3yr CAGR + EBITDA%
+    enterpriseValue Float? // VALUE-2: TTM EBITDA * multiple
+
+    // ── Variance KPIs (Budget vs Actuals) ────────────────
+    varianceRevenuePct           Float?
+    varianceCOGSPct              Float?
+    varianceGrossProfitPct       Float?
+    varianceOperatingExpensesPct Float?
+    varianceNetIncomePct         Float?
+    varianceEBITDAPct            Float?
+
+    // ── Cache metadata ────────────────────────────────────
+    lastFetchedAt DateTime @default(now())
+    fetchSource   String   @default("quickbooks") // source of truth
+    isStale       Boolean  @default(false)
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // One snapshot per client per period
+    @@unique([client_id, periodStart, periodEnd])
+    @@index([client_id, lastFetchedAt])
+    @@map("finance_kpis")
+}
+
+model LeadsKpi {
+    id        String @id @default(cuid())
+    client_id String
+    client    Client @relation(fields: [client_id], references: [client_id])
+
+    periodStart DateTime
+    periodEnd   DateTime
+
+    // ── Pipeline KPIs (LEADS-1 to LEADS-5) ───────────────
+    leads          Int? // LEADS-1: MQLs + SQLs
+    calls          Int? // LEADS-2
+    proposals      Int? // LEADS-3
+    dealsWon       Int? // LEADS-4
+    conversionRate Float? // LEADS-5: deals won / proposals
+
+    // ── Revenue KPIs (PS-6, PS-9) ─────────────────────────
+    pipelineCoverage Float? // PS-6: proposed work / revenue goal
+    recurringRevenue Float? // PS-9 raw value
+    recurringPercent Float? // PS-9 %: recurring / total revenue
+    oneTimeRevenue   Float? // total - recurring
+
+    // ── Client Health KPIs (PS-8, PS-14) ──────────────────
+    clientConcentration    Float? // PS-8: top 5 client revenue %
+    founderDependencySales Float? // PS-14: founder revenue / total
+
+    // ── Custom KPIs (need clarification — flagged in table) ──
+    dealVelocity       Float? // avg days lead → close
+    forecastAccuracy   Float? // actual / forecasted revenue %
+    retentionRate      Float? // retained clients / starting count
+    customerEngagement Float? // TBD — email/call activity score
+
+    // ── Segment breakdown (stored as JSON for flexibility) ──
+    // e.g. { "consulting": 45000, "retainer": 30000, "project": 15000 }
+    revenuePerSegment Json? // PS-* custom segment breakdown
+
+    lastFetchedAt DateTime @default(now())
+    isStale       Boolean  @default(false)
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@unique([client_id, periodStart, periodEnd])
+    @@index([client_id, lastFetchedAt])
+    @@map("leads_kpis")
+}
+
+model LaborKpi {
+    id        String   @id @default(cuid())
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Client scoping
+    client_id String
+    client    Client @relation(fields: [client_id], references: [client_id])
+
+    // Period
+    periodStart DateTime
+    periodEnd   DateTime
+
+    // Source — "monday" | "clickup"
+    laborSource String
+
+    // ── LABOR-3: Direct labor hours
+    directLaborHours Float?
+
+    // ── LABOR-4 / LABOR-5: Headcount
+    billableFTEs    Int?
+    nonBillableFTEs Int?
+
+    // ── LABOR-6: Utilization
+    billableUtilization Float? // percentage 0–100
+
+    // ── LABOR-2: Cost per hour (cross-source — needs QB labor cost)
+    laborCostPerHour Float?
+
+    // ── LABOR-7: Revenue per billable FTE (cross-source — needs QB revenue)
+    revenuePerBillableFTE Float?
+
+    // ── PS-15: Founder dependency on service delivery
+    founderDependencyService Float? // percentage 0–100
+
+    // UI flags
+    hasBillableColumn Boolean @default(false) // false = show "set up billable column" prompt
+    isStale           Boolean @default(false) // true = background refresh in progress
+
+    // One row per client per period
+    @@unique([client_id, periodStart, periodEnd])
+    @@index([client_id])
+    @@map("labor_kpis")
 }

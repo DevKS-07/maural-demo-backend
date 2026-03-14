@@ -9,6 +9,7 @@ const clientRoutes = require("./routes/client.routes");
 const docsRoutes = require("./routes/docs.routes");
 const chatRoutes = require("./routes/chat.routes");
 const integrations = require("./routes/integrations.routes");
+const summaryRoutes = require("./routes/summary.routes");
 
 // Auth middleware
 const { requireAuth } = require("./middleware/auth.middleware");
@@ -40,6 +41,8 @@ router.use("/client", requireAuth, clientRoutes); // Client CRUD + users/files
 router.use("/docs", requireAuth, docsRoutes); // Documents + comments + activity
 
 router.use("/integrations", requireAuth, integrations); // HubSpot, QuickBooks, Monday, ClickUp
+
+router.use("/summary", summaryRoutes); // KPI summary routes (some may be public, some protected depending on use case)
 
 router.use("/chat", requireAuth, chatRoutes); // AI chat
 
