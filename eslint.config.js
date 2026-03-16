@@ -17,6 +17,6 @@ module.exports = [
     },
   },
   {
-    ignores: ["node_modules/", "coverage/", "uploads/", "prisma.config.js"],
+    ignores: ["node_modules/", "coverage/", "uploads/", "prisma.config.js", "controllers/__*.js"],
   },
 ];

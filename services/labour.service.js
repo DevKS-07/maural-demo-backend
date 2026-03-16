@@ -49,7 +49,7 @@ const getLaborKPIsService = async (
 
   if (!client) throw new Error(`No client found for user: ${userId}`);
 
-  const { laborSource, mondayBoardId, clickupWorkspaceId } = client;
+  const { laborSource, mondayBoardId } = client;
 
   if (!laborSource) {
     return {

@@ -109,7 +109,7 @@ const connectionSuccessHandler = async (req, res) => {
     const token = await prisma.mondayToken.findUnique({ where: { user_id } }); // fixed: added await
     if (!token) return res.status(404).send("Token not found.");
     res.redirect("/api/integrations/monday/status");
-  } catch (error) {
+  } catch (_error) {
     res.status(500).send("Error connecting Monday!");
   }
 };
@@ -120,7 +120,7 @@ const connectionStatus = async (req, res) => {
     if (!user_id) return res.status(200).json({ connected: false });
     const token = await prisma.mondayToken.findUnique({ where: { user_id } });
     return res.status(200).json({ connected: Boolean(token) });
-  } catch (error) {
+  } catch (_error) {
     return res.status(500).json({
       connected: false,
       error: "Failed to check Monday connection status",

@@ -5,11 +5,7 @@
 const axios = require("axios");
 const crypto = require("crypto");
 const prisma = require("../lib/prisma");
-const {
-  getLeadsKPIsService,
-  getValidAccessToken,
-  refreshAndPersistToken,
-} = require("../services/leads.service");
+const { getLeadsKPIsService } = require("../services/leads.service");
 
 const {
   HUBSPOT_CLIENT_ID,
@@ -95,7 +91,7 @@ const connectionSuccessHandler = async (req, res) => {
     const token = await prisma.hubspotToken.findUnique({ where: { user_id } });
     if (!token) return res.status(404).send("Token not found.");
     res.redirect("/api/integrations/hubspot/status");
-  } catch (error) {
+  } catch (_error) {
     res.status(500).send("Error connecting HubSpot!");
   }
 };
@@ -106,7 +102,7 @@ const connectionStatus = async (req, res) => {
     if (!user_id) return res.status(200).json({ connected: false });
     const token = await prisma.hubspotToken.findUnique({ where: { user_id } });
     return res.status(200).json({ connected: Boolean(token) });
-  } catch (error) {
+  } catch (_error) {
     return res.status(500).json({
       connected: false,
       error: "Failed to check HubSpot connection status",

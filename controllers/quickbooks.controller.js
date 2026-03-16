@@ -120,7 +120,7 @@ const connectionSuccessHandler = async (req, res) => {
         .status(404)
         .send("Token not found after successful connection.");
     res.redirect("/api/integrations/quickbooks/status");
-  } catch (error) {
+  } catch (_error) {
     res.status(500).send("Error connecting QuickBooks!");
   }
 };
@@ -138,7 +138,7 @@ const connectionStatus = async (req, res) => {
       where: { user_id },
     });
     return res.status(200).json({ connected: Boolean(token) });
-  } catch (error) {
+  } catch (_error) {
     return res.status(500).json({
       connected: false,
       error: "Failed to check QuickBooks connection status",
@@ -155,7 +155,7 @@ const refreshAccessToken = async (req, res) => {
   try {
     const { access_token } = await refreshAndPersistTokenService(user_id);
     return res.status(200).json({ success: true, access_token });
-  } catch (error) {
+  } catch (_error) {
     return res.status(500).json({ error: "Failed to refresh token" });
   }
 };
