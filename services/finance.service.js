@@ -5,12 +5,19 @@ const axios = require("axios");
 const OAuthClient = require("intuit-oauth");
 const prisma = require("../lib/prisma");
 
-const CLIENT_ID = process.env.QUICKBOOKS_CLIENT_ID;
-const CLIENT_SECRET = process.env.QUICKBOOKS_CLIENT_SECRET;
-const REDIRECT_URI = process.env.QUICKBOOKS_REDIRECT_URI;
-const ENVIRONMENT = process.env.QUICKBOOKS_ENVIRONMENT || "sandbox";
-const QB_BASE_URL =
-  process.env.QUICKBOOKS_BASE_URL || "https://quickbooks.api.intuit.com";
+const {
+  QUICKBOOKS_CLIENT_ID,
+  QUICKBOOKS_CLIENT_SECRET,
+  QUICKBOOKS_REDIRECT_URI,
+  QUICKBOOKS_ENVIRONMENT,
+  QUICKBOOKS_BASE_URL,
+} = require("../config/env");
+
+const CLIENT_ID = QUICKBOOKS_CLIENT_ID;
+const CLIENT_SECRET = QUICKBOOKS_CLIENT_SECRET;
+const REDIRECT_URI = QUICKBOOKS_REDIRECT_URI;
+const ENVIRONMENT = QUICKBOOKS_ENVIRONMENT;
+const QB_BASE_URL = QUICKBOOKS_BASE_URL || "https://quickbooks.api.intuit.com";
 
 // ─────────────────────────────────────────────────────────────────
 //  AUTH HELPERS
@@ -115,7 +122,7 @@ const fetchQBReport = async (
       await new Promise((r) => setTimeout(r, wait * 1000));
       return fetchQBReport(clientId, reportName, params, retry);
     }
-    throw new Error(`[QB] ${reportName} failed (${status}): ${message}`);
+    throw new Error(`[QB] ${reportName} failed (${status}): ${message}`, { cause: error });
   }
 };
 

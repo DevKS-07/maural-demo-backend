@@ -5,9 +5,15 @@ const axios = require("axios");
 const crypto = require("crypto");
 const prisma = require("../lib/prisma");
 
-const CLIENT_ID = process.env.MONDAY_CLIENT_ID;
-const CLIENT_SECRET = process.env.MONDAY_CLIENT_SECRET;
-const REDIRECT_URI = process.env.MONDAY_REDIRECT_URI;
+const {
+  MONDAY_CLIENT_ID,
+  MONDAY_CLIENT_SECRET,
+  MONDAY_REDIRECT_URI,
+} = require("../config/env");
+
+const CLIENT_ID = MONDAY_CLIENT_ID;
+const CLIENT_SECRET = MONDAY_CLIENT_SECRET;
+const REDIRECT_URI = MONDAY_REDIRECT_URI;
 const API_VERSION = "2025-07";
 
 const SCOPES = [

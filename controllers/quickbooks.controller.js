@@ -8,10 +8,17 @@ const {
   getFinancialKPIsService,
 } = require("../services/finance.service");
 
-const CLIENT_ID = process.env.QUICKBOOKS_CLIENT_ID;
-const CLIENT_SECRET = process.env.QUICKBOOKS_CLIENT_SECRET;
-const REDIRECT_URI = process.env.QUICKBOOKS_REDIRECT_URI;
-const ENVIRONMENT = process.env.QUICKBOOKS_ENVIRONMENT || "sandbox";
+const {
+  QUICKBOOKS_CLIENT_ID,
+  QUICKBOOKS_CLIENT_SECRET,
+  QUICKBOOKS_REDIRECT_URI,
+  QUICKBOOKS_ENVIRONMENT,
+} = require("../config/env");
+
+const CLIENT_ID = QUICKBOOKS_CLIENT_ID;
+const CLIENT_SECRET = QUICKBOOKS_CLIENT_SECRET;
+const REDIRECT_URI = QUICKBOOKS_REDIRECT_URI;
+const ENVIRONMENT = QUICKBOOKS_ENVIRONMENT;
 
 /**
  * Install QuickBooks - Initiates the OAuth 2.0 flow

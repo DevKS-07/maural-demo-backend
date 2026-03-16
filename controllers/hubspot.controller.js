@@ -11,9 +11,15 @@ const {
   refreshAndPersistToken,
 } = require("../services/leads.service");
 
-const CLIENT_ID = process.env.HUBSPOT_CLIENT_ID;
-const CLIENT_SECRET = process.env.HUBSPOT_CLIENT_SECRET;
-const REDIRECT_URI = process.env.HUBSPOT_REDIRECT_URI;
+const {
+  HUBSPOT_CLIENT_ID,
+  HUBSPOT_CLIENT_SECRET,
+  HUBSPOT_REDIRECT_URI,
+} = require("../config/env");
+
+const CLIENT_ID = HUBSPOT_CLIENT_ID;
+const CLIENT_SECRET = HUBSPOT_CLIENT_SECRET;
+const REDIRECT_URI = HUBSPOT_REDIRECT_URI;
 
 const SCOPES = [
   "crm.objects.deals.read",

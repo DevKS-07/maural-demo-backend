@@ -5,8 +5,13 @@
 const axios  = require("axios");
 const prisma = require("../lib/prisma");
 
-const CLIENT_ID     = process.env.CLICKUP_CLIENT_ID;
-const CLIENT_SECRET = process.env.CLICKUP_CLIENT_SECRET;
+const {
+  CLICKUP_CLIENT_ID,
+  CLICKUP_CLIENT_SECRET,
+} = require("../config/env");
+
+const CLIENT_ID     = CLICKUP_CLIENT_ID;
+const CLIENT_SECRET = CLICKUP_CLIENT_SECRET;
 
 // ─────────────────────────────────────────────────────────────────
 //  AUTH HELPERS
@@ -93,7 +98,7 @@ const fetchClickUp = async (userId, endpoint, params = {}, retry = true) => {
       return fetchClickUp(userId, endpoint, params, retry);
     }
 
-    throw new Error(`[ClickUp] ${endpoint} failed (${status}): ${message}`);
+    throw new Error(`[ClickUp] ${endpoint} failed (${status}): ${message}`, { cause: error });
   }
 };
 

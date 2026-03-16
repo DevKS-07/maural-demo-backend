@@ -5,8 +5,13 @@
 const axios = require("axios");
 const prisma = require("../lib/prisma");
 
-const CLIENT_ID = process.env.HUBSPOT_CLIENT_ID;
-const CLIENT_SECRET = process.env.HUBSPOT_CLIENT_SECRET;
+const {
+  HUBSPOT_CLIENT_ID,
+  HUBSPOT_CLIENT_SECRET,
+} = require("../config/env");
+
+const CLIENT_ID = HUBSPOT_CLIENT_ID;
+const CLIENT_SECRET = HUBSPOT_CLIENT_SECRET;
 
 // ─────────────────────────────────────────────────────────────────
 //  AUTH HELPERS
@@ -140,6 +145,7 @@ const fetchAllPages = async (
     const message = error.response?.data?.message || error.message;
     throw new Error(
       `[HubSpot] ${objectType} fetch failed (${status}): ${message}`,
+      { cause: error },
     );
   }
 };

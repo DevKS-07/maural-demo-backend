@@ -9,8 +9,13 @@
 const axios  = require("axios");
 const prisma = require("../lib/prisma");
 
-const CLIENT_ID     = process.env.MONDAY_CLIENT_ID;
-const CLIENT_SECRET = process.env.MONDAY_CLIENT_SECRET;
+const {
+  MONDAY_CLIENT_ID,
+  MONDAY_CLIENT_SECRET,
+} = require("../config/env");
+
+const CLIENT_ID     = MONDAY_CLIENT_ID;
+const CLIENT_SECRET = MONDAY_CLIENT_SECRET;
 const MONDAY_API    = "https://api.monday.com/v2";
 const API_VERSION   = "2025-07";
 
@@ -111,7 +116,7 @@ const mondayQuery = async (userId, query, variables = {}, retry = true) => {
       return mondayQuery(userId, query, variables, retry);
     }
 
-    throw new Error(`[Monday] Query failed (${status}): ${message}`);
+    throw new Error(`[Monday] Query failed (${status}): ${message}`, { cause: error });
   }
 };
 
