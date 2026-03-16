@@ -30,8 +30,8 @@ exports.requireAuth = AUTH_DISABLED ? passThrough : clerkRequireAuth();
 const ROLE_HIERARCHY = {
   super_admin: 4,
   admin: 3,
-  client_executive: 2,
-  client_staff: 1,
+  org_executive: 2,
+  org_staff: 1,
 };
 
 // ---------------------------------------------------------------------------

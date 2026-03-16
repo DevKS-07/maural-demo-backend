@@ -41,7 +41,7 @@ const MOCK_USER = {
   phone: "555-1234",
   gender: "female",
   status: "active",
-  client_id: 10,
+  org_id: "a1b2c3d4-uuid",
   role_id: 2,
 };
 
@@ -307,7 +307,7 @@ describe("User Controller - Unit Tests", () => {
           first_name: "Jane",
           last_name: "Doe",
           email: "jane@example.com",
-          client_id: "10",
+          org_id: "a1b2c3d4-uuid",
           role_id: "2",
         },
       };

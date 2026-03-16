@@ -142,14 +142,14 @@ describe("chat controller", () => {
       });
     });
 
-    test("uses default clientIds and history when omitted", async () => {
+    test("uses default orgIds and history when omitted", async () => {
       mockOrchestrate();
       const req = { body: { message: "What is the net income?" } };
       const res = createJsonRes();
 
       await chat(req, res);
 
-      // retrieveDocuments should be called with "all" as clientIds (the default) and top-k of 5
+      // retrieveDocuments should be called with "all" as orgIds (the default) and top-k of 5
       expect(retrieveDocuments).toHaveBeenCalledWith(
         "What is the net income?",
         "all",

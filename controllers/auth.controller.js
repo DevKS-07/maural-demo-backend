@@ -3,7 +3,7 @@ const { clerkClient } = require("@clerk/express");
 const prisma = require("../lib/prisma");
 const { CLERK_WEBHOOK_SECRET } = require("../config/env");
 
-const DEFAULT_CLERK_ROLE = "client_staff";
+const DEFAULT_CLERK_ROLE = "org_staff";
 
 // ---------------------------------------------------------------------------
 // Clerk role name → DB role_name mapping
@@ -13,8 +13,8 @@ const DEFAULT_CLERK_ROLE = "client_staff";
 const CLERK_ROLE_TO_DB_ROLE = {
   super_admin: "Super Admin",
   admin: "Admin",
-  client_executive: "Client Executive",
-  client_staff: "Client Staff",
+  org_executive: "Org Executive",
+  org_staff: "Org Staff",
 };
 
 // ---------------------------------------------------------------------------
@@ -178,7 +178,7 @@ exports.getMe = async (req, res) => {
             },
           },
         },
-        Client: true,
+        Organisation: true,
       },
     });
 
@@ -189,5 +189,37 @@ exports.getMe = async (req, res) => {
     res.status(200).json(user);
   } catch (error) {
     res.status(500).json({ message: "Failed to retrieve user profile", error: error.message });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// getMyOrg
+// Returns the current authenticated user's organisation record.
+// Uses the Clerk userId from the JWT to look up the user, then returns
+// the related Organisation.
+//
+// @route GET /api/auth/org
+// @access Protected (requireAuth)
+// ---------------------------------------------------------------------------
+exports.getMyOrg = async (req, res) => {
+  const { userId: clerkId } = req.auth();
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { clerk_id: clerkId },
+      include: { Organisation: true },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found in database" });
+    }
+
+    if (!user.Organisation) {
+      return res.status(404).json({ message: "User is not assigned to any organisation" });
+    }
+
+    res.status(200).json(user.Organisation);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to retrieve organisation", error: error.message });
   }
 };

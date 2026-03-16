@@ -68,7 +68,7 @@ const MOCK_FILE_META = {
   file_size: 204800,
   file_source: "file_storage/uploads/report.pdf",
   ctg_id: 1,
-  client_id: 10,
+  org_id: "a1b2c3d4-uuid",
   user_id: 5,
 };
 
@@ -305,7 +305,7 @@ describe("Docs Controller - Unit Tests", () => {
       });
       prisma.file.create.mockResolvedValue(MOCK_FILE_META);
 
-      const req = { file: mockFile, body: { ctg_id: "1", client_id: "10", user_id: "5" } };
+      const req = { file: mockFile, body: { ctg_id: "1", org_id: "a1b2c3d4-uuid", user_id: "5" } };
       const res = createRes();
 
       await docsController.createDocument(req, res);

@@ -63,7 +63,7 @@ const callbackHandler = async (req, res) => {
       res.status(500).send("Error during token exchange. Please try again.");
     }
 
-    req.session.user_id = tokenData.user_id;
+    req.session.org_id = tokenData.org_id;
 
     res.redirect("/api/integrations/clickup/success");
   }
@@ -75,11 +75,11 @@ const callbackHandler = async (req, res) => {
  * @param {*} res
  */
 const connectionSuccessHandler = (req, res) => {
-  const user_id = req.session.user_id;
-  console.log(`User: ${user_id}`);
+  const org_id = req.session.org_id;
+  console.log(`Organisation: ${org_id}`);
 
   // const token = prisma.clickupToken.findUnique({
-  //  where: { user_id: user_id },
+  //  where: { org_id },
   //});
   // console.log(`Token: ${token}`);
 
@@ -95,14 +95,14 @@ const connectionSuccessHandler = (req, res) => {
  */
 const connectionStatus = async (req, res) => {
   try {
-    const user_id = req.session.user_id;
+    const org_id = req.session.org_id;
 
-    if (!user_id) {
+    if (!org_id) {
       return res.status(200).json({ connected: false });
     }
 
     const token = await prisma.clickupToken.findUnique({
-      where: { user_id },
+      where: { org_id },
     });
 
     return res.status(200).json({
@@ -151,19 +151,21 @@ const exchangeAuthCodeForTokens = async (exchangeProof) => {
       },
     );
 
-    const user_id = userMetadataRes.data.user.id;
+    const org_id = userMetadataRes.data.user.id;
 
     // console.log(
-    //   `User ${user_id} Tokens:\n
+    //   `Organisation ${org_id} Tokens:\n
     //   \nAccess Token: ${access_token} \nRefresh Token: ${refresh_token}\nExpires In: ${expires_in} seconds`
     // );
 
     // Storing these tokens in DB
+    // TODO: When this upsert is uncommented, also add:
+    //   await prisma.organisation.update({ where: { org_id }, data: { clickup_connected: true } });
     /*
     await prisma.clickupToken.upsert({
-      where: { user_id: user_id },
+      where: { org_id },
       create: {
-        user_id: user_id,
+        org_id,
         access_token,
         refresh_token,
         expires_at,
@@ -176,7 +178,7 @@ const exchangeAuthCodeForTokens = async (exchangeProof) => {
     });
     */
 
-    return { user_id, access_token };
+    return { org_id, access_token };
   } catch (err) {
     console.error(
       `> Error exchanging ${exchangeProof.grant_type} for access token`,
@@ -201,20 +203,20 @@ const refreshClickUpToken = async (refreshToken) => {
 };
 
 /**
- * Get the token record for a specific user
- * @param {*} user_id user ID
+ * Get the token record for a specific organisation
+ * @param {*} org_id organisation ID
  * @returns The token record from the database
  */
-const getTokenRecord = async (user_id) => {
+const getTokenRecord = async (org_id) => {
   return await prisma.clickupToken.findUnique({
-    where: { user_id: user_id },
+    where: { org_id },
   });
 };
 
-const _checkAndRefreshToken = async (user_id) => {
-  const tokenRecord = await getTokenRecord(user_id);
+const _checkAndRefreshToken = async (org_id) => {
+  const tokenRecord = await getTokenRecord(org_id);
   if (!tokenRecord) {
-    throw new Error("No token record found for user");
+    throw new Error("No token record found for organisation");
   }
   const now = new Date();
   if (now >= tokenRecord.expires_at) {
@@ -222,7 +224,7 @@ const _checkAndRefreshToken = async (user_id) => {
     const newTokens = await refreshClickUpToken(tokenRecord.refresh_token);
     const expires_at = new Date(Date.now() + newTokens.expires_in * 1000);
     await prisma.clickupToken.update({
-      where: { user_id: user_id },
+      where: { org_id },
       data: {
         access_token: newTokens.access_token,
         refresh_token: newTokens.refresh_token,

@@ -2,7 +2,7 @@
 // Pure data/business logic — no req, no res.
 // Handles auth, token refresh, and Labor KPI fetching.
 //
-// Board structure varies per client — this service detects
+// Board structure varies per organisation — this service detects
 // the time tracking column at runtime rather than assuming
 // a fixed column ID or name.
 
@@ -23,13 +23,13 @@ const API_VERSION   = "2025-07";
 //  AUTH HELPERS
 // ─────────────────────────────────────────────────────────────────
 
-const getTokenRecord = async (userId) => {
-  const token = await prisma.mondayToken.findUnique({ where: { user_id: userId } });
-  if (!token) throw new Error(`No Monday token found for user: ${userId}`);
+const getTokenRecord = async (orgId) => {
+  const token = await prisma.mondayToken.findUnique({ where: { org_id: orgId } });
+  if (!token) throw new Error(`No Monday token found for organisation: ${orgId}`);
   return token;
 };
 
-const refreshAndPersistToken = async (userId, refreshToken) => {
+const refreshAndPersistToken = async (orgId, refreshToken) => {
   const response = await axios.post(
     "https://auth.monday.com/oauth2/token",
     new URLSearchParams({
@@ -44,24 +44,24 @@ const refreshAndPersistToken = async (userId, refreshToken) => {
   const expires_at = new Date(Date.now() + expires_in * 1000);
 
   await prisma.mondayToken.update({
-    where: { user_id: userId },
+    where: { org_id: orgId },
     data:  { access_token, refresh_token, expires_at },
   });
 
-  console.log(`[Monday] Tokens refreshed for user: ${userId}`);
+  console.log(`[Monday] Tokens refreshed for organisation: ${orgId}`);
   return access_token;
 };
 
-const getValidAccessToken = async (userId) => {
-  const token     = await getTokenRecord(userId);
+const getValidAccessToken = async (orgId) => {
+  const token     = await getTokenRecord(orgId);
   const isExpired = new Date() >= new Date(token.expires_at);
   if (isExpired) {
     if (!token.refresh_token) {
-      // Monday long-lived tokens don't refresh — user needs to reconnect
+      // Monday long-lived tokens don't refresh — org needs to reconnect
       throw new Error("Monday token expired and no refresh token available. Please reconnect Monday.");
     }
-    console.log(`[Monday] Token expired for user: ${userId} — refreshing...`);
-    return await refreshAndPersistToken(userId, token.refresh_token);
+    console.log(`[Monday] Token expired for organisation: ${orgId} — refreshing...`);
+    return await refreshAndPersistToken(orgId, token.refresh_token);
   }
   return token.access_token;
 };
@@ -74,8 +74,8 @@ const getValidAccessToken = async (userId) => {
  * Execute a Monday GraphQL query.
  * Auto-refreshes token on 401, backs off on 429.
  */
-const mondayQuery = async (userId, query, variables = {}, retry = true) => {
-  const accessToken = await getValidAccessToken(userId);
+const mondayQuery = async (orgId, query, variables = {}, retry = true) => {
+  const accessToken = await getValidAccessToken(orgId);
 
   try {
     const response = await axios.post(
@@ -103,17 +103,17 @@ const mondayQuery = async (userId, query, variables = {}, retry = true) => {
     const message = error.response?.data?.error_message || error.message;
 
     if (status === 401 && retry) {
-      console.log(`[Monday] 401 — refreshing token for user: ${userId}`);
-      const token = await getTokenRecord(userId);
-      await refreshAndPersistToken(userId, token.refresh_token);
-      return mondayQuery(userId, query, variables, false);
+      console.log(`[Monday] 401 — refreshing token for organisation: ${orgId}`);
+      const token = await getTokenRecord(orgId);
+      await refreshAndPersistToken(orgId, token.refresh_token);
+      return mondayQuery(orgId, query, variables, false);
     }
 
     if (status === 429) {
       const wait = parseInt(error.response?.headers?.["retry-after"] || "10", 10);
       console.warn(`[Monday] Rate limited. Waiting ${wait}s...`);
       await new Promise((r) => setTimeout(r, wait * 1000));
-      return mondayQuery(userId, query, variables, retry);
+      return mondayQuery(orgId, query, variables, retry);
     }
 
     throw new Error(`[Monday] Query failed (${status}): ${message}`, { cause: error });
@@ -140,8 +140,8 @@ const BILLABLE_COLUMN_TYPES = ["checkbox", "status", "dropdown", "boolean"];
  * @param {string} boardId
  * @returns {Promise<{ timeColumnId: string|null, billableColumnId: string|null }>}
  */
-const detectBoardColumns = async (userId, boardId) => {
-  const data = await mondayQuery(userId, `
+const detectBoardColumns = async (orgId, boardId) => {
+  const data = await mondayQuery(orgId, `
     query ($boardId: [ID!]) {
       boards(ids: $boardId) {
         columns {
@@ -184,12 +184,12 @@ const detectBoardColumns = async (userId, boardId) => {
  * @param {string} timeColumnId
  * @returns {Promise<Array>} flat array of items with column values
  */
-const fetchBoardItems = async (userId, boardId, timeColumnId) => {
+const fetchBoardItems = async (orgId, boardId, timeColumnId) => {
   const items  = [];
   let   cursor = null;
 
   do {
-    const data = await mondayQuery(userId, `
+    const data = await mondayQuery(orgId, `
       query ($boardId: [ID!], $columnIds: [String], $cursor: String) {
         boards(ids: $boardId) {
           items_page(limit: 100, cursor: $cursor) {
@@ -313,18 +313,18 @@ const parseItemHours = (items, timeColumnId, startDate, endDate) => {
  * LABOR-2 (laborCostPerHour) and LABOR-7 (revenuePerBillableFTE)
  * require QB data and are calculated in summaryEngine.
  *
- * @param {string} userId
- * @param {string} boardId     - the client's Monday board ID
+ * @param {string} orgId
+ * @param {string} boardId     - the organisation's Monday board ID
  * @param {object} options     - { startDate, endDate, founderUserId? }
  * @returns {Promise<object>}
  */
-const getLaborKPIsService = async (userId, boardId, { startDate, endDate, founderUserId = null } = {}) => {
+const getLaborKPIsService = async (orgId, boardId, { startDate, endDate, founderUserId = null } = {}) => {
   const now   = new Date();
   const start = startDate || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
   const end   = endDate   || new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
 
   // Step 1: Detect which column holds time data for this board
-  const { timeColumnId, billableColumnId } = await detectBoardColumns(userId, boardId);
+  const { timeColumnId, billableColumnId } = await detectBoardColumns(orgId, boardId);
 
   if (!timeColumnId) {
     console.warn(`[Monday] No time tracking column found on board ${boardId}`);
@@ -342,7 +342,7 @@ const getLaborKPIsService = async (userId, boardId, { startDate, endDate, founde
   }
 
   // Step 2: Fetch all items with time data
-  const items = await fetchBoardItems(userId, boardId, timeColumnId);
+  const items = await fetchBoardItems(orgId, boardId, timeColumnId);
 
   // Step 3: Parse hours from items
   const { totalHours, assigneeSet } = parseItemHours(items, timeColumnId, start, end);

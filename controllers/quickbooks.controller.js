@@ -78,13 +78,13 @@ const callbackHandler = async (req, res) => {
       x_refresh_token_expires_in,
       token_type,
     } = authResponse.json;
-    // TODO: Replace realmId with Clerk user ID once auth is integrated
-    const user_id = realmId;
-    req.session.user_id = user_id;
+    // TODO: Replace with org_id from authenticated user's organisation
+    const org_id = realmId;
+    req.session.org_id = org_id;
     await prisma.quickbooksToken.upsert({
-      where: { user_id },
+      where: { org_id },
       create: {
-        user_id,
+        org_id,
         access_token,
         refresh_token,
         token_type,
@@ -100,6 +100,12 @@ const callbackHandler = async (req, res) => {
         x_refresh_token_expires_in,
       },
     });
+
+    await prisma.organisation.update({
+      where: { org_id },
+      data: { quickbooks_connected: true },
+    });
+
     res.redirect("/api/integrations/quickbooks/success");
   } catch (error) {
     console.error("Error fetching access tokens:", error);
@@ -113,7 +119,7 @@ const callbackHandler = async (req, res) => {
 const connectionSuccessHandler = async (req, res) => {
   try {
     const token = await prisma.quickbooksToken.findUnique({
-      where: { user_id: req.session.user_id },
+      where: { org_id: req.session.org_id },
     });
     if (!token)
       return res
@@ -132,10 +138,10 @@ const connectionSuccessHandler = async (req, res) => {
  */
 const connectionStatus = async (req, res) => {
   try {
-    const user_id = req.session.user_id;
-    if (!user_id) return res.status(200).json({ connected: false });
+    const org_id = req.session.org_id;
+    if (!org_id) return res.status(200).json({ connected: false });
     const token = await prisma.quickbooksToken.findUnique({
-      where: { user_id },
+      where: { org_id },
     });
     return res.status(200).json({ connected: Boolean(token) });
   } catch (_error) {
@@ -150,10 +156,10 @@ const connectionStatus = async (req, res) => {
  * Refresh the access-token
  */
 const refreshAccessToken = async (req, res) => {
-  const user_id = req.session.user_id;
-  if (!user_id) return res.status(401).json({ error: "Not authenticated" });
+  const org_id = req.session.org_id;
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
   try {
-    const { access_token } = await refreshAndPersistTokenService(user_id);
+    const { access_token } = await refreshAndPersistTokenService(org_id);
     return res.status(200).json({ success: true, access_token });
   } catch (_error) {
     return res.status(500).json({ error: "Failed to refresh token" });
@@ -164,12 +170,12 @@ const refreshAccessToken = async (req, res) => {
  * Retrieves all Financial & Cash KPIs in a Company.
  */
 const getFinancialKPIs = async (req, res) => {
-  const user_id = req.session.user_id;
-  if (!user_id) return res.status(401).json({ error: "Not authenticated" });
+  const org_id = req.session.org_id;
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
   const { startDate, endDate, asOfDate } = req.query;
   try {
     // Calls the service — no business logic here
-    const kpis = await getFinancialKPIsService(user_id, {
+    const kpis = await getFinancialKPIsService(org_id, {
       startDate,
       endDate,
       asOfDate,

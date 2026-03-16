@@ -7,28 +7,9 @@ datasource db {
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model ActivityType {
-    activity_id   BigInt         @id @unique @default(autoincrement())
-    activity_name String?
-    Activity_Log  Activity_Log[]
-}
-
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model Activity_Log {
-    log_id            BigInt       @id @unique @default(autoincrement())
-    file_id           String       @db.Uuid
-    activity_type     BigInt
-    activity_datetime DateTime     @default(now()) @db.Timestamp(6)
-    user_id           BigInt?
-    ActivityType      ActivityType @relation(fields: [activity_type], references: [activity_id])
-    File              File         @relation(fields: [file_id], references: [file_id])
-    User              User?        @relation(fields: [user_id], references: [user_id])
-}
-
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model Client {
-    client_id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    client_name        String
+model Organisation {
+    org_id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    org_name           String
     industry           String?
     founded            DateTime? @db.Date
     key_contacts       BigInt?
@@ -36,23 +17,22 @@ model Client {
     organization_chart String?
     gpt_types          String?
     storage_bucket     String    @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-    User               User[]
-    File               File[]
 
-    financeKpis FinanceKpi[]
-    leadsKpis   LeadsKpi[]
-    laborKpis   LaborKpi[]
-}
+    // Integration connection flags (auto-set when tokens are created/deleted)
+    hubspot_connected    Boolean @default(false)
+    quickbooks_connected Boolean @default(false)
+    monday_connected     Boolean @default(false)
+    clickup_connected    Boolean @default(false)
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model Comment {
-    id         BigInt   @id @default(autoincrement())
-    file_id    String   @db.Uuid
-    comment    String?
-    created_at DateTime @db.Timestamp(6)
-    user_id    BigInt?
-    File       File     @relation(fields: [file_id], references: [file_id], onDelete: Cascade)
-    User       User?    @relation(fields: [user_id], references: [user_id])
+    User             User[]
+    File             File[]
+    financeKpis      FinanceKpi[]
+    leadsKpis        LeadsKpi[]
+    laborKpis        LaborKpi[]
+    hubspotTokens    HubspotToken[]
+    quickbooksTokens QuickbooksToken[]
+    mondayTokens     MondayToken[]
+    clickupTokens    ClickUpToken[]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -74,18 +54,16 @@ model Category {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model File {
-    file_id      String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+    file_id      String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
     file_name    String
     file_size    Float
     file_source  String
     ctg_id       BigInt? // Document category FK → Category (e.g. legal, financial, hr)
-    client_id    String? // Which client owns this file (FK → Client)
+    org_id       String? @db.Uuid // Which organisation owns this file (FK → Organisation)
     user_id      BigInt? // Which user uploaded it (FK → User)
-    activityLogs Activity_Log[]
-    Category     Category?      @relation(fields: [ctg_id], references: [ctg_id])
-    Client       Client?        @relation(fields: [client_id], references: [client_id])
-    User         User?          @relation(fields: [user_id], references: [user_id])
-    comments     Comment[]
+    Category     Category?     @relation(fields: [ctg_id], references: [ctg_id])
+    Organisation Organisation? @relation(fields: [org_id], references: [org_id])
+    User         User?         @relation(fields: [user_id], references: [user_id])
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -105,22 +83,21 @@ model Role {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model User {
-    client_id    String?
+    org_id       String?   @db.Uuid
     role_id      BigInt?
-    clerk_id     String?        @unique
+    clerk_id     String?   @unique
     first_name   String
     last_name    String
     email        String
     phone        String?
     gender       String?
     status       String?
-    last_login   DateTime?      @db.Timestamp(6)
-    user_id      BigInt         @id @unique @default(autoincrement())
-    Activity_Log Activity_Log[]
-    Comment      Comment[]
+    job_title    String?
+    last_login   DateTime? @db.Timestamp(6)
+    user_id      BigInt    @id @unique @default(autoincrement())
     File         File[]
-    Client       Client?        @relation(fields: [client_id], references: [client_id], onDelete: SetNull)
-    Role         Role?          @relation(fields: [role_id], references: [role_id])
+    Organisation Organisation? @relation(fields: [org_id], references: [org_id], onDelete: SetNull)
+    Role         Role?         @relation(fields: [role_id], references: [role_id])
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -132,51 +109,55 @@ model mock_data {
 }
 
 model HubspotToken {
-    user_id       Int       @id
+    org_id        String        @id @db.Uuid
     access_token  String
     refresh_token String
     expires_at    DateTime
-    created_at    DateTime? @default(now())
+    created_at    DateTime?     @default(now())
     updated_at    DateTime?
+    Organisation  Organisation  @relation(fields: [org_id], references: [org_id], onDelete: Cascade)
 
     @@map("hubspot_tokens")
 }
 
 model QuickbooksToken {
-    user_id                    BigInt @id
+    org_id                     String       @id @db.Uuid
     access_token               String
     refresh_token              String
     token_type                 String
     expires_in                 Int
     x_refresh_token_expires_in Int
     realmId                    BigInt
+    Organisation               Organisation @relation(fields: [org_id], references: [org_id], onDelete: Cascade)
 
     @@map("quickbooks_tokens")
 }
 
 model MondayToken {
-    id                       Int      @id @default(autoincrement())
-    user_id                  String   @unique
+    id                       Int          @id @default(autoincrement())
+    org_id                   String       @unique @db.Uuid
     access_token             String
     refresh_token            String?
     token_type               String?
     realm_id                 String?
     expires_in               Int?
     refresh_token_expires_in Int?
-    created_at               DateTime @default(now())
-    updated_at               DateTime @updatedAt
+    created_at               DateTime     @default(now())
+    updated_at               DateTime     @updatedAt
+    Organisation             Organisation @relation(fields: [org_id], references: [org_id], onDelete: Cascade)
 
     @@map("monday_tokens")
 }
 
 model ClickUpToken {
-    user_id       Int       @id
+    org_id        String       @id @db.Uuid
     access_token  String
     refresh_token String
     token_type    String
     expires_at    DateTime
-    created_at    DateTime? @default(now())
+    created_at    DateTime?    @default(now())
     updated_at    DateTime?
+    Organisation  Organisation @relation(fields: [org_id], references: [org_id], onDelete: Cascade)
 
     @@map("clickup_tokens")
 }
@@ -201,9 +182,9 @@ model document_embeddings {
 }
 
 model FinanceKpi {
-    id        String @id @default(cuid())
-    client_id String
-    client    Client @relation(fields: [client_id], references: [client_id])
+    id     String       @id @default(cuid())
+    org_id String       @db.Uuid
+    organisation Organisation @relation(fields: [org_id], references: [org_id])
 
     // Period this snapshot covers
     periodStart DateTime
@@ -258,16 +239,16 @@ model FinanceKpi {
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
-    // One snapshot per client per period
-    @@unique([client_id, periodStart, periodEnd])
-    @@index([client_id, lastFetchedAt])
+    // One snapshot per organisation per period
+    @@unique([org_id, periodStart, periodEnd])
+    @@index([org_id, lastFetchedAt])
     @@map("finance_kpis")
 }
 
 model LeadsKpi {
-    id        String @id @default(cuid())
-    client_id String
-    client    Client @relation(fields: [client_id], references: [client_id])
+    id     String       @id @default(cuid())
+    org_id String       @db.Uuid
+    organisation Organisation @relation(fields: [org_id], references: [org_id])
 
     periodStart DateTime
     periodEnd   DateTime
@@ -285,7 +266,7 @@ model LeadsKpi {
     recurringPercent Float? // PS-9 %: recurring / total revenue
     oneTimeRevenue   Float? // total - recurring
 
-    // ── Client Health KPIs (PS-8, PS-14) ──────────────────
+    // ── Organisation Health KPIs (PS-8, PS-14) ──────────────
     clientConcentration    Float? // PS-8: top 5 client revenue %
     founderDependencySales Float? // PS-14: founder revenue / total
 
@@ -305,8 +286,8 @@ model LeadsKpi {
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
-    @@unique([client_id, periodStart, periodEnd])
-    @@index([client_id, lastFetchedAt])
+    @@unique([org_id, periodStart, periodEnd])
+    @@index([org_id, lastFetchedAt])
     @@map("leads_kpis")
 }
 
@@ -315,9 +296,9 @@ model LaborKpi {
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
-    // Client scoping
-    client_id String
-    client    Client @relation(fields: [client_id], references: [client_id])
+    // Organisation scoping
+    org_id       String       @db.Uuid
+    organisation Organisation @relation(fields: [org_id], references: [org_id])
 
     // Period
     periodStart DateTime
@@ -349,8 +330,8 @@ model LaborKpi {
     hasBillableColumn Boolean @default(false) // false = show "set up billable column" prompt
     isStale           Boolean @default(false) // true = background refresh in progress
 
-    // One row per client per period
-    @@unique([client_id, periodStart, periodEnd])
-    @@index([client_id])
+    // One row per organisation per period
+    @@unique([org_id, periodStart, periodEnd])
+    @@index([org_id])
     @@map("labor_kpis")
 }

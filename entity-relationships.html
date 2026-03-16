@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maural Knowledge Hub — Entity Relationships & Business Context</title>
+    <style>
+        @media print {
+            body { margin: 0.5in; font-size: 11pt; }
+            .page-break { page-break-before: always; }
+            h1 { font-size: 20pt; }
+            h2 { font-size: 16pt; }
+            h3 { font-size: 13pt; }
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.7;
+            color: #1a1a2e;
+            background: #f8f9fc;
+            padding: 40px;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 {
+            font-size: 28px;
+            color: #0f3460;
+            border-bottom: 3px solid #e94560;
+            padding-bottom: 12px;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 36px;
+        }
+        h2 {
+            font-size: 22px;
+            color: #16213e;
+            margin-top: 36px;
+            margin-bottom: 16px;
+            padding-left: 12px;
+            border-left: 4px solid #e94560;
+        }
+        h3 {
+            font-size: 17px;
+            color: #0f3460;
+            margin-top: 24px;
+            margin-bottom: 10px;
+        }
+        p, li {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        ul { padding-left: 24px; margin-bottom: 16px; }
+        li { margin-bottom: 6px; }
+
+        .entity-card {
+            background: #fff;
+            border: 1px solid #e0e4ec;
+            border-radius: 10px;
+            padding: 24px 28px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+        .entity-card h3 {
+            margin-top: 0;
+            font-size: 19px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .entity-badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 10px;
+            border-radius: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .badge-core { background: #e94560; color: #fff; }
+        .badge-auth { background: #0f3460; color: #fff; }
+        .badge-data { background: #1a936f; color: #fff; }
+        .badge-ai { background: #7b2d8e; color: #fff; }
+        .badge-integration { background: #e07c24; color: #fff; }
+
+        .relationship-list {
+            background: #f4f6fb;
+            border-left: 3px solid #0f3460;
+            padding: 12px 18px;
+            border-radius: 0 8px 8px 0;
+            margin-top: 12px;
+        }
+        .relationship-list p {
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+        .relationship-list strong { color: #0f3460; }
+
+        .diagram-section {
+            background: #fff;
+            border: 1px solid #e0e4ec;
+            border-radius: 10px;
+            padding: 28px;
+            margin: 28px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+        .diagram-section pre {
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            overflow-x: auto;
+            color: #16213e;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0 24px 0;
+            font-size: 13px;
+        }
+        th {
+            background: #0f3460;
+            color: #fff;
+            text-align: left;
+            padding: 10px 14px;
+        }
+        th:first-child { border-radius: 8px 0 0 0; }
+        th:last-child { border-radius: 0 8px 0 0; }
+        td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #e8eaf0;
+        }
+        tr:nth-child(even) { background: #f8f9fc; }
+        tr:hover { background: #eef1f8; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <h1>Maural Knowledge Hub — Entity Relationships & Business Context</h1>
+    <p class="subtitle">A conceptual breakdown of every entity in the system, what it represents in the business domain, and how entities relate to one another.</p>
+
+    <!-- ─────────────────────────────────────────────────── -->
+    <h2>1. The Business Model at a Glance</h2>
+    <!-- ─────────────────────────────────────────────────── -->
+
+    <p>
+        Maural Solutions LLC is a consulting firm that serves <strong>multiple organisations</strong> simultaneously. The Knowledge Management System (KMS) is built as a <strong>multi-tenant platform</strong> — meaning a single deployment of the application serves every organisation, but each organisation's data is logically isolated from every other organisation's data. Think of it like an apartment building: the building is one structure (one application), but each apartment (each organisation/tenant) has its own locked door, its own contents, and its own residents. The landlord (Maural Solutions / Super Admin) has a master key and can manage the building, but tenants only see their own apartment.
+    </p>
+    <p>
+        Within this model, there are two distinct sides of the platform:
+    </p>
+    <ul>
+        <li><strong>The administrative side</strong> — operated by Maural Solutions staff (Super Admins and Admins) who onboard organisations, manage the platform, oversee all tenants, and access cross-organisation analytics.</li>
+        <li><strong>The organisation side</strong> — operated by the organisation's own employees (Org Executives and Org Staff) who manage their own documents, view their own dashboards, and interact with the AI chatbot scoped to their organisation's knowledge base.</li>
+    </ul>
+
+    <!-- ─────────────────────────────────────────────────── -->
+    <h2>2. Entity Definitions</h2>
+    <!-- ─────────────────────────────────────────────────── -->
+
+    <!-- ORGANISATION -->
+    <div class="entity-card">
+        <h3>Organisation (Tenant) <span class="entity-badge badge-core">Core Entity</span></h3>
+        <p>
+            An <strong>Organisation</strong> represents a distinct organisation that Maural Solutions serves. In multi-tenant terminology, each Organisation is a <strong>tenant</strong>. Examples might be "Acme Corp," "Greenfield Industries," or "Lakewood Medical Group." Each Organisation record stores the organisation's profile information — its name (<code>org_name</code>), industry, founding date, key contacts, location, and organizational chart reference.
+        </p>
+        <p>
+            Critically, each Organisation is assigned its own <strong>storage bucket</strong> (a UUID-identified container in Supabase Storage). This is the tenant isolation boundary for documents: all files belonging to an organisation are stored in that organisation's bucket, and the system enforces that users from one organisation can never access another organisation's bucket. The Organisation entity is the <strong>anchor point</strong> of the entire data model — Users belong to an Organisation, Files belong to an Organisation, and KPI data (financial, leads, labor) is scoped to an Organisation.
+        </p>
+        <p>
+            The <code>gpt_types</code> field indicates which AI/chatbot capabilities have been enabled for that organisation, allowing Maural to customize the AI experience per organisation. Additionally, boolean flags (<code>hubspot_connected</code>, <code>quickbooks_connected</code>, <code>monday_connected</code>, <code>clickup_connected</code>) track which external integrations have been connected for this organisation.
+        </p>
+        <div class="relationship-list">
+            <p><strong>Has many:</strong> Users, Files, FinanceKpis, LeadsKpis, LaborKpis</p>
+            <p><strong>Has one (per service):</strong> HubspotToken, QuickbooksToken, MondayToken, ClickUpToken</p>
+            <p><strong>Business meaning:</strong> "This is one of the companies we serve."</p>
+        </div>
+    </div>
+
+    <!-- USER -->
+    <div class="entity-card">
+        <h3>User <span class="entity-badge badge-core">Core Entity</span></h3>
+        <p>
+            A <strong>User</strong> is any individual person who logs into the platform. Every User has a name, email, phone, demographic fields, and a <code>job_title</code> field, along with a <code>clerk_id</code> that links them to their identity in the external authentication provider (Clerk). The User record in the database is the <strong>internal profile</strong> — it stores application-specific data (role assignment, organisation membership, activity tracking), while Clerk handles the authentication concerns (password hashing, session tokens, MFA).
+        </p>
+        <p>
+            Each User <strong>optionally belongs to an Organisation</strong>. This "optionally" is important: Maural Solutions' own staff (Super Admins and Admins) are Users who are <em>not</em> assigned to any specific Organisation — they exist above the tenant boundary and can see across all organisations. In contrast, organisation-side users (Org Executives and Org Staff) are always associated with exactly one Organisation, and the system uses this <code>org_id</code> foreign key to enforce tenant isolation throughout every API query.
+        </p>
+        <p>
+            Each User is assigned exactly one <strong>Role</strong>, which determines what they can see and do within the platform. Users can also upload Files, and the system tracks who uploaded each document.
+        </p>
+        <div class="relationship-list">
+            <p><strong>Belongs to:</strong> Organisation (optional — null for Maural staff), Role</p>
+            <p><strong>Has many:</strong> Files (uploaded by this user)</p>
+            <p><strong>Linked to:</strong> Clerk (external auth provider) via <code>clerk_id</code></p>
+            <p><strong>Business meaning:</strong> "This is a person who uses the platform."</p>
+        </div>
+    </div>
+
+    <!-- ROLE -->
+    <div class="entity-card">
+        <h3>Role <span class="entity-badge badge-auth">Auth & Access</span></h3>
+        <p>
+            A <strong>Role</strong> defines a level of access within the platform. The system implements a strict four-tier <strong>role hierarchy</strong>:
+        </p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Role</th>
+                    <th>Level</th>
+                    <th>Scope</th>
+                    <th>Who This Is</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Super Admin</td>
+                    <td>4 (highest)</td>
+                    <td>Platform-wide</td>
+                    <td>Maural Solutions system administrator. Full control over all organisations, users, and system configuration.</td>
+                </tr>
+                <tr>
+                    <td>Admin</td>
+                    <td>3</td>
+                    <td>Platform-wide</td>
+                    <td>Maural Solutions consultant or manager. Can manage organisations and users but may not have system-level configuration access.</td>
+                </tr>
+                <tr>
+                    <td>Org Executive</td>
+                    <td>2</td>
+                    <td>Own organisation only</td>
+                    <td>A senior person within the organisation (e.g., CEO, VP). Can manage their org's users, documents, view dashboards, and access analytics — but only for their own organisation.</td>
+                </tr>
+                <tr>
+                    <td>Org Staff</td>
+                    <td>1 (lowest)</td>
+                    <td>Own organisation only</td>
+                    <td>A regular employee within the organisation. Can view and upload documents, use the chatbot, and access their organisation's knowledge base — with more limited management capabilities.</td>
+                </tr>
+            </tbody>
+        </table>
+        <p>
+            The RBAC middleware enforces this hierarchy: any endpoint can declare a <strong>minimum required role</strong>, and the system compares the requesting user's role level against the minimum. A level-2 user can access any endpoint requiring level 1 or 2, but not level 3 or 4. This is a hierarchical (or "tiered") RBAC model, as opposed to a flat role model where each role is independent.
+        </p>
+        <div class="relationship-list">
+            <p><strong>Has many:</strong> Users, RolePermissions</p>
+            <p><strong>Business meaning:</strong> "This defines what a class of users is allowed to do."</p>
+        </div>
+    </div>
+
+    <!-- PERMISSION & ROLE-PERMISSION -->
+    <div class="entity-card">
+        <h3>Permission & RolePermission <span class="entity-badge badge-auth">Auth & Access</span></h3>
+        <p>
+            A <strong>Permission</strong> represents a specific, granular action that can be performed in the system (e.g., "create_document", "delete_user", "view_dashboard"). The <strong>RolePermission</strong> entity is a <strong>junction table</strong> that creates a many-to-many relationship between Roles and Permissions — meaning each Role can have multiple Permissions, and each Permission can be assigned to multiple Roles.
+        </p>
+        <p>
+            This two-layer approach (hierarchical role levels <em>plus</em> granular permissions) gives the system flexibility. The role hierarchy handles the broad "who outranks whom" logic, while the permission assignments handle fine-grained "can this role specifically do X?" checks. For example, both Admin and Org Executive might be at different hierarchy levels, but both could share a "view_financial_reports" permission if the business requires it.
+        </p>
+        <div class="relationship-list">
+            <p><strong>RolePermission bridges:</strong> Role ↔ Permission (many-to-many)</p>
+            <p><strong>Business meaning:</strong> "These are the specific capabilities assigned to each role."</p>
+        </div>
+    </div>
+
+    <!-- FILE / DOCUMENT -->
+    <div class="entity-card">
+        <h3>File (Document) <span class="entity-badge badge-data">Knowledge Base</span></h3>
+        <p>
+            A <strong>File</strong> represents a document that has been uploaded into the knowledge base. This is the central asset of the KMS — the whole purpose of the platform is to store, organize, retrieve, and derive insights from these files. Files can be PDFs, spreadsheets (XLSX), Word documents (DOCX), images, or other business documents.
+        </p>
+        <p>
+            Each File record stores metadata: the file name, file size, and <code>file_source</code> (where it came from — e.g., direct upload, a HubSpot integration, a QuickBooks export). The actual file content is stored in <strong>Supabase Storage</strong> within the owning Organisation's dedicated storage bucket — the database only holds the metadata and the reference, not the binary content itself.
+        </p>
+        <p>
+            Files are <strong>categorized</strong> (linked to a Category) for organizational purposes, and the system tracks <strong>who uploaded them</strong> (linked to a User). When a file is uploaded, the <strong>ingestion pipeline</strong> processes it: extracting text content, generating vector embeddings via Ollama, and storing those embeddings in the <code>document_embeddings</code> table so the AI chatbot can later retrieve relevant documents during a conversation.
+        </p>
+        <div class="relationship-list">
+            <p><strong>Belongs to:</strong> Organisation (tenant ownership), Category (organizational), User (uploader)</p>
+            <p><strong>Processed into:</strong> document_embeddings (for AI retrieval)</p>
+            <p><strong>Stored in:</strong> Supabase Storage (Organisation's dedicated bucket)</p>
+            <p><strong>Business meaning:</strong> "This is a piece of knowledge that the organization has stored in the system."</p>
+        </div>
+    </div>
+
+    <!-- CATEGORY -->
+    <div class="entity-card">
+        <h3>Category <span class="entity-badge badge-data">Knowledge Base</span></h3>
+        <p>
+            A <strong>Category</strong> is a classification label used to organize Files within the knowledge base. Categories might include labels like "Legal," "Financial," "HR," "Marketing," "Operations," or "Contracts." They provide a human-readable organizational structure so users can browse and filter documents by type rather than having to search through a flat list.
+        </p>
+        <p>
+            Categories are <strong>shared across all organisations</strong> — they are not tenant-scoped. This means "Financial" as a category means the same thing for every organisation. The tenant isolation is enforced at the File level (each file belongs to a specific organisation), not at the category level.
+        </p>
+        <div class="relationship-list">
+            <p><strong>Has many:</strong> Files</p>
+            <p><strong>Business meaning:</strong> "This is a way to classify and organize documents by type."</p>
+        </div>
+    </div>
+
+    <!-- DOCUMENT EMBEDDINGS -->
+    <div class="entity-card">
+        <h3>Document Embeddings <span class="entity-badge badge-ai">AI / Chatbot</span></h3>
+        <p>
+            The <strong>document_embeddings</strong> table is the foundation of the AI chatbot's knowledge. When a File is ingested, the system extracts its text content, splits it into meaningful chunks, and passes each chunk through an embedding model (Ollama) to generate a high-dimensional vector representation. These vectors capture the <em>semantic meaning</em> of the text — not just keywords, but the concepts and relationships within the content.
+        </p>
+        <p>
+            Each record stores the original text <code>content</code> (so it can be shown to the user), a <code>metadata</code> JSON field (containing the source file reference, organisation ID, page numbers, etc.), and the <code>embedding</code> vector itself. The vector column uses PostgreSQL's <code>pgvector</code> extension, which enables <strong>similarity search</strong> — when a user asks the chatbot a question, the question is also embedded into a vector, and the system finds the document chunks whose vectors are closest to the question vector. This is the <strong>Retrieval-Augmented Generation (RAG)</strong> pattern.
+        </p>
+        <div class="relationship-list">
+            <p><strong>Derived from:</strong> Files (via the ingestion pipeline)</p>
+            <p><strong>Used by:</strong> RAG service → Chat controller → AI chatbot responses</p>
+            <p><strong>Business meaning:</strong> "This is the AI-searchable representation of our document knowledge base."</p>
+        </div>
+    </div>
+
+    <!-- KPI MODELS -->
+    <div class="entity-card">
+        <h3>FinanceKpi / LeadsKpi / LaborKpi <span class="entity-badge badge-data">Analytics & Dashboards</span></h3>
+        <p>
+            The three <strong>KPI models</strong> store periodic business intelligence snapshots pulled from external systems. They are the data behind the organisation dashboards and represent the "analytics and insight generation" pillar of the platform.
+        </p>
+
+        <h3 style="font-size: 15px; margin-top: 16px;">FinanceKpi</h3>
+        <p>
+            Financial performance data sourced primarily from <strong>QuickBooks</strong>. Each record is a time-bounded snapshot (defined by <code>periodStart</code> and <code>periodEnd</code>) of an organisation's financial health: revenue, gross profit, net income, EBITDA, cash position, accounts receivable, monthly burn rate, cash runway, working capital, days sales outstanding (DSO), and valuation metrics (Rule of 40, enterprise value). It also stores budget-vs-actuals variance percentages. This gives Org Executives and Maural consultants a financial dashboard without needing to log into QuickBooks directly.
+        </p>
+
+        <h3 style="font-size: 15px; margin-top: 16px;">LeadsKpi</h3>
+        <p>
+            Sales pipeline and business health data sourced primarily from <strong>HubSpot</strong>. Tracks the sales funnel (leads → calls → proposals → deals won → conversion rate), revenue composition (recurring vs. one-time), pipeline coverage, client concentration risk (how dependent revenue is on the top 5 clients/customers), founder dependency in sales, deal velocity, forecast accuracy, and retention rate. This paints a picture of an organisation's go-to-market health and growth trajectory.
+        </p>
+
+        <h3 style="font-size: 15px; margin-top: 16px;">LaborKpi</h3>
+        <p>
+            Workforce and utilization data sourced from project management tools — <strong>Monday.com</strong> or <strong>ClickUp</strong>. Tracks direct labor hours, headcount (billable vs. non-billable FTEs), billable utilization rate, labor cost per hour, revenue per billable FTE, and founder dependency on service delivery. For consulting firms, utilization and labor efficiency are often the most critical operational metrics.
+        </p>
+
+        <p>
+            All three KPI models follow the same structural pattern: they are <strong>scoped to an Organisation</strong>, bounded by a <strong>time period</strong>, and include cache metadata (<code>lastFetchedAt</code>, <code>isStale</code>, <code>fetchSource</code>) to support background data refresh without blocking the dashboard UI. The unique constraint on <code>[org_id, periodStart, periodEnd]</code> ensures there is exactly one snapshot per organisation per period — refreshing the same period overwrites the existing record rather than creating duplicates.
+        </p>
+        <div class="relationship-list">
+            <p><strong>Belongs to:</strong> Organisation</p>
+            <p><strong>Sourced from:</strong> QuickBooks (finance), HubSpot (leads), Monday.com/ClickUp (labor)</p>
+            <p><strong>Business meaning:</strong> "These are the business performance metrics we track for each organisation over time."</p>
+        </div>
+    </div>
+
+    <!-- EXTERNAL SYSTEM -->
+    <div class="entity-card">
+        <h3>ExternalSystem <span class="entity-badge badge-integration">Integrations</span></h3>
+        <p>
+            The <strong>ExternalSystem</strong> entity is a registry of third-party platforms that the KMS can connect to. Each record describes an external service — its name, type (e.g., CRM, accounting, project management), authentication method (e.g., OAuth2, API key), and a URL reference. This serves as a <strong>catalog</strong> of available integrations, providing a centralized place to document what external systems exist and how they authenticate.
+        </p>
+        <div class="relationship-list">
+            <p><strong>Standalone:</strong> Not directly linked to other entities via foreign keys</p>
+            <p><strong>Business meaning:</strong> "These are the third-party tools we can pull data from."</p>
+        </div>
+    </div>
+
+    <!-- OAUTH TOKENS -->
+    <div class="entity-card">
+        <h3>HubspotToken / QuickbooksToken / MondayToken / ClickUpToken <span class="entity-badge badge-integration">Integrations</span></h3>
+        <p>
+            The four <strong>Token models</strong> store OAuth2 credentials for each external integration. When an organisation connects their HubSpot, QuickBooks, Monday.com, or ClickUp account to the KMS, the OAuth2 handshake produces an access token and a refresh token, which are stored in these tables. The access token is used for API calls to the external service; the refresh token is used to obtain a new access token when the current one expires.
+        </p>
+        <p>
+            Each token record is keyed by <code>org_id</code>, meaning the integration is tied to the <strong>organisation that authorized it</strong>. The tokens belong to the organisation as a whole, not to any individual user — this ensures that the integration persists regardless of which user initiated the OAuth flow. The system uses these stored tokens to periodically fetch KPI data and populate the FinanceKpi, LeadsKpi, and LaborKpi tables.
+        </p>
+        <div class="relationship-list">
+            <p><strong>Belongs to:</strong> Organisation (via org_id)</p>
+            <p><strong>Enables:</strong> Data fetching for KPI models</p>
+            <p><strong>Business meaning:</strong> "These are the saved credentials that let us pull data from external tools on behalf of an organisation."</p>
+        </div>
+    </div>
+
+    <!-- ─────────────────────────────────────────────────── -->
+    <h2 class="page-break">3. How Entities Relate — The Big Picture</h2>
+    <!-- ─────────────────────────────────────────────────── -->
+
+    <div class="diagram-section">
+        <pre>
+                           ┌─────────────────────────────┐
+                           │     MAURAL SOLUTIONS LLC     │
+                           │  (Platform Operator)         │
+                           └─────────────┬───────────────┘
+                                         │ operates
+                           ┌─────────────▼───────────────┐
+                           │      KMS PLATFORM            │
+                           │  (Multi-Tenant Application)  │
+                           └─────────────┬───────────────┘
+                                         │
+              ┌──────────────────────────┼──────────────────────────┐
+              │                          │                          │
+    ┌─────────▼─────────┐    ┌───────────▼──────────┐   ┌──────────▼──────────┐
+    │   Organisation A   │    │   Organisation B      │   │   Organisation C     │
+    │   (Tenant)         │    │   (Tenant)            │   │   (Tenant)           │
+    └─────────┬─────────┘    └───────────┬──────────┘   └──────────┬──────────┘
+              │                          │                          │
+    ┌─────────▼─────────────────────────────────────────────────────▼──────────┐
+    │  Each Organisation (Tenant) contains:                                          │
+    │                                                                          │
+    │  ┌─────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐              │
+    │  │  Users   │   │  Files   │   │  Finance │   │  Leads   │              │
+    │  │(Exec +  │──▶│(Docs in  │   │  KPIs    │   │  KPIs    │              │
+    │  │ Staff)  │   │ bucket)  │   │(from QB) │   │(from HS) │              │
+    │  └────┬────┘   └─────┬───┘   └──────────┘   └──────────┘              │
+    │       │              │                                                   │
+    │       │        ┌─────▼────┐   ┌──────────┐                              │
+    │       │        │Embeddings│   │  Labor   │                              │
+    │       │        │(for AI)  │   │  KPIs    │                              │
+    │       │        └─────┬───┘   │(Mon/CU)  │                              │
+    │       │              │       └──────────┘                               │
+    │       │        ┌─────▼────┐                                             │
+    │       └───────▶│ Chatbot  │ ◀── User asks question                     │
+    │                │ (RAG)    │ ──▶ Retrieves relevant embeddings           │
+    │                └──────────┘     within tenant boundary                   │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │  Cross-Cutting Entities (not tenant-scoped):                            │
+    │                                                                         │
+    │  ┌──────────┐  ┌────────────┐  ┌───────────────┐  ┌─────────────────┐  │
+    │  │  Roles   │  │Permissions │  │  Categories   │  │ ExternalSystems │  │
+    │  │(4-tier   │──│(granular   │  │(shared labels │  │(integration     │  │
+    │  │hierarchy)│  │ actions)   │  │ for all docs) │  │ catalog)        │  │
+    │  └──────────┘  └────────────┘  └───────────────┘  └─────────────────┘  │
+    │                                                                         │
+    │  ┌─────────────────────────────────────────────────────────────┐        │
+    │  │  OAuth Tokens (HubSpot, QuickBooks, Monday, ClickUp)       │        │
+    │  │  Per-organisation credentials for external data fetching    │        │
+    │  └─────────────────────────────────────────────────────────────┘        │
+    └─────────────────────────────────────────────────────────────────────────┘
+        </pre>
+    </div>
+
+    <!-- ─────────────────────────────────────────────────── -->
+    <h2>4. Key Relationship Patterns</h2>
+    <!-- ─────────────────────────────────────────────────── -->
+
+    <div class="entity-card">
+        <h3>Tenant Isolation (The Most Important Pattern)</h3>
+        <p>
+            The <code>org_id</code> foreign key is the <strong>single most important relationship</strong> in the entire data model. It appears on Users, Files, FinanceKpis, LeadsKpis, and LaborKpis. Every API query that returns tenant-scoped data filters by <code>org_id</code> to ensure that a user from Organisation A can never see Organisation B's documents, users, or KPI data. This isolation is enforced at multiple layers: the application code (API controllers filter by org_id), the database (row-level security policies), and the storage layer (each organisation has its own Supabase Storage bucket). The AI chatbot also respects this boundary — when retrieving document embeddings for a RAG query, the metadata filter ensures only the requesting user's organisation's documents are searched.
+        </p>
+    </div>
+
+    <div class="entity-card">
+        <h3>Authentication vs. Authorization (Two Separate Systems)</h3>
+        <p>
+            <strong>Authentication</strong> (proving who you are) is handled entirely by <strong>Clerk</strong>, an external identity provider. Clerk manages user registration, login, password hashing, session tokens, and multi-factor authentication. When a user logs in, Clerk issues a JWT (JSON Web Token) that the frontend sends with every API request.
+        </p>
+        <p>
+            <strong>Authorization</strong> (determining what you can do) is handled by the KMS itself. The <code>requireAuth</code> middleware verifies the Clerk JWT, then the <code>requireRole</code> middleware checks the user's role from the JWT's public metadata against the endpoint's minimum required role level. The Role and Permission entities in the database define the authorization model, while Clerk defines the authentication model. The <code>clerk_id</code> on the User entity is the bridge between the two systems.
+        </p>
+    </div>
+
+    <div class="entity-card">
+        <h3>The Document-to-Intelligence Pipeline</h3>
+        <p>
+            There is a directional flow from raw document to AI-ready knowledge:
+        </p>
+        <p>
+            <strong>File upload → Supabase Storage → Ingestion pipeline → Text extraction (PDF/DOCX/XLSX/OCR) → Embedding generation (Ollama) → document_embeddings table → RAG retrieval → Chatbot response</strong>
+        </p>
+        <p>
+            This pipeline transforms a static document (a PDF sitting in storage) into searchable, AI-queryable knowledge. The File entity represents the document as an organizational asset; the document_embeddings entity represents the same content as semantic vectors that the AI can reason over. They are two representations of the same underlying knowledge, connected through the ingestion pipeline.
+        </p>
+    </div>
+
+    <div class="entity-card">
+        <h3>External Data Flow (Integrations → KPIs → Dashboards)</h3>
+        <p>
+            The integration tokens enable a second data pipeline:
+        </p>
+        <p>
+            <strong>Organisation authorizes OAuth → Token stored → System fetches data from external API → Data transformed into KPI snapshots → Stored in FinanceKpi/LeadsKpi/LaborKpi → Rendered on organisation dashboard</strong>
+        </p>
+        <p>
+            This pipeline transforms raw data from multiple external tools (QuickBooks for finances, HubSpot for sales/leads, Monday.com or ClickUp for labor) into a <strong>unified dashboard experience</strong>. The organisation doesn't need to log into four different tools and mentally synthesize the data — the KMS pulls it all together into a coherent business intelligence view with computed metrics like EBITDA margin, cash runway, utilization rates, and conversion rates.
+        </p>
+    </div>
+
+    <!-- ─────────────────────────────────────────────────── -->
+    <h2>5. Entity Relationship Summary Table</h2>
+    <!-- ─────────────────────────────────────────────────── -->
+
+    <table>
+        <thead>
+            <tr>
+                <th>Entity</th>
+                <th>Relates To</th>
+                <th>Relationship Type</th>
+                <th>Business Meaning</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>Organisation</td><td>User</td><td>One-to-Many</td><td>An organisation has multiple employees on the platform</td></tr>
+            <tr><td>Organisation</td><td>File</td><td>One-to-Many</td><td>An organisation owns multiple documents in their knowledge base</td></tr>
+            <tr><td>Organisation</td><td>FinanceKpi</td><td>One-to-Many</td><td>An organisation has financial snapshots across multiple time periods</td></tr>
+            <tr><td>Organisation</td><td>LeadsKpi</td><td>One-to-Many</td><td>An organisation has sales pipeline snapshots across multiple time periods</td></tr>
+            <tr><td>Organisation</td><td>LaborKpi</td><td>One-to-Many</td><td>An organisation has workforce metrics across multiple time periods</td></tr>
+            <tr><td>Organisation</td><td>OAuth Tokens</td><td>One-to-One (per service)</td><td>An organisation has one set of credentials per connected external service</td></tr>
+            <tr><td>User</td><td>Organisation</td><td>Many-to-One (optional)</td><td>A user belongs to one organisation (or none, if Maural staff)</td></tr>
+            <tr><td>User</td><td>Role</td><td>Many-to-One</td><td>A user is assigned one role that determines their access level</td></tr>
+            <tr><td>User</td><td>File</td><td>One-to-Many</td><td>A user can upload multiple documents</td></tr>
+            <tr><td>Role</td><td>Permission</td><td>Many-to-Many (via RolePermission)</td><td>A role bundles multiple permissions; a permission can belong to multiple roles</td></tr>
+            <tr><td>File</td><td>Category</td><td>Many-to-One</td><td>A file is classified under one category (e.g., "Financial")</td></tr>
+            <tr><td>File</td><td>document_embeddings</td><td>One-to-Many (implicit)</td><td>A file's content is split into multiple embedded chunks for AI search</td></tr>
+        </tbody>
+    </table>
+
+    <p style="text-align: center; color: #999; font-size: 12px; margin-top: 40px;">
+        Maural Knowledge Hub — Entity Relationships & Business Context | Prepared March 2026
+    </p>
+
+</div>
+</body>
+</html>

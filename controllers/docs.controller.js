@@ -144,7 +144,7 @@ exports.getDocumentActivity = async (req, res) => {
  * @route POST /docs/
  * @param {file}   req.file          - The file uploaded via multipart/form-data (field name: "file")
  * @param {number} req.body.ctg_id   - Category ID to assign to the document
- * @param {number} req.body.client_id - Client ID that owns this document
+ * @param {string} req.body.org_id  - Organisation UUID that owns this document
  * @param {number} req.body.user_id  - User ID of the uploader
  * @returns {object} The created file metadata record
  * */
@@ -153,7 +153,7 @@ exports.createDocument = async (req, res) => {
     return res.status(400).json({ message: "No file provided" });
   }
 
-  const { ctg_id, client_id, user_id } = req.body;
+  const { ctg_id, org_id, user_id } = req.body;
   const safeName = encodeURIComponent(req.file.originalname);
 
   try {
@@ -176,7 +176,7 @@ exports.createDocument = async (req, res) => {
         file_size: req.file.size,
         file_source: data.fullPath,
         ctg_id: ctg_id ? BigInt(ctg_id) : undefined,
-        client_id: client_id ? BigInt(client_id) : undefined,
+        org_id: org_id || undefined,
         user_id: user_id ? BigInt(user_id) : undefined,
       },
     });
@@ -228,12 +228,12 @@ exports.addDocumentComment = async (req, res) => {
  * @param {string} req.params.id      - The UUID of the document to update
  * @param {string} req.body.file_name - Updated file name
  * @param {number} req.body.ctg_id    - Updated category ID
- * @param {number} req.body.client_id - Updated client ID
+ * @param {string} req.body.org_id    - Updated organisation UUID
  * @returns {object} The updated file metadata record
  * */
 exports.updateDocument = async (req, res) => {
   const { id } = req.params;
-  const { file_name, ctg_id, client_id } = req.body;
+  const { file_name, ctg_id, org_id } = req.body;
 
   try {
     const updatedFile = await prisma.file.update({
@@ -241,7 +241,7 @@ exports.updateDocument = async (req, res) => {
       data: {
         file_name,
         ctg_id: ctg_id ? BigInt(ctg_id) : undefined,
-        client_id: client_id ? BigInt(client_id) : undefined,
+        org_id: org_id || undefined,
       },
     });
     res.status(200).json(updatedFile);

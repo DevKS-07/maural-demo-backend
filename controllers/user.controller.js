@@ -150,15 +150,16 @@ exports.getUserPermissions = async (req, res) => {
  * @param {string} req.body.first_name - First name of the new user (required)
  * @param {string} req.body.last_name - Last name of the new user (required)
  * @param {string} req.body.email - Email of the new user (required)
- * @param {number} req.body.client_id - ID of the client this user belongs to
+ * @param {string} req.body.org_id - UUID of the organisation this user belongs to
  * @param {number} req.body.role_id - ID of the role assigned to this user
  * @param {string} req.body.phone - Phone number of the new user
  * @param {string} req.body.gender - Gender of the new user
  * @param {string} req.body.status - Status of the new user (e.g. active, inactive)
+ * @param {string} req.body.job_title - Job title of the new user (e.g. CEO, CTO)
  * @returns {object} - The newly created user object
  * */
 exports.createUser = async (req, res) => {
-  const { first_name, last_name, email, client_id, role_id, phone, gender, status } = req.body;
+  const { first_name, last_name, email, org_id, role_id, phone, gender, status, job_title } = req.body;
 
   if (!first_name || !last_name || !email) {
     return res.status(400).json({ message: "first_name, last_name, and email are required" });
@@ -173,7 +174,8 @@ exports.createUser = async (req, res) => {
         phone,
         gender,
         status,
-        client_id: client_id ? BigInt(client_id) : undefined,
+        job_title,
+        org_id: org_id || undefined,
         role_id: role_id ? BigInt(role_id) : undefined,
       },
     });
@@ -193,16 +195,17 @@ exports.createUser = async (req, res) => {
  * @param {string} req.body.first_name - Updated first name
  * @param {string} req.body.last_name - Updated last name
  * @param {string} req.body.email - Updated email
- * @param {number} req.body.client_id - Updated client ID
+ * @param {string} req.body.org_id - Updated organisation UUID
  * @param {number} req.body.role_id - Updated role ID
  * @param {string} req.body.phone - Updated phone number
  * @param {string} req.body.gender - Updated gender
  * @param {string} req.body.status - Updated status
+ * @param {string} req.body.job_title - Updated job title
  * @returns {object} - The updated user object
  * */
 exports.updateUser = async (req, res) => {
   const { userId } = req.params;
-  const { first_name, last_name, email, client_id, role_id, phone, gender, status } = req.body;
+  const { first_name, last_name, email, org_id, role_id, phone, gender, status, job_title } = req.body;
 
   try {
     const updatedUser = await prisma.user.update({
@@ -214,7 +217,8 @@ exports.updateUser = async (req, res) => {
         phone,
         gender,
         status,
-        client_id: client_id ? BigInt(client_id) : undefined,
+        job_title,
+        org_id: org_id || undefined,
         role_id: role_id ? BigInt(role_id) : undefined,
       },
     });

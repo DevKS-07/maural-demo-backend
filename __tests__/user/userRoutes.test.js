@@ -48,7 +48,7 @@ const MOCK_USER = {
   email: "jane@example.com",
   phone: "555-1234",
   status: "active",
-  client_id: 10,
+  org_id: "a1b2c3d4-uuid",
   role_id: 2,
 };
 

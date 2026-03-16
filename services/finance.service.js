@@ -27,12 +27,12 @@ const QB_BASE_URL = QUICKBOOKS_BASE_URL || "https://quickbooks.api.intuit.com";
  * Rebuild an authenticated OAuthClient from stored DB tokens.
  * Never relies on in-memory state — safe across server restarts.
  */
-const getAuthenticatedClient = async (clientId) => {
+const getAuthenticatedClient = async (orgId) => {
   const token = await prisma.quickbooksToken.findUnique({
-    where: { client_Id: clientId },
+    where: { org_id: orgId },
   });
   if (!token)
-    throw new Error(`No QuickBooks token found for user: ${clientId}`);
+    throw new Error(`No QuickBooks token found for organisation: ${orgId}`);
 
   const client = new OAuthClient({
     clientId: CLIENT_ID,
@@ -58,8 +58,8 @@ const getAuthenticatedClient = async (clientId) => {
  * Refresh tokens and persist back to DB.
  * Called automatically on 401 — can also be called directly.
  */
-const refreshAndPersistTokenService = async (clientId) => {
-  const { client, token } = await getAuthenticatedClient(clientId);
+const refreshAndPersistTokenService = async (orgId) => {
+  const { client, token } = await getAuthenticatedClient(orgId);
   const authResponse = await client.refresh();
   const {
     access_token,
@@ -70,7 +70,7 @@ const refreshAndPersistTokenService = async (clientId) => {
   } = authResponse.json;
 
   await prisma.quickbooksToken.update({
-    where: { client_Id: clientId },
+    where: { org_id: orgId },
     data: {
       access_token,
       refresh_token,
@@ -88,12 +88,12 @@ const refreshAndPersistTokenService = async (clientId) => {
 // ─────────────────────────────────────────────────────────────────
 
 const fetchQBReport = async (
-  clientId,
+  orgId,
   reportName,
   params = {},
   retry = true,
 ) => {
-  const { token } = await getAuthenticatedClient(clientId);
+  const { token } = await getAuthenticatedClient(orgId);
   const url = `${QB_BASE_URL}/v3/company/${token.realmId}/reports/${reportName}`;
 
   try {
@@ -112,15 +112,15 @@ const fetchQBReport = async (
 
     if (status === 401 && retry) {
       console.log(
-        `[QB] 401 on ${reportName} — refreshing for user: ${clientId}`,
+        `[QB] 401 on ${reportName} — refreshing for organisation: ${orgId}`,
       );
-      await refreshAndPersistTokenService(clientId);
-      return fetchQBReport(clientId, reportName, params, false);
+      await refreshAndPersistTokenService(orgId);
+      return fetchQBReport(orgId, reportName, params, false);
     }
     if (status === 429) {
       const wait = parseInt(error.response.headers["retry-after"] || "60", 10);
       await new Promise((r) => setTimeout(r, wait * 1000));
-      return fetchQBReport(clientId, reportName, params, retry);
+      return fetchQBReport(orgId, reportName, params, retry);
     }
     throw new Error(`[QB] ${reportName} failed (${status}): ${message}`, { cause: error });
   }
@@ -155,7 +155,7 @@ const findRowValue = (rows = [], label) => {
 // ─────────────────────────────────────────────────────────────────
 
 const getProfitAndLossService = async (
-  clientId,
+  orgId,
   { startDate, endDate, accounting = "Accrual" } = {},
 ) => {
   const params = { accounting_method: accounting };
@@ -164,7 +164,7 @@ const getProfitAndLossService = async (
     params.end_date = endDate;
   } else params.date_macro = "This Month";
 
-  const report = await fetchQBReport(clientId, "ProfitAndLoss", params);
+  const report = await fetchQBReport(orgId, "ProfitAndLoss", params);
   const rows = report.Rows?.Row || [];
 
   const totalIncome = findRowValue(rows, "Total Income") ?? 0;
@@ -203,11 +203,11 @@ const getProfitAndLossService = async (
   };
 };
 
-const getBalanceSheetService = async (clientId, { asOfDate } = {}) => {
+const getBalanceSheetService = async (orgId, { asOfDate } = {}) => {
   const params = asOfDate
     ? { date_macro: "Custom", end_date: asOfDate }
     : { date_macro: "Today" };
-  const report = await fetchQBReport(clientId, "BalanceSheet", params);
+  const report = await fetchQBReport(orgId, "BalanceSheet", params);
   const rows = report.Rows?.Row || [];
 
   const cashOnHand =
@@ -232,14 +232,14 @@ const getBalanceSheetService = async (clientId, { asOfDate } = {}) => {
 };
 
 const getBudgetVsActualsService = async (
-  clientId,
+  orgId,
   { startDate, endDate } = {},
 ) => {
   const params =
     startDate && endDate
       ? { start_date: startDate, end_date: endDate }
       : { date_macro: "This Fiscal Year" };
-  const report = await fetchQBReport(clientId, "BudgetVsActuals", params);
+  const report = await fetchQBReport(orgId, "BudgetVsActuals", params);
   const rows = report.Rows?.Row || [];
 
   const findBudgetRow = (rows, label) => {
@@ -289,18 +289,18 @@ const getBudgetVsActualsService = async (
  * Returns all Financial & Cash KPIs as a plain object.
  * No req, no res. Call it from any controller, cron, or webhook.
  *
- * @param {string} clientId
+ * @param {string} orgId
  * @param {object} options - { startDate, endDate, asOfDate }
  * @returns {Promise<object>}
  */
 const getFinancialKPIsService = async (
-  clientId,
+  orgId,
   { startDate, endDate, asOfDate } = {},
 ) => {
   const [pl, bs, bva] = await Promise.all([
-    getProfitAndLossService(clientId, { startDate, endDate }),
-    getBalanceSheetService(clientId, { asOfDate: asOfDate || endDate }),
-    getBudgetVsActualsService(clientId, { startDate, endDate }),
+    getProfitAndLossService(orgId, { startDate, endDate }),
+    getBalanceSheetService(orgId, { asOfDate: asOfDate || endDate }),
+    getBudgetVsActualsService(orgId, { startDate, endDate }),
   ]);
 
   const monthlyBurn = pl.cogs + pl.operatingExpenses;

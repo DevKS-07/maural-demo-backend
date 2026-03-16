@@ -68,14 +68,19 @@ const callbackHandler = async (req, res) => {
     const metaRes = await axios.get(
       `https://api.hubapi.com/oauth/v1/access-tokens/${access_token}`,
     );
-    // TODO: Replace hub_id with Clerk user ID once auth is integrated
-    const user_id = String(metaRes.data.hub_id);
-    req.session.user_id = user_id;
+    // TODO: Replace with org_id from authenticated user's organisation
+    const org_id = String(metaRes.data.hub_id);
+    req.session.org_id = org_id;
 
     await prisma.hubspotToken.upsert({
-      where: { user_id },
-      create: { user_id, access_token, refresh_token, expires_at },
+      where: { org_id },
+      create: { org_id, access_token, refresh_token, expires_at },
       update: { access_token, refresh_token, expires_at },
+    });
+
+    await prisma.organisation.update({
+      where: { org_id },
+      data: { hubspot_connected: true },
     });
 
     res.redirect("/api/integrations/hubspot/success");
@@ -86,9 +91,9 @@ const callbackHandler = async (req, res) => {
 };
 
 const connectionSuccessHandler = async (req, res) => {
-  const user_id = req.session.user_id;
+  const org_id = req.session.org_id;
   try {
-    const token = await prisma.hubspotToken.findUnique({ where: { user_id } });
+    const token = await prisma.hubspotToken.findUnique({ where: { org_id } });
     if (!token) return res.status(404).send("Token not found.");
     res.redirect("/api/integrations/hubspot/status");
   } catch (_error) {
@@ -98,9 +103,9 @@ const connectionSuccessHandler = async (req, res) => {
 
 const connectionStatus = async (req, res) => {
   try {
-    const user_id = req.session.user_id;
-    if (!user_id) return res.status(200).json({ connected: false });
-    const token = await prisma.hubspotToken.findUnique({ where: { user_id } });
+    const org_id = req.session.org_id;
+    if (!org_id) return res.status(200).json({ connected: false });
+    const token = await prisma.hubspotToken.findUnique({ where: { org_id } });
     return res.status(200).json({ connected: Boolean(token) });
   } catch (_error) {
     return res.status(500).json({
@@ -118,12 +123,12 @@ const connectionStatus = async (req, res) => {
  * GET /api/integrations/hubspot/kpis/leads
  */
 const getLeadsKPIs = async (req, res) => {
-  const user_id = req.session.user_id;
-  if (!user_id) return res.status(401).json({ error: "Not authenticated" });
+  const org_id = req.session.org_id;
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
 
   const { startDate, endDate } = req.query;
   try {
-    const kpis = await getLeadsKPIsService(user_id, { startDate, endDate });
+    const kpis = await getLeadsKPIsService(org_id, { startDate, endDate });
     return res.status(200).json(kpis);
   } catch (error) {
     console.error("[HubSpot] getLeadsKPIs error:", error.message);

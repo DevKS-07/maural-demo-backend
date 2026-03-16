@@ -16,4 +16,7 @@ router.post("/clerk", authController.handleClerkWebhook);
 // Get the current authenticated user's full DB profile (with role + permissions)
 router.get("/me", requireAuth, authController.getMe);
 
+// Get the current authenticated user's organisation
+router.get("/org", requireAuth, authController.getMyOrg);
+
 module.exports = router;

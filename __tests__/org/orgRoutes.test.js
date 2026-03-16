@@ -1,6 +1,6 @@
 // Mock lib/prisma before any require() calls
 jest.mock("../../lib/prisma", () => ({
-  client: {
+  organisation: {
     findMany: jest.fn(),
     findUnique: jest.fn(),
     create: jest.fn(),
@@ -18,7 +18,7 @@ jest.mock("../../lib/prisma", () => ({
 const request = require("supertest");
 const express = require("express");
 const prisma = require("../../lib/prisma");
-const clientRouter = require("../../routes/client.routes");
+const orgRouter = require("../../routes/org.routes");
 
 // ---------------------------------------------------------------------------
 // App setup
@@ -29,7 +29,7 @@ let app;
 beforeAll(() => {
   app = express();
   app.use(express.json());
-  app.use("/client", clientRouter);
+  app.use("/org", orgRouter);
 });
 
 beforeEach(() => jest.clearAllMocks());
@@ -38,97 +38,96 @@ beforeEach(() => jest.clearAllMocks());
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const MOCK_CLIENT = {
-  client_id: 1,
-  client_name: "Acme Corp",
+const MOCK_ORG = {
+  org_id: "a1b2c3d4-uuid",
+  org_name: "Acme Corp",
   industry: "Technology",
   founded: "2010-01-01",
   company_location: "Seattle, WA",
   gpt_types: "standard",
-  storage_bucket: "a1b2c3d4-uuid",
 };
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("Client Routes - Integration Tests", () => {
+describe("Org Routes - Integration Tests", () => {
 
   // ========================================================================
-  // GET /client/
+  // GET /org/
   // ========================================================================
-  describe("GET /client/", () => {
+  describe("GET /org/", () => {
     test("returns 200 and testing message", async () => {
-      const res = await request(app).get("/client/");
+      const res = await request(app).get("/org/");
 
       expect(res.status).toBe(200);
-      expect(res.text).toBe("Client API is working");
+      expect(res.text).toBe("Organisation API is working");
     });
   });
 
   // ========================================================================
-  // GET /client/all
+  // GET /org/all
   // ========================================================================
-  describe("GET /client/all", () => {
-    test("returns 200 with clients array", async () => {
-      prisma.client.findMany.mockResolvedValue([MOCK_CLIENT]);
+  describe("GET /org/all", () => {
+    test("returns 200 with organisations array", async () => {
+      prisma.organisation.findMany.mockResolvedValue([MOCK_ORG]);
 
-      const res = await request(app).get("/client/all");
+      const res = await request(app).get("/org/all");
 
       expect(res.status).toBe(200);
-      expect(res.body).toEqual([MOCK_CLIENT]);
+      expect(res.body).toEqual([MOCK_ORG]);
     });
 
     test("returns 500 on database error", async () => {
-      prisma.client.findMany.mockRejectedValue(new Error("DB error"));
+      prisma.organisation.findMany.mockRejectedValue(new Error("DB error"));
 
-      const res = await request(app).get("/client/all");
+      const res = await request(app).get("/org/all");
 
       expect(res.status).toBe(500);
-      expect(res.body).toHaveProperty("message", "Failed to retrieve clients");
+      expect(res.body).toHaveProperty("message", "Failed to retrieve organisations");
     });
   });
 
   // ========================================================================
-  // GET /client/:clientId
+  // GET /org/:orgId
   // ========================================================================
-  describe("GET /client/:clientId", () => {
-    test("returns 200 with client when found", async () => {
-      prisma.client.findUnique.mockResolvedValue(MOCK_CLIENT);
+  describe("GET /org/:orgId", () => {
+    test("returns 200 with organisation when found", async () => {
+      prisma.organisation.findUnique.mockResolvedValue(MOCK_ORG);
 
-      const res = await request(app).get("/client/1");
+      const res = await request(app).get("/org/a1b2c3d4-uuid");
 
       expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({ client_name: "Acme Corp" });
+      expect(res.body).toMatchObject({ org_name: "Acme Corp" });
     });
 
-    test("returns 404 when client not found", async () => {
-      prisma.client.findUnique.mockResolvedValue(null);
+    test("returns 404 when organisation not found", async () => {
+      prisma.organisation.findUnique.mockResolvedValue(null);
 
-      const res = await request(app).get("/client/999");
+      const res = await request(app).get("/org/nonexistent-uuid");
 
       expect(res.status).toBe(404);
-      expect(res.body).toHaveProperty("message", "Client with ID 999 not found");
+      expect(res.body).toHaveProperty("message", "Organisation with ID nonexistent-uuid not found");
     });
 
     test("returns 500 on database error", async () => {
-      prisma.client.findUnique.mockRejectedValue(new Error("DB error"));
+      prisma.organisation.findUnique.mockRejectedValue(new Error("DB error"));
 
-      const res = await request(app).get("/client/1");
+      const res = await request(app).get("/org/a1b2c3d4-uuid");
 
       expect(res.status).toBe(500);
     });
   });
 
   // ========================================================================
-  // GET /client/:clientId/users
+  // GET /org/:orgId/users
   // ========================================================================
-  describe("GET /client/:clientId/users", () => {
+  describe("GET /org/:orgId/users", () => {
     test("returns 200 with users array", async () => {
       const mockUsers = [{ user_id: 1, first_name: "Jane", email: "jane@acme.com" }];
       prisma.user.findMany.mockResolvedValue(mockUsers);
 
-      const res = await request(app).get("/client/1/users");
+      const res = await request(app).get("/org/a1b2c3d4-uuid/users");
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual(mockUsers);
@@ -137,7 +136,7 @@ describe("Client Routes - Integration Tests", () => {
     test("returns 200 with empty array when no users", async () => {
       prisma.user.findMany.mockResolvedValue([]);
 
-      const res = await request(app).get("/client/1/users");
+      const res = await request(app).get("/org/a1b2c3d4-uuid/users");
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual([]);
@@ -146,21 +145,21 @@ describe("Client Routes - Integration Tests", () => {
     test("returns 500 on database error", async () => {
       prisma.user.findMany.mockRejectedValue(new Error("DB error"));
 
-      const res = await request(app).get("/client/1/users");
+      const res = await request(app).get("/org/a1b2c3d4-uuid/users");
 
       expect(res.status).toBe(500);
     });
   });
 
   // ========================================================================
-  // GET /client/:clientId/files
+  // GET /org/:orgId/files
   // ========================================================================
-  describe("GET /client/:clientId/files", () => {
+  describe("GET /org/:orgId/files", () => {
     test("returns 200 with files array", async () => {
       const mockFiles = [{ file_id: "abc-123", file_name: "contract.pdf" }];
       prisma.file.findMany.mockResolvedValue(mockFiles);
 
-      const res = await request(app).get("/client/1/files");
+      const res = await request(app).get("/org/a1b2c3d4-uuid/files");
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual(mockFiles);
@@ -169,84 +168,84 @@ describe("Client Routes - Integration Tests", () => {
     test("returns 500 on database error", async () => {
       prisma.file.findMany.mockRejectedValue(new Error("DB error"));
 
-      const res = await request(app).get("/client/1/files");
+      const res = await request(app).get("/org/a1b2c3d4-uuid/files");
 
       expect(res.status).toBe(500);
     });
   });
 
   // ========================================================================
-  // POST /client/
+  // POST /org/
   // ========================================================================
-  describe("POST /client/", () => {
-    test("returns 201 with created client", async () => {
-      prisma.client.create.mockResolvedValue(MOCK_CLIENT);
+  describe("POST /org/", () => {
+    test("returns 201 with created organisation", async () => {
+      prisma.organisation.create.mockResolvedValue(MOCK_ORG);
 
-      const res = await request(app).post("/client/").send({
-        client_name: "Acme Corp",
+      const res = await request(app).post("/org/").send({
+        org_name: "Acme Corp",
         industry: "Technology",
       });
 
       expect(res.status).toBe(201);
-      expect(res.body).toMatchObject({ client_name: "Acme Corp" });
+      expect(res.body).toMatchObject({ org_name: "Acme Corp" });
     });
 
-    test("returns 400 when client_name is missing", async () => {
-      const res = await request(app).post("/client/").send({ industry: "Technology" });
+    test("returns 400 when org_name is missing", async () => {
+      const res = await request(app).post("/org/").send({ industry: "Technology" });
 
       expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty("message", "client_name is required");
+      expect(res.body).toHaveProperty("message", "org_name is required");
     });
 
     test("returns 500 on database error", async () => {
-      prisma.client.create.mockRejectedValue(new Error("DB error"));
+      prisma.organisation.create.mockRejectedValue(new Error("DB error"));
 
-      const res = await request(app).post("/client/").send({ client_name: "Acme Corp" });
+      const res = await request(app).post("/org/").send({ org_name: "Acme Corp" });
 
       expect(res.status).toBe(500);
     });
   });
 
   // ========================================================================
-  // PUT /client/:clientId
+  // PUT /org/:orgId
   // ========================================================================
-  describe("PUT /client/:clientId", () => {
-    test("returns 200 with updated client", async () => {
-      const updated = { ...MOCK_CLIENT, client_name: "Acme International" };
-      prisma.client.update.mockResolvedValue(updated);
+  describe("PUT /org/:orgId", () => {
+    test("returns 200 with updated organisation", async () => {
+      const updated = { ...MOCK_ORG, org_name: "Acme International" };
+      prisma.organisation.update.mockResolvedValue(updated);
 
-      const res = await request(app).put("/client/1").send({ client_name: "Acme International" });
+      const res = await request(app).put("/org/a1b2c3d4-uuid").send({ org_name: "Acme International" });
 
       expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({ client_name: "Acme International" });
+      expect(res.body).toMatchObject({ org_name: "Acme International" });
     });
 
     test("returns 500 on database error", async () => {
-      prisma.client.update.mockRejectedValue(new Error("DB error"));
+      prisma.organisation.update.mockRejectedValue(new Error("DB error"));
 
-      const res = await request(app).put("/client/1").send({ client_name: "Acme International" });
+      const res = await request(app).put("/org/a1b2c3d4-uuid").send({ org_name: "Acme International" });
 
       expect(res.status).toBe(500);
     });
   });
 
   // ========================================================================
-  // DELETE /client/:clientId
+  // DELETE /org/:orgId
   // ========================================================================
-  describe("DELETE /client/:clientId", () => {
+  describe("DELETE /org/:orgId", () => {
     test("returns 200 with success message", async () => {
-      prisma.client.delete.mockResolvedValue(MOCK_CLIENT);
+      prisma.organisation.delete.mockResolvedValue(MOCK_ORG);
 
-      const res = await request(app).delete("/client/1");
+      const res = await request(app).delete("/org/a1b2c3d4-uuid");
 
       expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty("message", "Client with ID 1 deleted");
+      expect(res.body).toHaveProperty("message", "Organisation with ID a1b2c3d4-uuid deleted");
     });
 
     test("returns 500 on database error", async () => {
-      prisma.client.delete.mockRejectedValue(new Error("DB error"));
+      prisma.organisation.delete.mockRejectedValue(new Error("DB error"));
 
-      const res = await request(app).delete("/client/1");
+      const res = await request(app).delete("/org/a1b2c3d4-uuid");
 
       expect(res.status).toBe(500);
     });

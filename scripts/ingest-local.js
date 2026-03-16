@@ -285,15 +285,15 @@ async function main() {
       console.log(`[embed] ${vectors.length} vectors`);
 
       // 5. Build rows.
-      // client_id / ctg_id are null here because local uploads are not yet
-      // associated with a specific client or category. Set them after updating
+      // org_id / ctg_id are null here because local uploads are not yet
+      // associated with a specific organisation or category. Set them after updating
       // the File record (e.g. via the admin UI or SQL).
       const rows = chunks.map((chunk, i) => ({
         content: chunk.content,
         metadata: {
           file_id: fileId,
           file_name: realName,
-          client_id: null, // assign after migrating File table
+          org_id: null, // assign after migrating File table
           ctg_id: null, // assign after migrating File table (FK → Category)
           chunk_index: chunk.chunkIndex,
         },

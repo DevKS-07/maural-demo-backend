@@ -241,7 +241,7 @@ async function ingestSingleFile(file) {
     metadata: {
       file_id: String(file.file_id),
       file_name: file.file_name,
-      client_id: file.client_id ? Number(file.client_id) : null,
+      org_id: file.org_id || null,
       ctg_id: file.ctg_id ? Number(file.ctg_id) : null,
       chunk_index: chunk.chunkIndex,
     },
@@ -277,7 +277,7 @@ exports.ingest = async (req, res) => {
       SELECT file_id::text AS file_id,
              file_name,
              file_source,
-             client_id,
+             org_id,
              ctg_id
       FROM   "File"
     `;
@@ -314,14 +314,14 @@ exports.ingest = async (req, res) => {
         const vectors = await embedBatch(chunks.map((c) => c.content));
 
         // 6. Prepare rows for document_embeddings.
-        // client_id enables the RAG service to scope retrieval to a specific client.
+        // org_id enables the RAG service to scope retrieval to a specific organisation.
         // ctg_id enables filtering by document category (FK → Category table).
         const rows = chunks.map((chunk, i) => ({
           content: chunk.content,
           metadata: {
             file_id: file.file_id,
             file_name: file.file_name,
-            client_id: file.client_id ? Number(file.client_id) : null,
+            org_id: file.org_id || null,
             ctg_id: file.ctg_id ? Number(file.ctg_id) : null,
             chunk_index: chunk.chunkIndex,
           },

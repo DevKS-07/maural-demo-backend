@@ -17,13 +17,13 @@ const CLIENT_SECRET = CLICKUP_CLIENT_SECRET;
 //  AUTH HELPERS
 // ─────────────────────────────────────────────────────────────────
 
-const getTokenRecord = async (userId) => {
-  const token = await prisma.clickupToken.findUnique({ where: { user_id: userId } });
-  if (!token) throw new Error(`No ClickUp token found for user: ${userId}`);
+const getTokenRecord = async (orgId) => {
+  const token = await prisma.clickupToken.findUnique({ where: { org_id: orgId } });
+  if (!token) throw new Error(`No ClickUp token found for organisation: ${orgId}`);
   return token;
 };
 
-const refreshAndPersistToken = async (userId, refreshToken) => {
+const refreshAndPersistToken = async (orgId, refreshToken) => {
   const response = await axios.post(
     "https://api.clickup.com/api/v2/oauth/token",
     new URLSearchParams({
@@ -38,23 +38,23 @@ const refreshAndPersistToken = async (userId, refreshToken) => {
   const expires_at = new Date(Date.now() + expires_in * 1000);
 
   await prisma.clickupToken.update({
-    where: { user_id: userId },
+    where: { org_id: orgId },
     data:  { access_token, refresh_token, expires_at },
   });
 
-  console.log(`[ClickUp] Tokens refreshed for user: ${userId}`);
+  console.log(`[ClickUp] Tokens refreshed for organisation: ${orgId}`);
   return access_token;
 };
 
 /**
  * Returns a valid access token — auto-refreshes if expired.
  */
-const getValidAccessToken = async (userId) => {
-  const token     = await getTokenRecord(userId);
+const getValidAccessToken = async (orgId) => {
+  const token     = await getTokenRecord(orgId);
   const isExpired = new Date() >= new Date(token.expires_at);
   if (isExpired) {
-    console.log(`[ClickUp] Token expired for user: ${userId} — refreshing...`);
-    return await refreshAndPersistToken(userId, token.refresh_token);
+    console.log(`[ClickUp] Token expired for organisation: ${orgId} — refreshing...`);
+    return await refreshAndPersistToken(orgId, token.refresh_token);
   }
   return token.access_token;
 };
@@ -67,8 +67,8 @@ const getValidAccessToken = async (userId) => {
  * Make an authenticated GET request to the ClickUp REST API.
  * Auto-refreshes token on 401, backs off on 429.
  */
-const fetchClickUp = async (userId, endpoint, params = {}, retry = true) => {
-  const accessToken = await getValidAccessToken(userId);
+const fetchClickUp = async (orgId, endpoint, params = {}, retry = true) => {
+  const accessToken = await getValidAccessToken(orgId);
 
   try {
     const response = await axios.get(
@@ -85,17 +85,17 @@ const fetchClickUp = async (userId, endpoint, params = {}, retry = true) => {
     const message = error.response?.data?.err || error.message;
 
     if (status === 401 && retry) {
-      console.log(`[ClickUp] 401 — refreshing token for user: ${userId}`);
-      const token = await getTokenRecord(userId);
-      await refreshAndPersistToken(userId, token.refresh_token);
-      return fetchClickUp(userId, endpoint, params, false);
+      console.log(`[ClickUp] 401 — refreshing token for organisation: ${orgId}`);
+      const token = await getTokenRecord(orgId);
+      await refreshAndPersistToken(orgId, token.refresh_token);
+      return fetchClickUp(orgId, endpoint, params, false);
     }
 
     if (status === 429) {
       const wait = parseInt(error.response.headers["retry-after"] || "10", 10);
       console.warn(`[ClickUp] Rate limited. Waiting ${wait}s...`);
       await new Promise((r) => setTimeout(r, wait * 1000));
-      return fetchClickUp(userId, endpoint, params, retry);
+      return fetchClickUp(orgId, endpoint, params, retry);
     }
 
     throw new Error(`[ClickUp] ${endpoint} failed (${status}): ${message}`, { cause: error });
@@ -113,20 +113,20 @@ const fetchClickUp = async (userId, endpoint, params = {}, retry = true) => {
  * Uses externalId stored on ClientIntegration if available,
  * otherwise fetches from the ClickUp API.
  */
-const getTeamId = async (userId) => {
-  const token = await getTokenRecord(userId);
+const getTeamId = async (orgId) => {
+  const token = await getTokenRecord(orgId);
 
   // If teamId was stored during OAuth, use it directly
   if (token.team_id) return token.team_id;
 
   // Otherwise fetch from API and cache it
-  const data   = await fetchClickUp(userId, "/team");
+  const data   = await fetchClickUp(orgId, "/team");
   const teamId = data.teams?.[0]?.id;
-  if (!teamId) throw new Error("[ClickUp] No workspace found for user");
+  if (!teamId) throw new Error("[ClickUp] No workspace found for organisation");
 
   // Persist for future calls
   await prisma.clickupToken.update({
-    where: { user_id: userId },
+    where: { org_id: orgId },
     data:  { team_id: teamId },
   });
 

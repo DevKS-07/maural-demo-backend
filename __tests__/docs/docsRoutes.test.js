@@ -74,7 +74,7 @@ const MOCK_FILE_META = {
   file_size: 204800,
   file_source: "file_storage/uploads/report.pdf",
   ctg_id: 1,
-  client_id: 10,
+  org_id: "a1b2c3d4-uuid",
   user_id: 5,
 };
 
@@ -242,7 +242,7 @@ describe("Docs Routes - Integration Tests", () => {
       const res = await request(app)
         .post("/docs/")
         .field("ctg_id", "1")
-        .field("client_id", "10")
+        .field("org_id", "a1b2c3d4-uuid")
         .field("user_id", "5")
         .attach("file", Buffer.from("fake pdf content"), "report.pdf");
 

@@ -77,14 +77,14 @@ const callbackHandler = async (req, res) => {
         },
       },
     );
-    // TODO: Replace with Clerk user ID once auth is integrated
-    const user_id = String(userRes.data.data.me.id);
-    req.session.user_id = user_id;
+    // TODO: Replace with org_id from authenticated user's organisation
+    const org_id = String(userRes.data.data.me.id);
+    req.session.org_id = org_id;
 
     await prisma.mondayToken.upsert({
-      where: { user_id },
+      where: { org_id },
       create: {
-        user_id,
+        org_id,
         access_token,
         refresh_token: refresh_token ?? null,
         expires_in: expires_in ?? null,
@@ -96,6 +96,11 @@ const callbackHandler = async (req, res) => {
       },
     });
 
+    await prisma.organisation.update({
+      where: { org_id },
+      data: { monday_connected: true },
+    });
+
     res.redirect("/api/integrations/monday/success");
   } catch (error) {
     console.error("[Monday] Token exchange error:", error.message);
@@ -104,9 +109,9 @@ const callbackHandler = async (req, res) => {
 };
 
 const connectionSuccessHandler = async (req, res) => {
-  const user_id = req.session.user_id;
+  const org_id = req.session.org_id;
   try {
-    const token = await prisma.mondayToken.findUnique({ where: { user_id } }); // fixed: added await
+    const token = await prisma.mondayToken.findUnique({ where: { org_id } }); // fixed: added await
     if (!token) return res.status(404).send("Token not found.");
     res.redirect("/api/integrations/monday/status");
   } catch (_error) {
@@ -116,9 +121,9 @@ const connectionSuccessHandler = async (req, res) => {
 
 const connectionStatus = async (req, res) => {
   try {
-    const user_id = req.session.user_id;
-    if (!user_id) return res.status(200).json({ connected: false });
-    const token = await prisma.mondayToken.findUnique({ where: { user_id } });
+    const org_id = req.session.org_id;
+    if (!org_id) return res.status(200).json({ connected: false });
+    const token = await prisma.mondayToken.findUnique({ where: { org_id } });
     return res.status(200).json({ connected: Boolean(token) });
   } catch (_error) {
     return res.status(500).json({

@@ -5,7 +5,7 @@ const homeRoutes = require("./routes/home.routes");
 const adminRoutes = require("./routes/admin.routes");
 const authRoutes = require("./routes/auth.routes");
 const userRoutes = require("./routes/user.routes");
-const clientRoutes = require("./routes/client.routes");
+const orgRoutes = require("./routes/org.routes");
 const docsRoutes = require("./routes/docs.routes");
 const chatRoutes = require("./routes/chat.routes");
 const integrations = require("./routes/integrations.routes");
@@ -36,7 +36,7 @@ router.use("/admin", requireAuth, adminRoutes); // Admin-only management routes
 
 router.use("/user", requireAuth, userRoutes); // User CRUD + activity/files/comments/permissions
 
-router.use("/client", requireAuth, clientRoutes); // Client CRUD + users/files
+router.use("/org", requireAuth, orgRoutes); // Organisation CRUD + users/files
 
 router.use("/docs", requireAuth, docsRoutes); // Documents + comments + activity
 

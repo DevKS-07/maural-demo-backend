@@ -7,12 +7,12 @@ const prisma = require("../lib/prisma");
  * GET /api/summary/financial
  */
 const getFinancialSummary = async (req, res) => {
-  const user_id = req.session.user_id;
-  if (!user_id) return res.status(401).json({ error: "Not authenticated" });
+  const org_id = req.session.org_id;
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
 
   const { startDate, endDate, asOfDate } = req.query;
   try {
-    const financial = await getFinancialKPIsService(user_id, {
+    const financial = await getFinancialKPIsService(org_id, {
       startDate,
       endDate,
       asOfDate,
@@ -28,12 +28,12 @@ const getFinancialSummary = async (req, res) => {
  * GET /api/summary/leads
  */
 const getLeadsSummary = async (req, res) => {
-  const user_id = req.session.user_id;
-  if (!user_id) return res.status(401).json({ error: "Not authenticated" });
+  const org_id = req.session.org_id;
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
 
   const { startDate, endDate } = req.query;
   try {
-    const leads = await getLeadsKPIsService(user_id, { startDate, endDate });
+    const leads = await getLeadsKPIsService(org_id, { startDate, endDate });
     return res.status(200).json({ leads });
   } catch (error) {
     console.error("[SummaryEngine] getLeadsSummary error:", error.message);
@@ -45,12 +45,12 @@ const getLeadsSummary = async (req, res) => {
  * GET /api/summary/labor
  */
 const getLaborSummary = async (req, res) => {
-  const user_id = req.session.user_id;
-  if (!user_id) return res.status(401).json({ error: "Not authenticated" });
+  const org_id = req.session.org_id;
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
 
   const { startDate, endDate } = req.query;
   try {
-    const labor = await getLaborKPIsService(user_id, { startDate, endDate });
+    const labor = await getLaborKPIsService(org_id, { startDate, endDate });
     return res.status(200).json({ labor });
   } catch (error) {
     console.error("[SummaryEngine] getLaborSummary error:", error.message);
@@ -64,16 +64,16 @@ const getLaborSummary = async (req, res) => {
  * Each fails independently via Promise.allSettled.
  */
 const getFullDashboardSummary = async (req, res) => {
-  const user_id = req.session.user_id;
-  if (!user_id) return res.status(401).json({ error: "Not authenticated" });
+  const org_id = req.session.org_id;
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
 
   const { startDate, endDate, asOfDate } = req.query;
 
   try {
     // Run financial and leads in parallel first
     const [financialResult, leadsResult] = await Promise.allSettled([
-      getFinancialKPIsService(user_id, { startDate, endDate, asOfDate }),
-      getLeadsKPIsService(user_id, { startDate, endDate }),
+      getFinancialKPIsService(org_id, { startDate, endDate, asOfDate }),
+      getLeadsKPIsService(org_id, { startDate, endDate }),
     ]);
 
     // Pass QB values into labor for cross-source KPIs (LABOR-2, LABOR-7)
@@ -84,7 +84,7 @@ const getFullDashboardSummary = async (req, res) => {
     const qbTotalRevenue = financial?.totalIncome ?? null;
 
     const [laborResult] = await Promise.allSettled([
-      getLaborKPIsService(user_id, {
+      getLaborKPIsService(org_id, {
         startDate,
         endDate,
         qbLaborCost,
@@ -127,13 +127,13 @@ const getFullDashboardSummary = async (req, res) => {
 
 /**
  * GET /api/summary/scorecard
- * Returns a scorecard entry for each client — DB first, API fallback if stale/missing.
+ * Returns a scorecard entry for each organisation — DB first, API fallback if stale/missing.
  *
  * Response:
  * {
- *   clients: [
+ *   orgs: [
  *     {
- *       clientId, name,
+ *       org_id, name,
  *       score: { totalPipelineValue, pipelineCoverageRatio, totalRevenue,
  *                ebitdaPct, revenuePerHead, workingCapital, billableUtilization }
  *     }
@@ -141,43 +141,43 @@ const getFullDashboardSummary = async (req, res) => {
  * }
  */
 const getScorecardSummary = async (req, res) => {
-  if (!req.session.user_id)
+  if (!req.session.org_id)
     return res.status(401).json({ error: "Not authenticated" });
 
   const { startDate, endDate, asOfDate } = req.query;
 
   try {
-    const clients = await prisma.client.findMany({
-      select: { client_id: true, client_name: true },
+    const orgs = await prisma.organisation.findMany({
+      select: { org_id: true, org_name: true },
     });
 
-    if (!clients.length) {
+    if (!orgs.length) {
       return res
         .status(200)
-        .json({ clients: [], fetchedAt: new Date().toISOString() });
+        .json({ orgs: [], fetchedAt: new Date().toISOString() });
     }
 
     const results = await Promise.allSettled(
-      clients.map((client) =>
-        fetchClientScorecardData(client, { startDate, endDate, asOfDate }),
+      orgs.map((org) =>
+        fetchOrgScorecardData(org, { startDate, endDate, asOfDate }),
       ),
     );
 
-    const clientScores = results.map((result, i) => {
+    const orgScores = results.map((result, i) => {
       if (result.status === "fulfilled") {
-        const { client_id, name, financial, leads, labor } = result.value;
+        const { org_id, name, financial, leads, labor } = result.value;
         return {
-          client_id: client_id,
+          org_id: org_id,
           name,
-          score: buildClientScore({ financial, leads, labor }),
+          score: buildOrgScore({ financial, leads, labor }),
         };
       }
       console.warn(
-        `[Scorecard] Failed for ${clients[i].name}: ${result.reason?.message}`,
+        `[Scorecard] Failed for ${orgs[i].org_name}: ${result.reason?.message}`,
       );
       return {
-        client_id: clients[i].client_id,
-        name: clients[i].client_name,
+        org_id: orgs[i].org_id,
+        name: orgs[i].org_name,
         score: buildEmptyScorecard(),
         error: result.reason?.message,
       };
@@ -185,7 +185,7 @@ const getScorecardSummary = async (req, res) => {
 
     return res
       .status(200)
-      .json({ clients: clientScores, fetchedAt: new Date().toISOString() });
+      .json({ orgs: orgScores, fetchedAt: new Date().toISOString() });
   } catch (error) {
     console.error("[SummaryEngine] getScorecardSummary error:", error.message);
     return res.status(500).json({ error: error.message });
@@ -214,26 +214,26 @@ const resolvePeriod = (startDate, endDate) => {
 };
 
 /**
- * Fetch scorecard data for a single client.
+ * Fetch scorecard data for a single organisation.
  * Strategy per KPI table:
- *   1. Check DB for a record matching clientId + period
+ *   1. Check DB for a record matching org_id + period
  *   2. If found and fresh (<6h)  → return DB data immediately
  *   3. If found but stale (>6h)  → return DB data + trigger background API refresh
  *   4. If not found (cold)       → fetch from API, persist to DB, return result
  */
-const fetchClientScorecardData = async (
-  client,
+const fetchOrgScorecardData = async (
+  org,
   { startDate, endDate, asOfDate },
 ) => {
   const { start, end } = resolvePeriod(startDate, endDate);
-  const clientId = client.id;
+  const orgId = org.org_id;
 
   // ── 1. Read all three KPI tables from DB in parallel ────────────
   const [dbFinance, dbLeads, dbLabor] = await Promise.all([
     prisma.financeKpi.findUnique({
       where: {
-        clientId_periodStart_periodEnd: {
-          clientId,
+        org_id_periodStart_periodEnd: {
+          org_id: orgId,
           periodStart: start,
           periodEnd: end,
         },
@@ -241,8 +241,8 @@ const fetchClientScorecardData = async (
     }),
     prisma.leadsKpi.findUnique({
       where: {
-        clientId_periodStart_periodEnd: {
-          clientId,
+        org_id_periodStart_periodEnd: {
+          org_id: orgId,
           periodStart: start,
           periodEnd: end,
         },
@@ -250,8 +250,8 @@ const fetchClientScorecardData = async (
     }),
     prisma.laborKpi.findUnique({
       where: {
-        clientId_periodStart_periodEnd: {
-          clientId,
+        org_id_periodStart_periodEnd: {
+          org_id: orgId,
           periodStart: start,
           periodEnd: end,
         },
@@ -272,10 +272,10 @@ const fetchClientScorecardData = async (
   if (needsFinance || needsLeads) {
     const [financialResult, leadsResult] = await Promise.allSettled([
       needsFinance
-        ? getFinancialKPIsService(clientId, { startDate, endDate, asOfDate })
+        ? getFinancialKPIsService(orgId, { startDate, endDate, asOfDate })
         : Promise.resolve(dbFinance),
       needsLeads
-        ? getLeadsKPIsService(clientId, { startDate, endDate })
+        ? getLeadsKPIsService(orgId, { startDate, endDate })
         : Promise.resolve(dbLeads),
     ]);
 
@@ -286,14 +286,14 @@ const fetchClientScorecardData = async (
         await prisma.financeKpi
           .upsert({
             where: {
-              clientId_periodStart_periodEnd: {
-                clientId,
+              org_id_periodStart_periodEnd: {
+                org_id: orgId,
                 periodStart: start,
                 periodEnd: end,
               },
             },
             create: {
-              clientId,
+              org_id: orgId,
               periodStart: start,
               periodEnd: end,
               ...mapFinanceToSchema(financial),
@@ -302,7 +302,7 @@ const fetchClientScorecardData = async (
           })
           .catch((e) =>
             console.warn(
-              `[Scorecard] Failed to persist finance for ${client.name}:`,
+              `[Scorecard] Failed to persist finance for ${org.org_name}:`,
               e.message,
             ),
           );
@@ -316,14 +316,14 @@ const fetchClientScorecardData = async (
         await prisma.leadsKpi
           .upsert({
             where: {
-              clientId_periodStart_periodEnd: {
-                clientId,
+              org_id_periodStart_periodEnd: {
+                org_id: orgId,
                 periodStart: start,
                 periodEnd: end,
               },
             },
             create: {
-              clientId,
+              org_id: orgId,
               periodStart: start,
               periodEnd: end,
               ...mapLeadsToSchema(leads),
@@ -332,7 +332,7 @@ const fetchClientScorecardData = async (
           })
           .catch((e) =>
             console.warn(
-              `[Scorecard] Failed to persist leads for ${client.name}:`,
+              `[Scorecard] Failed to persist leads for ${org.org_name}:`,
               e.message,
             ),
           );
@@ -342,7 +342,7 @@ const fetchClientScorecardData = async (
 
   if (needsLabor) {
     const [laborResult] = await Promise.allSettled([
-      getLaborKPIsService(clientId, {
+      getLaborKPIsService(orgId, {
         startDate,
         endDate,
         qbTotalRevenue: financial?.totalIncome ?? null,
@@ -355,14 +355,14 @@ const fetchClientScorecardData = async (
       await prisma.laborKpi
         .upsert({
           where: {
-            clientId_periodStart_periodEnd: {
-              clientId,
+            org_id_periodStart_periodEnd: {
+              org_id: orgId,
               periodStart: start,
               periodEnd: end,
             },
           },
           create: {
-            clientId,
+            org_id: orgId,
             periodStart: start,
             periodEnd: end,
             ...mapLaborToSchema(labor),
@@ -371,14 +371,14 @@ const fetchClientScorecardData = async (
         })
         .catch((e) =>
           console.warn(
-            `[Scorecard] Failed to persist labor for ${client.name}:`,
+            `[Scorecard] Failed to persist labor for ${org.org_name}:`,
             e.message,
           ),
         );
     }
   }
 
-  return { clientId, name: client.name, financial, leads, labor };
+  return { org_id: orgId, name: org.org_name, financial, leads, labor };
 };
 
 // ─────────────────────────────────────────────────────────────────
@@ -414,9 +414,9 @@ const mapLaborToSchema = (l) => ({
 });
 
 /**
- * Build the scorecard score object for a single client.
+ * Build the scorecard score object for a single organisation.
  */
-const buildClientScore = ({ financial, leads, labor }) => {
+const buildOrgScore = ({ financial, leads, labor }) => {
   const totalRevenue = financial?.totalIncome ?? null;
   const netRevenue = financial?.netIncome ?? null;
   const ebitda = financial?.ebitda ?? null;
@@ -461,7 +461,7 @@ const buildClientScore = ({ financial, leads, labor }) => {
 };
 
 /**
- * Empty scorecard shape — returned when a client has no data yet.
+ * Empty scorecard shape — returned when an organisation has no data yet.
  */
 const buildEmptyScorecard = () => ({
   totalPipelineValue: null,

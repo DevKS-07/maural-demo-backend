@@ -18,25 +18,25 @@ const CLIENT_SECRET = HUBSPOT_CLIENT_SECRET;
 // ─────────────────────────────────────────────────────────────────
 
 /**
- * Get token record from DB for a user.
- * @param {string} clientId
+ * Get token record from DB for an organisation.
+ * @param {string} orgId
  * @returns {Promise<object>}
  */
-const getTokenRecord = async (clientId) => {
+const getTokenRecord = async (orgId) => {
   const token = await prisma.hubspotToken.findUnique({
-    where: { client_Id: clientId },
+    where: { org_id: orgId },
   });
-  if (!token) throw new Error(`No HubSpot token found for user: ${clientId}`);
+  if (!token) throw new Error(`No HubSpot token found for organisation: ${orgId}`);
   return token;
 };
 
 /**
  * Use refresh token to get a new access token and persist to DB.
- * @param {string} clientId
+ * @param {string} orgId
  * @param {string} refreshToken
  * @returns {Promise<string>} new access token
  */
-const refreshAndPersistToken = async (clientId, refreshToken) => {
+const refreshAndPersistToken = async (orgId, refreshToken) => {
   const response = await axios.post(
     "https://api.hubapi.com/oauth/v1/token",
     new URLSearchParams({
@@ -51,29 +51,29 @@ const refreshAndPersistToken = async (clientId, refreshToken) => {
   const expires_at = new Date(Date.now() + expires_in * 1000);
 
   await prisma.hubspotToken.update({
-    where: { client_Id: clientId },
+    where: { org_id: orgId },
     data: { access_token, refresh_token, expires_at },
   });
 
-  console.log(`[HubSpot] Tokens refreshed and persisted for user: ${clientId}`);
+  console.log(`[HubSpot] Tokens refreshed and persisted for organisation: ${orgId}`);
   return access_token;
 };
 
 /**
  * Returns a valid access token — auto-refreshes if expired.
  * Call this before every HubSpot API request.
- * @param {string} clientId
+ * @param {string} orgId
  * @returns {Promise<string>} valid access token
  */
-const getValidAccessToken = async (clientId) => {
-  const token = await getTokenRecord(clientId);
+const getValidAccessToken = async (orgId) => {
+  const token = await getTokenRecord(orgId);
   const isExpired = new Date() >= new Date(token.expires_at);
 
   if (isExpired) {
     console.log(
-      `[HubSpot] Token expired for user: ${clientId} — refreshing...`,
+      `[HubSpot] Token expired for organisation: ${orgId} — refreshing...`,
     );
-    return await refreshAndPersistToken(clientId, token.refresh_token);
+    return await refreshAndPersistToken(orgId, token.refresh_token);
   }
 
   return token.access_token;
@@ -89,14 +89,14 @@ const getValidAccessToken = async (clientId) => {
  * HubSpot paginates at 100 — loops until all records are fetched.
  * Retries once with a refreshed token on 401.
  *
- * @param {string} clientId
+ * @param {string} orgId
  * @param {string} objectType  - "deals" | "contacts" | "companies"
  * @param {object} params      - query params (properties, filterGroups etc.)
  * @param {boolean} retry      - internal flag to prevent infinite retry loop
  * @returns {Promise<Array>}   - flat array of all results
  */
 const fetchAllPages = async (
-  clientId,
+  orgId,
   objectType,
   params = {},
   retry = true,
@@ -106,7 +106,7 @@ const fetchAllPages = async (
 
   try {
     do {
-      const accessToken = await getValidAccessToken(clientId);
+      const accessToken = await getValidAccessToken(orgId);
 
       const response = await axios.get(
         `https://api.hubapi.com/crm/v3/objects/${objectType}`,
@@ -127,11 +127,11 @@ const fetchAllPages = async (
     // Token rejected mid-pagination — refresh and retry once
     if (status === 401 && retry) {
       console.log(
-        `[HubSpot] 401 on ${objectType} — refreshing token for user: ${clientId}`,
+        `[HubSpot] 401 on ${objectType} — refreshing token for organisation: ${orgId}`,
       );
-      const token = await getTokenRecord(clientId);
-      await refreshAndPersistToken(clientId, token.refresh_token);
-      return fetchAllPages(clientId, objectType, params, false);
+      const token = await getTokenRecord(orgId);
+      await refreshAndPersistToken(orgId, token.refresh_token);
+      return fetchAllPages(orgId, objectType, params, false);
     }
 
     // Rate limit — HubSpot allows 100 req/10s on free, 150/10s on paid
@@ -139,7 +139,7 @@ const fetchAllPages = async (
       const wait = parseInt(error.response.headers["retry-after"] || "10", 10);
       console.warn(`[HubSpot] Rate limited. Waiting ${wait}s...`);
       await new Promise((r) => setTimeout(r, wait * 1000));
-      return fetchAllPages(clientId, objectType, params, retry);
+      return fetchAllPages(orgId, objectType, params, retry);
     }
 
     const message = error.response?.data?.message || error.message;
@@ -153,18 +153,18 @@ const fetchAllPages = async (
 // ─────────────────────────────────────────────────────────────────
 //  INDIVIDUAL KPI FETCHERS
 //  Each maps to specific KPIs from the library.
-//  All take clientId + date range, return plain objects.
+//  All take orgId + date range, return plain objects.
 // ─────────────────────────────────────────────────────────────────
 
 /**
  * LEADS-1: Total leads (MQLs + SQLs) created in the period.
- * @param {string} clientId
+ * @param {string} orgId
  * @param {string} startDate - 'YYYY-MM-DD'
  * @param {string} endDate   - 'YYYY-MM-DD'
  * @returns {Promise<number>}
  */
-const getLeadsCountService = async (clientId, { startDate, endDate }) => {
-  const contacts = await fetchAllPages(clientId, "contacts", {
+const getLeadsCountService = async (orgId, { startDate, endDate }) => {
+  const contacts = await fetchAllPages(orgId, "contacts", {
     properties: "lifecyclestage,createdate",
     filterGroups: JSON.stringify([
       {
@@ -201,13 +201,13 @@ const getLeadsCountService = async (clientId, { startDate, endDate }) => {
  * LEADS-5: conversion rate (won / proposals)
  * PS-6:    total open pipeline value (for coverage ratio)
  *
- * @param {string} clientId
+ * @param {string} orgId
  * @param {string} startDate
  * @param {string} endDate
  * @returns {Promise<object>}
  */
-const getPipelineMetricsService = async (clientId, { startDate, endDate }) => {
-  const deals = await fetchAllPages(clientId, "deals", {
+const getPipelineMetricsService = async (orgId, { startDate, endDate }) => {
+  const deals = await fetchAllPages(orgId, "deals", {
     properties: "dealstage,amount,closedate,createdate,hs_activity_type",
   });
 
@@ -260,13 +260,13 @@ const getPipelineMetricsService = async (clientId, { startDate, endDate }) => {
  * PS-9: Recurring vs one-time revenue breakdown.
  * Requires deal_type or recurring_revenue_amount custom property in HubSpot.
  *
- * @param {string} clientId
+ * @param {string} orgId
  * @param {string} startDate
  * @param {string} endDate
  * @returns {Promise<object>}
  */
-const getRevenueBreakdownService = async (clientId, { startDate, endDate }) => {
-  const deals = await fetchAllPages(clientId, "deals", {
+const getRevenueBreakdownService = async (orgId, { startDate, endDate }) => {
+  const deals = await fetchAllPages(orgId, "deals", {
     properties: "dealstage,amount,deal_type,closedate,recurring_revenue_amount",
   });
 
@@ -320,13 +320,13 @@ const getRevenueBreakdownService = async (clientId, { startDate, endDate }) => {
  * dealVelocity: avg days from deal created → closed won
  * retentionRate: % of last-period companies that returned this period
  *
- * @param {string} clientId
+ * @param {string} orgId
  * @param {string} startDate
  * @param {string} endDate
  * @returns {Promise<object>}
  */
-const getClientMetricsService = async (clientId, { startDate, endDate }) => {
-  const deals = await fetchAllPages(clientId, "deals", {
+const getClientMetricsService = async (orgId, { startDate, endDate }) => {
+  const deals = await fetchAllPages(orgId, "deals", {
     properties: "dealstage,amount,closedate,createdate",
     associations: "companies",
   });
@@ -431,14 +431,14 @@ const getClientMetricsService = async (clientId, { startDate, endDate }) => {
 // ─────────────────────────────────────────────────────────────────
 
 /**
- * Fetch all Leads & Pipeline KPIs for a user and period.
+ * Fetch all Leads & Pipeline KPIs for an organisation and period.
  * Pure data — no req/res. Safe to call from anywhere.
  *
- * @param {string} clientId
+ * @param {string} orgId
  * @param {object} options - { startDate, endDate }
  * @returns {Promise<object>} all Leads KPIs
  */
-const getLeadsKPIsService = async (clientId, { startDate, endDate } = {}) => {
+const getLeadsKPIsService = async (orgId, { startDate, endDate } = {}) => {
   // Default to current month if no dates provided
   const now = new Date();
   const start =
@@ -452,10 +452,10 @@ const getLeadsKPIsService = async (clientId, { startDate, endDate } = {}) => {
 
   // All four fetchers run in parallel
   const [leadsCount, pipeline, revenue, clients] = await Promise.all([
-    getLeadsCountService(clientId, { startDate: start, endDate: end }),
-    getPipelineMetricsService(clientId, { startDate: start, endDate: end }),
-    getRevenueBreakdownService(clientId, { startDate: start, endDate: end }),
-    getClientMetricsService(clientId, { startDate: start, endDate: end }),
+    getLeadsCountService(orgId, { startDate: start, endDate: end }),
+    getPipelineMetricsService(orgId, { startDate: start, endDate: end }),
+    getRevenueBreakdownService(orgId, { startDate: start, endDate: end }),
+    getClientMetricsService(orgId, { startDate: start, endDate: end }),
   ]);
 
   return {

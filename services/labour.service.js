@@ -1,6 +1,6 @@
 // labor.service.js
 // Unified labor KPI layer — routes to Monday or ClickUp
-// based on the client's laborSource field.
+// based on the organisation's laborSource field.
 // summaryEngine imports only this file, never the individual services.
 
 const { getLaborKPIsService: getMondayLaborKPIs } = require("./monday.service");
@@ -10,14 +10,14 @@ const {
 const prisma = require("../lib/prisma");
 
 /**
- * Fetch all Labor KPIs for a client.
- * Routes to the correct service based on client.laborSource.
+ * Fetch all Labor KPIs for an organisation.
+ * Routes to the correct service based on organisation.laborSource.
  *
  * Also calculates cross-source KPIs that need both labor + QB data:
  *   LABOR-2: laborCostPerHour      = qbLaborCost     / directLaborHours
  *   LABOR-7: revenuePerBillableFTE = qbTotalRevenue  / billableFTEs
  *
- * @param {string} userId
+ * @param {string} orgId
  * @param {object} options
  * @param {string} options.startDate
  * @param {string} options.endDate
@@ -28,7 +28,7 @@ const prisma = require("../lib/prisma");
  */
 
 const getLaborKPIsService = async (
-  userId,
+  orgId,
   {
     startDate,
     endDate,
@@ -37,9 +37,9 @@ const getLaborKPIsService = async (
     qbTotalRevenue = null,
   } = {},
 ) => {
-  // Look up the client to get laborSource + the relevant board/workspace ID
-  const client = await prisma.client.findFirst({
-    where: { user_id: userId },
+  // Look up the organisation to get laborSource + the relevant board/workspace ID
+  const org = await prisma.organisation.findUnique({
+    where: { org_id: orgId },
     select: {
       laborSource: true, // "monday" | "clickup"
       mondayBoardId: true,
@@ -47,9 +47,9 @@ const getLaborKPIsService = async (
     },
   });
 
-  if (!client) throw new Error(`No client found for user: ${userId}`);
+  if (!org) throw new Error(`No organisation found for org_id: ${orgId}`);
 
-  const { laborSource, mondayBoardId } = client;
+  const { laborSource, mondayBoardId } = org;
 
   if (!laborSource) {
     return {
@@ -72,14 +72,14 @@ const getLaborKPIsService = async (
 
   if (laborSource === "monday") {
     if (!mondayBoardId)
-      throw new Error(`Client has laborSource=monday but no mondayBoardId set`);
-    laborData = await getMondayLaborKPIs(userId, mondayBoardId, {
+      throw new Error(`Organisation has laborSource=monday but no mondayBoardId set`);
+    laborData = await getMondayLaborKPIs(orgId, mondayBoardId, {
       startDate,
       endDate,
       founderUserId,
     });
   } else if (laborSource === "clickup") {
-    laborData = await getClickUpLaborKPIs(userId, {
+    laborData = await getClickUpLaborKPIs(orgId, {
       startDate,
       endDate,
       founderUserId,

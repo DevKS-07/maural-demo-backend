@@ -135,11 +135,11 @@ function estimatePreConfidence(docs, intents) {
 // ---------------------------------------------------------------------------
 // Shared orchestration logic (used by both streaming + non-streaming)
 // ---------------------------------------------------------------------------
-async function orchestrate(message, clientIds, history) {
+async function orchestrate(message, orgIds, history) {
   // Step 1 — intent detection and document retrieval run in parallel
   const [intents, docs] = await Promise.all([
     detectIntents(message),
-    retrieveDocuments(message, clientIds, 5),
+    retrieveDocuments(message, orgIds, 5),
   ]);
 
   console.log(`[chat] Detected intents: [${intents.join(", ")}]`);
@@ -189,7 +189,7 @@ async function orchestrate(message, clientIds, history) {
 // POST /api/chat/stream — SSE streaming (primary path)
 // ---------------------------------------------------------------------------
 exports.streamChat = async (req, res) => {
-  const { message, clientIds = "all", history = [] } = req.body;
+  const { message, orgIds = "all", history = [] } = req.body;
 
   if (!message || typeof message !== "string") {
     return res.status(400).json({ error: "message is required" });
@@ -210,7 +210,7 @@ exports.streamChat = async (req, res) => {
 
   try {
     const { validatedAnswer, intents, sources, confidence, issues } =
-      await orchestrate(message, clientIds, history);
+      await orchestrate(message, orgIds, history);
 
     // 1. Send detected intents (frontend can show intent badge)
     sendEvent({ type: "intent", intents });
@@ -242,7 +242,7 @@ exports.streamChat = async (req, res) => {
 // POST /api/chat — non-streaming JSON fallback
 // ---------------------------------------------------------------------------
 exports.chat = async (req, res) => {
-  const { message, clientIds = "all", history = [] } = req.body;
+  const { message, orgIds = "all", history = [] } = req.body;
 
   if (!message || typeof message !== "string") {
     return res.status(400).json({ error: "message is required" });
@@ -250,7 +250,7 @@ exports.chat = async (req, res) => {
 
   try {
     const { validatedAnswer, intents, sources, confidence, issues } =
-      await orchestrate(message, clientIds, history);
+      await orchestrate(message, orgIds, history);
 
     return res.status(200).json({
       answer: validatedAnswer,

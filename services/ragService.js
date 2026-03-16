@@ -8,15 +8,15 @@
  *   - table: document_embeddings (id, content, metadata jsonb, embedding vector(1536))
  *   - function: match_documents(query_embedding, match_count, filter)
  *
- * Client-scoped retrieval:
- *   Every File belongs to a Client via client_id. Every ingested chunk carries
- *   client_id in its metadata. Pass a clientId (or array of clientIds) to restrict
- *   the vector search to only that client's documents.
- *   Pass "all" (or omit) to search across ALL clients' documents (admin use).
+ * Organisation-scoped retrieval:
+ *   Every File belongs to an Organisation via org_id. Every ingested chunk carries
+ *   org_id in its metadata. Pass an orgId (or array of orgIds) to restrict
+ *   the vector search to only that organisation's documents.
+ *   Pass "all" (or omit) to search across ALL organisations' documents (admin use).
  *
- *   When clientIds is provided the RPC filter enforces the scope at the DB level
- *   (single client). For multiple clients the RPC fetches a larger result set and
- *   JavaScript post-filters to keep only the relevant clients' chunks.
+ *   When orgIds is provided the RPC filter enforces the scope at the DB level
+ *   (single organisation). For multiple organisations the RPC fetches a larger result set and
+ *   JavaScript post-filters to keep only the relevant organisations' chunks.
  *
  *   ctg_id can be used to further narrow results to a specific document category.
  */
@@ -65,52 +65,52 @@ function getEmbeddings() {
 // ---------------------------------------------------------------------------
 
 /**
- * Normalise the clientIds argument into a plain array of numbers, or null.
- * null means "all clients" (admin / unrestricted search).
+ * Normalise the orgIds argument into a plain array of UUID strings, or null.
+ * null means "all organisations" (admin / unrestricted search).
  *
- * @param {number|number[]|string|"all"|null|undefined} raw
- * @returns {number[]|null}
+ * @param {string|string[]|"all"|null|undefined} raw
+ * @returns {string[]|null}
  */
-function normaliseClientIds(raw) {
+function normaliseOrgIds(raw) {
   if (!raw || raw === "all") return null;
   const arr = Array.isArray(raw) ? raw : [raw];
-  const nums = arr.map(Number).filter((n) => !isNaN(n) && n > 0);
-  return nums.length > 0 ? nums : null;
+  const ids = arr.map(String).filter((s) => s.length > 0);
+  return ids.length > 0 ? ids : null;
 }
 
 /**
  * Retrieve the top-K most relevant document chunks from Supabase pgvector,
- * scoped to the specified client(s).
+ * scoped to the specified organisation(s).
  *
- * Each ingested chunk stores { client_id, ctg_id, file_id, file_name }
- * in its metadata. This function uses client_id to enforce document isolation
- * between clients.
+ * Each ingested chunk stores { org_id, ctg_id, file_id, file_name }
+ * in its metadata. This function uses org_id to enforce document isolation
+ * between organisations.
  *
  * @param {string}                    query      - User question to embed
- * @param {number|number[]|"all"}     clientIds  - Restrict to these client IDs, or "all"
+ * @param {string|string[]|"all"}     orgIds     - Restrict to these organisation IDs, or "all"
  * @param {number}                    topK       - Number of chunks to return
  * @returns {Promise<Array<{content:string, metadata:object, similarity:number}>>}
  */
-async function retrieveDocuments(query, clientIds, topK = 15) {
+async function retrieveDocuments(query, orgIds, topK = 15) {
   const supabase = getSupabase();
   const embeddings = getEmbeddings();
 
-  // Normalise → [1, 2, 3] or null
-  const clientIdList = normaliseClientIds(clientIds);
+  // Normalise → ["uuid-1", "uuid-2"] or null
+  const orgIdList = normaliseOrgIds(orgIds);
 
   // -------------------------------------------------------------------------
-  // Build the list of files the model should know about (scoped to client).
+  // Build the list of files the model should know about (scoped to organisation).
   // We use raw SQL because the Prisma schema may not yet be migrated to the
   // live DB — explicit column names avoids SELECT * failures.
   // -------------------------------------------------------------------------
   let allFiles;
   try {
-    if (clientIdList) {
-      // Only files belonging to the requested client(s)
+    if (orgIdList) {
+      // Only files belonging to the requested organisation(s)
       allFiles = await prisma.$queryRaw`
         SELECT file_id::text AS file_id, file_name
         FROM   "File"
-        WHERE  client_id = ANY(${clientIdList}::bigint[])
+        WHERE  org_id = ANY(${orgIdList}::uuid[])
       `;
     } else {
       // Admin / no filter — return all files
@@ -119,7 +119,7 @@ async function retrieveDocuments(query, clientIds, topK = 15) {
       `;
     }
   } catch {
-    // Fallback if client_id column doesn't exist yet (pre-migration)
+    // Fallback if org_id column doesn't exist yet (pre-migration)
     allFiles = await prisma.$queryRaw`
       SELECT file_id::text AS file_id, file_name FROM "File"
     `;
@@ -128,16 +128,16 @@ async function retrieveDocuments(query, clientIds, topK = 15) {
   // -------------------------------------------------------------------------
   // Build the JSONB filter for the match_documents RPC.
   // The RPC uses `metadata @> filter` (JSONB containment).
-  // Single-client: pass directly. Multi-client: no RPC filter — post-filter in JS.
+  // Single-organisation: pass directly. Multi-organisation: no RPC filter — post-filter in JS.
   // -------------------------------------------------------------------------
   const rpcFilter =
-    clientIdList && clientIdList.length === 1
-      ? { client_id: clientIdList[0] }
+    orgIdList && orgIdList.length === 1
+      ? { org_id: orgIdList[0] }
       : {};
 
-  // Fetch more rows for multi-client so post-filter still gets topK results
+  // Fetch more rows for multi-organisation so post-filter still gets topK results
   const fetchCount =
-    clientIdList && clientIdList.length > 1 ? topK * clientIdList.length : topK;
+    orgIdList && orgIdList.length > 1 ? topK * orgIdList.length : topK;
 
   // Embed the incoming query
   const queryEmbedding = await embeddings.embedQuery(query);
@@ -158,15 +158,15 @@ async function retrieveDocuments(query, clientIds, topK = 15) {
 
   let chunks = data || [];
 
-  // Post-filter: for multiple clients, keep only chunks belonging to those clients.
-  if (clientIdList && clientIdList.length > 1) {
+  // Post-filter: for multiple organisations, keep only chunks belonging to those organisations.
+  if (orgIdList && orgIdList.length > 1) {
     chunks = chunks
-      .filter((c) => clientIdList.includes(Number(c.metadata?.client_id)))
+      .filter((c) => orgIdList.includes(c.metadata?.org_id))
       .slice(0, topK);
   }
 
   // -------------------------------------------------------------------------
-  // Document coverage guarantee: every file the client owns should have at
+  // Document coverage guarantee: every file the organisation owns should have at
   // least one chunk visible to the model, even if it scored outside topK.
   // -------------------------------------------------------------------------
   const representedFileIds = new Set(
@@ -198,7 +198,7 @@ async function retrieveDocuments(query, clientIds, topK = 15) {
 
   // -------------------------------------------------------------------------
   // Prepend a synthetic "document index" entry so the model always knows
-  // which files belong to this client, regardless of similarity scores.
+  // which files belong to this organisation, regardless of similarity scores.
   // -------------------------------------------------------------------------
   const fileIndex = {
     content: `Available documents in the knowledge base:\n${allFiles
