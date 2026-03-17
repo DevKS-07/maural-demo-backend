@@ -84,7 +84,7 @@ DIRECT_URL=postgresql://...
 
 ## Supabase Database Setup
 
-The `document_embeddings` table must use `vector(768)` dimensions to match `nomic-embed-text` output.
+The `document_embeddings` table must use `vector(768)` dimensions to match `nomic-embed-text` output. It includes a real `org_id` column (FK → Organisation) for database-level tenant isolation during vector search.
 
 Run the following in your Supabase SQL Editor:
 
@@ -92,19 +92,26 @@ Run the following in your Supabase SQL Editor:
 -- Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- Create embeddings table
+-- Create embeddings table with org_id for tenant isolation
 CREATE TABLE IF NOT EXISTS document_embeddings (
   id        bigserial PRIMARY KEY,
   content   text,
   metadata  jsonb,
+  org_id    uuid REFERENCES "Organisation"(org_id) ON DELETE CASCADE,
   embedding vector(768)
 );
 
--- Create similarity search function
+-- Index on org_id for fast tenant-scoped queries
+CREATE INDEX IF NOT EXISTS idx_document_embeddings_org_id
+  ON document_embeddings (org_id);
+
+-- Tenant-scoped similarity search function
+-- filter_org_ids: pass a UUID array to scope results to specific organisations,
+--                 or NULL to search across all organisations (admin use).
 CREATE OR REPLACE FUNCTION match_documents(
   query_embedding vector(768),
   match_count     int DEFAULT 15,
-  filter          jsonb DEFAULT '{}'
+  filter_org_ids  uuid[] DEFAULT NULL
 )
 RETURNS TABLE (
   id         bigint,
@@ -122,6 +129,7 @@ BEGIN
     document_embeddings.metadata,
     1 - (document_embeddings.embedding <=> query_embedding) AS similarity
   FROM document_embeddings
+  WHERE (filter_org_ids IS NULL OR document_embeddings.org_id = ANY(filter_org_ids))
   ORDER BY document_embeddings.embedding <=> query_embedding
   LIMIT match_count;
 END;
@@ -174,7 +182,7 @@ Upload file to Supabase Storage (or place in uploads/)
          ↓
   Delete old chunks for this file (idempotent)
          ↓
-  Insert new rows into document_embeddings table
+  Insert new rows into document_embeddings table (with org_id for tenant isolation)
 ```
 
 ### Supported file types
@@ -203,7 +211,7 @@ Each chunk stores:
 - `content` — the raw text slice
 - `metadata.file_id` — UUID of the source file
 - `metadata.file_name` — original filename
-- `metadata.client_id` — client association (nullable)
+- `metadata.org_id` — organisation association (nullable)
 - `metadata.ctg_id` — category association, FK → Category table (nullable)
 - `metadata.chunk_index` — position of chunk within the document
 
@@ -229,11 +237,17 @@ The same model is used at query time to embed the user's question, producing a c
 
 When a user sends a message, the query is embedded and compared against all stored chunk vectors using cosine similarity via Supabase's `match_documents` RPC function. The **15 most similar chunks** are returned.
 
+### Organisation-scoped retrieval (tenant isolation)
+
+Every document chunk is associated with an organisation via the `org_id` column on `document_embeddings`. The `match_documents` RPC accepts a `filter_org_ids` parameter (UUID array) that enforces tenant isolation at the database level — only chunks belonging to the specified organisation(s) are searched. Passing `NULL` searches all organisations (admin use).
+
+The chat endpoints pass the authenticated user's `orgIds` through to the RAG service, which normalises the value and forwards it to the RPC. This ensures users only see answers grounded in their own organisation's documents.
+
 ### Document coverage guarantee
 
-After the top-K search, the system checks which files have **no chunks** in the results. For any missing file, it fetches at least 1 chunk directly from `document_embeddings` regardless of similarity score. This ensures the model always has content from every document in the knowledge base, even for queries that are semantically unrelated to a particular file.
+After the top-K search, the system checks which files (scoped to the same organisation) have **no chunks** in the results. For any missing file, it fetches at least 1 chunk directly from `document_embeddings` regardless of similarity score. This ensures the model always has content from every document in the organisation's knowledge base, even for queries that are semantically unrelated to a particular file.
 
-Additionally, a **document index** (list of all file names from the File table) is prepended to the context on every request, so the model always knows what documents exist.
+Additionally, a **document index** (list of all file names belonging to the organisation) is prepended to the context on every request, so the model always knows what documents exist.
 
 ---
 
@@ -248,7 +262,7 @@ Cosine similarity measures the angle between two vectors in 768-dimensional spac
 similarity = (A · B) / (|A| × |B|)
 ```
 
-Supabase pgvector uses the `<=>` operator for cosine distance. The `match_documents` function converts this to similarity (`1 - distance`) and returns results ordered from most to least relevant.
+Supabase pgvector uses the `<=>` operator for cosine distance. The `match_documents` function converts this to similarity (`1 - distance`) and returns results ordered from most to least relevant. When `filter_org_ids` is provided, only vectors belonging to those organisations are considered.
 
 ---
 

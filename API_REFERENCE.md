@@ -19,7 +19,7 @@
   - [Webhooks](#webhooks)
   - [Auth](#auth)
   - [Users](#users)
-  - [Clients](#clients)
+  - [Organisations](#organisations)
   - [Documents](#documents)
   - [Chat / AI](#chat--ai)
   - [Integrations — HubSpot](#integrations--hubspot)
@@ -36,7 +36,7 @@ The Maural KMS (Knowledge Management System) API is a Node.js/Express backend th
 
 - **Document management** — upload, download, and organize files stored in Supabase Storage.
 - **AI-powered chat** — multi-intent RAG (Retrieval-Augmented Generation) pipeline with guardrails.
-- **User & client management** — CRUD with role-based access control.
+- **User & organisation management** — CRUD with role-based access control.
 - **Third-party integrations** — OAuth 2.0 connections to HubSpot, QuickBooks, Monday.com, and ClickUp.
 
 ### Global Middleware
@@ -71,8 +71,8 @@ The `requireRole(minRole)` middleware enforces a role hierarchy:
 |---|---|---|
 | `super_admin` | 4 | Full system access |
 | `admin` | 3 | Administrative access |
-| `client_executive` | 2 | Client-level management |
-| `client_staff` | 1 | Basic client access |
+| `org_executive` | 2 | Organisation-level management |
+| `org_staff` | 1 | Basic organisation access |
 
 A user must have a role level **≥ the minimum required level** to access the endpoint.
 
@@ -207,8 +207,8 @@ Receives webhook events from Clerk for user lifecycle management. Verified using
 |---|---|
 | `super_admin` | Super Admin |
 | `admin` | Admin |
-| `client_executive` | Client Executive |
-| `client_staff` | Client Staff |
+| `org_executive` | Org Executive |
+| `org_staff` | Org Staff |
 
 **Response `200 OK`**
 
@@ -243,7 +243,8 @@ Returns the profile of the currently authenticated user.
   "gender": "female",
   "status": "active",
   "role_id": "2",
-  "client_id": "1",
+  "org_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "job_title": "Engineering Manager",
   "Role": {
     "role_id": "2",
     "role_name": "Admin",
@@ -256,9 +257,9 @@ Returns the profile of the currently authenticated user.
       }
     ]
   },
-  "Client": {
-    "client_id": "1",
-    "client_name": "Acme Corp"
+  "Organisation": {
+    "org_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "org_name": "Acme Corp"
   }
 }
 ```
@@ -266,6 +267,34 @@ Returns the profile of the currently authenticated user.
 > **Note:** BigInt fields are serialized as strings.
 
 **Error `404 Not Found`** — User not found in database
+
+---
+
+#### `GET /api/auth/org`
+
+Returns the organisation of the currently authenticated user.
+
+**Auth:** Required (Clerk JWT)
+
+**Response `200 OK`**
+
+```json
+{
+  "org_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "org_name": "Acme Corp",
+  "industry": "Technology",
+  "founded": "2010-01-15T00:00:00.000Z",
+  "key_contacts": "5",
+  "company_location": "New York, NY",
+  "storage_bucket": "b2c3d4e5-...",
+  "hubspot_connected": true,
+  "quickbooks_connected": false,
+  "monday_connected": true,
+  "clickup_connected": false
+}
+```
+
+**Error `404 Not Found`** — User not found or not assigned to any organisation
 
 ---
 
@@ -305,7 +334,7 @@ Returns all users in the system.
     "gender": "female",
     "status": "active",
     "role_id": "2",
-    "client_id": "1",
+    "org_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "last_login": "2026-03-10T08:30:00.000Z"
   }
 ]
@@ -383,9 +412,9 @@ Returns all files uploaded by a user.
     "file_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "file_name": "report.pdf",
     "file_size": "2048",
-    "file_source": "client-bucket/report.pdf",
+    "file_source": "file_storage/report.pdf",
     "ctg_id": "1",
-    "client_id": "1",
+    "org_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "user_id": "1",
     "created_at": "2026-03-01T12:00:00.000Z",
     "updated_at": "2026-03-01T12:00:00.000Z"
@@ -465,11 +494,12 @@ Creates a new user.
 | `first_name` | `string` | Yes | User's first name |
 | `last_name` | `string` | Yes | User's last name |
 | `email` | `string` | Yes | User's email address |
-| `client_id` | `BigInt` | No | Associated client ID |
+| `org_id` | `string` (UUID) | No | Associated organisation ID |
 | `role_id` | `BigInt` | No | Role ID to assign |
 | `phone` | `string` | No | Phone number |
 | `gender` | `string` | No | Gender |
 | `status` | `string` | No | Account status |
+| `job_title` | `string` | No | Job title |
 
 **Response `201 Created`** — The created User object
 
@@ -519,25 +549,25 @@ Deletes a user.
 
 ---
 
-### Clients
+### Organisations
 
-All client endpoints require authentication (`requireAuth`).
+All organisation endpoints require authentication (`requireAuth`).
 
 ---
 
-#### `GET /api/client/`
+#### `GET /api/org/`
 
 **Response `200 OK`**
 
 ```
-Client API is working
+Organisation API is working
 ```
 
 ---
 
-#### `GET /api/client/all`
+#### `GET /api/org/all`
 
-Returns all clients in the system.
+Returns all organisations in the system.
 
 **Auth:** Required
 
@@ -546,24 +576,28 @@ Returns all clients in the system.
 ```json
 [
   {
-    "client_id": "1",
-    "client_name": "Acme Corp",
+    "org_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "org_name": "Acme Corp",
     "industry": "Technology",
     "founded": "2010-01-15T00:00:00.000Z",
     "key_contacts": "5",
     "company_location": "New York, NY",
     "organization_chart": "https://...",
     "gpt_types": "general",
-    "storage_bucket": "a1b2c3d4-..."
+    "storage_bucket": "b2c3d4e5-...",
+    "hubspot_connected": true,
+    "quickbooks_connected": false,
+    "monday_connected": false,
+    "clickup_connected": false
   }
 ]
 ```
 
 ---
 
-#### `GET /api/client/:clientId`
+#### `GET /api/org/:orgId`
 
-Returns a single client by ID.
+Returns a single organisation by ID.
 
 **Auth:** Required
 
@@ -571,17 +605,17 @@ Returns a single client by ID.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `clientId` | `BigInt` (string) | The client's ID |
+| `orgId` | `string` (UUID) | The organisation's ID |
 
-**Response `200 OK`** — Client object
+**Response `200 OK`** — Organisation object
 
-**Error `404 Not Found`** — Client does not exist
+**Error `404 Not Found`** — Organisation does not exist
 
 ---
 
-#### `GET /api/client/:clientId/users`
+#### `GET /api/org/:orgId/users`
 
-Returns all users belonging to a client.
+Returns all users belonging to an organisation.
 
 **Auth:** Required
 
@@ -589,15 +623,15 @@ Returns all users belonging to a client.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `clientId` | `BigInt` (string) | The client's ID |
+| `orgId` | `string` (UUID) | The organisation's ID |
 
 **Response `200 OK`** — Array of User objects
 
 ---
 
-#### `GET /api/client/:clientId/files`
+#### `GET /api/org/:orgId/files`
 
-Returns all files belonging to a client.
+Returns all files belonging to an organisation.
 
 **Auth:** Required
 
@@ -605,15 +639,15 @@ Returns all files belonging to a client.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `clientId` | `BigInt` (string) | The client's ID |
+| `orgId` | `string` (UUID) | The organisation's ID |
 
 **Response `200 OK`** — Array of File objects
 
 ---
 
-#### `POST /api/client/`
+#### `POST /api/org/`
 
-Creates a new client.
+Creates a new organisation.
 
 **Auth:** Required
 
@@ -621,7 +655,7 @@ Creates a new client.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `client_name` | `string` | Yes | Client/company name |
+| `org_name` | `string` | Yes | Organisation/company name |
 | `industry` | `string` | No | Industry sector |
 | `founded` | `string` (ISO date) | No | Date founded |
 | `key_contacts` | `BigInt` | No | Primary contact user ID |
@@ -629,15 +663,15 @@ Creates a new client.
 | `organization_chart` | `string` | No | URL to org chart |
 | `gpt_types` | `string` | No | AI model preferences |
 
-**Response `201 Created`** — The created Client object
+**Response `201 Created`** — The created Organisation object
 
-**Error `400 Bad Request`** — Missing `client_name`
+**Error `400 Bad Request`** — Missing `org_name`
 
 ---
 
-#### `PUT /api/client/:clientId`
+#### `PUT /api/org/:orgId`
 
-Updates an existing client.
+Updates an existing organisation.
 
 **Auth:** Required
 
@@ -645,17 +679,17 @@ Updates an existing client.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `clientId` | `BigInt` (string) | The client's ID |
+| `orgId` | `string` (UUID) | The organisation's ID |
 
-**Request Body:** Any subset of the fields from `POST /api/client/`
+**Request Body:** Any subset of the fields from `POST /api/org/`
 
-**Response `200 OK`** — The updated Client object
+**Response `200 OK`** — The updated Organisation object
 
 ---
 
-#### `DELETE /api/client/:clientId`
+#### `DELETE /api/org/:orgId`
 
-Deletes a client.
+Deletes an organisation.
 
 **Auth:** Required
 
@@ -663,13 +697,13 @@ Deletes a client.
 
 | Parameter | Type | Description |
 |---|---|---|
-| `clientId` | `BigInt` (string) | The client's ID |
+| `orgId` | `string` (UUID) | The organisation's ID |
 
 **Response `200 OK`**
 
 ```json
 {
-  "message": "Client with ID 1 deleted"
+  "message": "Organisation with ID a1b2c3d4-... deleted"
 }
 ```
 
@@ -707,9 +741,9 @@ Returns metadata for all documents.
     "file_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "file_name": "report.pdf",
     "file_size": "2048576",
-    "file_source": "client-bucket/report.pdf",
+    "file_source": "file_storage/report.pdf",
     "ctg_id": "1",
-    "client_id": "1",
+    "org_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "user_id": "1",
     "created_at": "2026-03-01T12:00:00.000Z",
     "updated_at": "2026-03-01T12:00:00.000Z"
@@ -739,9 +773,9 @@ Returns all documents in a specific category.
     "file_id": "a1b2c3d4-...",
     "file_name": "report.pdf",
     "file_size": "2048576",
-    "file_source": "client-bucket/report.pdf",
+    "file_source": "file_storage/report.pdf",
     "ctg_id": "1",
-    "client_id": "1",
+    "org_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "user_id": "1",
     "Category": {
       "ctg_id": "1",
@@ -788,7 +822,7 @@ Uploads a new document to Supabase Storage and creates metadata in the database.
 |---|---|---|---|
 | `file` | `File` | Yes | The file to upload (max 50 MB) |
 | `ctg_id` | `BigInt` | No | Category ID |
-| `client_id` | `BigInt` | No | Client owner ID |
+| `org_id` | `string` (UUID) | No | Organisation owner ID |
 | `user_id` | `BigInt` | No | Uploader user ID |
 
 **Response `201 Created`**
@@ -798,9 +832,9 @@ Uploads a new document to Supabase Storage and creates metadata in the database.
   "file_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "file_name": "report.pdf",
   "file_size": "2048576",
-  "file_source": "documents/a1b2c3d4-.../report.pdf",
+  "file_source": "file_storage/report.pdf",
   "ctg_id": "1",
-  "client_id": "1",
+  "org_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "user_id": "1",
   "created_at": "2026-03-11T12:00:00.000Z",
   "updated_at": "2026-03-11T12:00:00.000Z"
@@ -829,7 +863,7 @@ Updates document metadata (does not replace the file itself).
 |---|---|---|---|
 | `file_name` | `string` | No | New file name |
 | `ctg_id` | `BigInt` | No | New category ID |
-| `client_id` | `BigInt` | No | New client owner |
+| `org_id` | `string` (UUID) | No | New organisation owner |
 
 **Response `200 OK`** — The updated File metadata object
 
@@ -999,7 +1033,7 @@ Sends a message to the AI chatbot. The pipeline:
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `message` | `string` | Yes | The user's question or prompt |
-| `clientIds` | `string` or `"all"` | No | Comma-separated client IDs to scope document search, or `"all"` (default: `"all"`) |
+| `orgIds` | `string` or `string[]` or `"all"` | No | Organisation ID(s) to scope document search, or `"all"` (default: `"all"`) |
 | `history` | `array` | No | Previous conversation history for context |
 
 **Response `200 OK`**
@@ -1614,28 +1648,33 @@ OAuth callback handler. Exchanges code for token and fetches the ClickUp user ID
 | `gender` | `String?` | Gender |
 | `status` | `String?` | Account status |
 | `role_id` | `BigInt?` (FK → Role) | Assigned role |
-| `client_id` | `BigInt?` (FK → Client) | Associated client |
+| `org_id` | `String?` (FK → Organisation, UUID) | Associated organisation |
+| `job_title` | `String?` | Job title |
 | `last_login` | `DateTime?` | Last login timestamp |
 
-**Relations:** `Role`, `Client`, `Activity_Log[]`, `Comment[]`, `File[]`
+**Relations:** `Role`, `Organisation`, `File[]`
 
 ---
 
-### Client
+### Organisation
 
 | Field | Type | Description |
 |---|---|---|
-| `client_id` | `BigInt` (PK, auto-increment) | Unique identifier |
-| `client_name` | `String` | Company name |
+| `org_id` | `String` (PK, UUID) | Unique identifier |
+| `org_name` | `String` | Company name |
 | `industry` | `String?` | Industry sector |
 | `founded` | `DateTime?` | Date founded |
 | `key_contacts` | `BigInt?` | Primary contact user ID |
 | `company_location` | `String?` | Headquarters |
 | `organization_chart` | `String?` | Org chart URL |
 | `gpt_types` | `String?` | AI model preferences |
-| `storage_bucket` | `String?` (UUID) | Supabase storage bucket |
+| `storage_bucket` | `String` (UUID) | Supabase storage bucket |
+| `hubspot_connected` | `Boolean` | HubSpot integration connected |
+| `quickbooks_connected` | `Boolean` | QuickBooks integration connected |
+| `monday_connected` | `Boolean` | Monday.com integration connected |
+| `clickup_connected` | `Boolean` | ClickUp integration connected |
 
-**Relations:** `User[]`, `File[]`
+**Relations:** `User[]`, `File[]`, `FinanceKpi[]`, `LeadsKpi[]`, `LaborKpi[]`, `HubspotToken`, `QuickbooksToken`, `MondayToken`, `ClickUpToken`, `document_embeddings[]`
 
 ---
 
@@ -1648,12 +1687,12 @@ OAuth callback handler. Exchanges code for token and fetches the ClickUp user ID
 | `file_size` | `BigInt?` | File size in bytes |
 | `file_source` | `String?` | Supabase storage path |
 | `ctg_id` | `BigInt?` (FK → Category) | Category |
-| `client_id` | `BigInt?` (FK → Client) | Owning client |
+| `org_id` | `String?` (FK → Organisation, UUID) | Owning organisation |
 | `user_id` | `BigInt?` (FK → User) | Uploader |
 | `created_at` | `DateTime` | Upload timestamp |
 | `updated_at` | `DateTime` | Last modified timestamp |
 
-**Relations:** `Category`, `Client`, `User`, `Activity_Log[]`, `Comment[]`
+**Relations:** `Category`, `Organisation`, `User`
 
 ---
 
@@ -1701,7 +1740,7 @@ OAuth callback handler. Exchanges code for token and fetches the ClickUp user ID
 | `role_id` | `BigInt` (PK, auto-increment) | Unique identifier |
 | `role_name` | `String?` | Role label |
 
-**Predefined Roles:** Super Admin, Admin, Client Executive, Client Staff
+**Predefined Roles:** Super Admin, Admin, Org Executive, Org Staff
 
 **Relations:** `User[]`, `RolePermission[]`
 
@@ -1746,10 +1785,10 @@ OAuth callback handler. Exchanges code for token and fetches the ClickUp user ID
 
 | Field | Type |
 |---|---|
-| `user_id` | `String` (PK) |
+| `org_id` | `String` (PK, UUID, FK → Organisation) |
 | `access_token` | `String` |
 | `refresh_token` | `String` |
-| `expires_at` | `BigInt` |
+| `expires_at` | `DateTime` |
 | `created_at` | `DateTime` |
 | `updated_at` | `DateTime` |
 
@@ -1757,11 +1796,11 @@ OAuth callback handler. Exchanges code for token and fetches the ClickUp user ID
 
 | Field | Type |
 |---|---|
-| `user_id` | `String` (PK) |
+| `org_id` | `String` (PK, UUID, FK → Organisation) |
 | `access_token` | `String` |
 | `refresh_token` | `String` |
 | `token_type` | `String` |
-| `realmId` | `String` |
+| `realmId` | `BigInt` |
 | `expires_in` | `Int` |
 | `x_refresh_token_expires_in` | `Int` |
 
@@ -1770,10 +1809,10 @@ OAuth callback handler. Exchanges code for token and fetches the ClickUp user ID
 | Field | Type |
 |---|---|
 | `id` | `Int` (PK, auto-increment) |
-| `user_id` | `String` |
+| `org_id` | `String` (unique, UUID, FK → Organisation) |
 | `access_token` | `String` |
 | `refresh_token` | `String?` |
-| `token_type` | `String` |
+| `token_type` | `String?` |
 | `realm_id` | `String?` |
 | `expires_in` | `Int?` |
 | `refresh_token_expires_in` | `Int?` |
@@ -1784,11 +1823,11 @@ OAuth callback handler. Exchanges code for token and fetches the ClickUp user ID
 
 | Field | Type |
 |---|---|
-| `user_id` | `String` (PK) |
+| `org_id` | `String` (PK, UUID, FK → Organisation) |
 | `access_token` | `String` |
-| `refresh_token` | `String?` |
-| `token_type` | `String?` |
-| `expires_at` | `BigInt?` |
+| `refresh_token` | `String` |
+| `token_type` | `String` |
+| `expires_at` | `DateTime` |
 | `created_at` | `DateTime` |
 | `updated_at` | `DateTime` |
 
@@ -1800,7 +1839,8 @@ OAuth callback handler. Exchanges code for token and fetches the ClickUp user ID
 |---|---|---|
 | `id` | `BigInt` (PK) | Unique identifier |
 | `content` | `Text` | Chunk of document text |
-| `metadata` | `JSON` | File ID, file name, chunk index, etc. |
-| `embedding` | `vector` | Embedding vector (generated by Ollama `nomic-embed-text`) |
+| `metadata` | `JSON` | File ID, file name, org_id, ctg_id, chunk index |
+| `org_id` | `String?` (FK → Organisation, UUID) | Organisation scope for tenant isolation |
+| `embedding` | `vector(1536)` | Embedding vector (generated by Ollama `nomic-embed-text`) |
 
-Used for semantic similarity search in the RAG chat pipeline.
+The `org_id` column has a B-tree index and `ON DELETE CASCADE` FK to the Organisation table. The `match_documents` RPC uses `WHERE org_id = ANY(filter_org_ids)` for database-level tenant isolation during vector search.

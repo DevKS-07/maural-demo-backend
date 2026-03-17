@@ -20,10 +20,6 @@ router.get("/:userId/comments", userController.getUserComments); // Get comments
 
 router.get("/:userId/permissions", userController.getUserPermissions); // Get user's permissions via their role
 
-// **************************  POST ROUTES **************************
-
-router.post("/", userController.createUser); // Create a new user
-
 // **************************  PUT ROUTES **************************
 
 router.put("/:userId", userController.updateUser); // Update user's profile by ID

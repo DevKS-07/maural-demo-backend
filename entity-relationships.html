@@ -173,7 +173,7 @@
             The <code>gpt_types</code> field indicates which AI/chatbot capabilities have been enabled for that organisation, allowing Maural to customize the AI experience per organisation. Additionally, boolean flags (<code>hubspot_connected</code>, <code>quickbooks_connected</code>, <code>monday_connected</code>, <code>clickup_connected</code>) track which external integrations have been connected for this organisation.
         </p>
         <div class="relationship-list">
-            <p><strong>Has many:</strong> Users, Files, FinanceKpis, LeadsKpis, LaborKpis</p>
+            <p><strong>Has many:</strong> Users, Files, FinanceKpis, LeadsKpis, LaborKpis, document_embeddings</p>
             <p><strong>Has one (per service):</strong> HubspotToken, QuickbooksToken, MondayToken, ClickUpToken</p>
             <p><strong>Business meaning:</strong> "This is one of the companies we serve."</p>
         </div>
@@ -307,12 +307,16 @@
             The <strong>document_embeddings</strong> table is the foundation of the AI chatbot's knowledge. When a File is ingested, the system extracts its text content, splits it into meaningful chunks, and passes each chunk through an embedding model (Ollama) to generate a high-dimensional vector representation. These vectors capture the <em>semantic meaning</em> of the text — not just keywords, but the concepts and relationships within the content.
         </p>
         <p>
-            Each record stores the original text <code>content</code> (so it can be shown to the user), a <code>metadata</code> JSON field (containing the source file reference, organisation ID, page numbers, etc.), and the <code>embedding</code> vector itself. The vector column uses PostgreSQL's <code>pgvector</code> extension, which enables <strong>similarity search</strong> — when a user asks the chatbot a question, the question is also embedded into a vector, and the system finds the document chunks whose vectors are closest to the question vector. This is the <strong>Retrieval-Augmented Generation (RAG)</strong> pattern.
+            Each record stores the original text <code>content</code> (so it can be shown to the user), a <code>metadata</code> JSON field (containing the source file reference, page numbers, etc.), and the <code>embedding</code> vector itself. The vector column uses PostgreSQL's <code>pgvector</code> extension, which enables <strong>similarity search</strong> — when a user asks the chatbot a question, the question is also embedded into a vector, and the system finds the document chunks whose vectors are closest to the question vector. This is the <strong>Retrieval-Augmented Generation (RAG)</strong> pattern.
+        </p>
+        <p>
+            Each embedding row has a real <code>org_id</code> UUID column (foreign key → Organisation) that enables <strong>tenant-scoped vector search</strong> at the database level. The <code>match_documents</code> RPC function accepts a <code>filter_org_ids</code> parameter and uses <code>WHERE org_id = ANY(filter_org_ids)</code> to restrict results to the caller's organisation — or returns all results when <code>filter_org_ids</code> is NULL (admin mode). A B-tree index on <code>org_id</code> ensures fast tenant-scoped queries. The foreign key uses <code>ON DELETE CASCADE</code>, so deleting an organisation automatically removes all its embeddings.
         </p>
         <div class="relationship-list">
+            <p><strong>Belongs to:</strong> Organisation (via <code>org_id</code> FK, ON DELETE CASCADE)</p>
             <p><strong>Derived from:</strong> Files (via the ingestion pipeline)</p>
             <p><strong>Used by:</strong> RAG service → Chat controller → AI chatbot responses</p>
-            <p><strong>Business meaning:</strong> "This is the AI-searchable representation of our document knowledge base."</p>
+            <p><strong>Business meaning:</strong> "This is the AI-searchable representation of our document knowledge base, scoped per organisation for tenant isolation."</p>
         </div>
     </div>
 
@@ -443,7 +447,7 @@
     <div class="entity-card">
         <h3>Tenant Isolation (The Most Important Pattern)</h3>
         <p>
-            The <code>org_id</code> foreign key is the <strong>single most important relationship</strong> in the entire data model. It appears on Users, Files, FinanceKpis, LeadsKpis, and LaborKpis. Every API query that returns tenant-scoped data filters by <code>org_id</code> to ensure that a user from Organisation A can never see Organisation B's documents, users, or KPI data. This isolation is enforced at multiple layers: the application code (API controllers filter by org_id), the database (row-level security policies), and the storage layer (each organisation has its own Supabase Storage bucket). The AI chatbot also respects this boundary — when retrieving document embeddings for a RAG query, the metadata filter ensures only the requesting user's organisation's documents are searched.
+            The <code>org_id</code> foreign key is the <strong>single most important relationship</strong> in the entire data model. It appears on Users, Files, FinanceKpis, LeadsKpis, LaborKpis, and document_embeddings. Every API query that returns tenant-scoped data filters by <code>org_id</code> to ensure that a user from Organisation A can never see Organisation B's documents, users, or KPI data. This isolation is enforced at multiple layers: the application code (API controllers filter by org_id), the database (row-level security policies, foreign keys with ON DELETE CASCADE), and the storage layer (each organisation has its own Supabase Storage bucket). The AI chatbot enforces this boundary at the database level — the <code>document_embeddings</code> table has a real <code>org_id</code> UUID column with a B-tree index, and the <code>match_documents</code> RPC function uses <code>WHERE org_id = ANY(filter_org_ids)</code> to scope vector search results to the requesting user's organisation. Admin users can pass NULL to search across all organisations.
         </p>
     </div>
 
@@ -502,6 +506,7 @@
             <tr><td>Organisation</td><td>FinanceKpi</td><td>One-to-Many</td><td>An organisation has financial snapshots across multiple time periods</td></tr>
             <tr><td>Organisation</td><td>LeadsKpi</td><td>One-to-Many</td><td>An organisation has sales pipeline snapshots across multiple time periods</td></tr>
             <tr><td>Organisation</td><td>LaborKpi</td><td>One-to-Many</td><td>An organisation has workforce metrics across multiple time periods</td></tr>
+            <tr><td>Organisation</td><td>document_embeddings</td><td>One-to-Many</td><td>An organisation's ingested document chunks are scoped for tenant-isolated AI search (CASCADE delete)</td></tr>
             <tr><td>Organisation</td><td>OAuth Tokens</td><td>One-to-One (per service)</td><td>An organisation has one set of credentials per connected external service</td></tr>
             <tr><td>User</td><td>Organisation</td><td>Many-to-One (optional)</td><td>A user belongs to one organisation (or none, if Maural staff)</td></tr>
             <tr><td>User</td><td>Role</td><td>Many-to-One</td><td>A user is assigned one role that determines their access level</td></tr>

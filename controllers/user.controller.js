@@ -141,51 +141,6 @@ exports.getUserPermissions = async (req, res) => {
   }
 };
 
-///////////////////////////////  POST ROUTES ///////////////////////////////
-
-/**
- * ### FOR SUPER ADMIN / ADMIN ONLY ###
- * Create a new user
- * @route POST /users/
- * @param {string} req.body.first_name - First name of the new user (required)
- * @param {string} req.body.last_name - Last name of the new user (required)
- * @param {string} req.body.email - Email of the new user (required)
- * @param {string} req.body.org_id - UUID of the organisation this user belongs to
- * @param {number} req.body.role_id - ID of the role assigned to this user
- * @param {string} req.body.phone - Phone number of the new user
- * @param {string} req.body.gender - Gender of the new user
- * @param {string} req.body.status - Status of the new user (e.g. active, inactive)
- * @param {string} req.body.job_title - Job title of the new user (e.g. CEO, CTO)
- * @returns {object} - The newly created user object
- * */
-exports.createUser = async (req, res) => {
-  const { first_name, last_name, email, org_id, role_id, phone, gender, status, job_title } = req.body;
-
-  if (!first_name || !last_name || !email) {
-    return res.status(400).json({ message: "first_name, last_name, and email are required" });
-  }
-
-  try {
-    const newUser = await prisma.user.create({
-      data: {
-        first_name,
-        last_name,
-        email,
-        phone,
-        gender,
-        status,
-        job_title,
-        org_id: org_id || undefined,
-        role_id: role_id ? BigInt(role_id) : undefined,
-      },
-    });
-    res.status(201).json(newUser);
-  } catch (error) {
-    console.error("Failed to create user:", error.message);
-    res.status(500).json({ message: "Failed to create user" });
-  }
-};
-
 ///////////////////////////////  PUT ROUTES ///////////////////////////////
 
 /**
