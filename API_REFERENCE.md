@@ -300,9 +300,20 @@ Returns the organisation of the currently authenticated user.
 
 ### Users
 
-All user endpoints require authentication (`requireAuth`). Invitation endpoints additionally require `requireRole("admin")`.
+All user endpoints require authentication (`requireAuth`). Invitation endpoints additionally require `requireRole("org_executive")` or higher.
 
-Users are created exclusively through Clerk invitations — there is no public sign-up. Admins invite users via `POST /api/user/invite`, Clerk sends the invitation email, and when the invitee signs up, the webhook auto-assigns their `org_id` and `role` from the invitation metadata.
+Users are created exclusively through Clerk invitations — there is no public sign-up. Authorised users invite others via `POST /api/user/invite`, Clerk sends the invitation email, and when the invitee signs up, the webhook auto-assigns their `org_id` and `role` from the invitation metadata.
+
+**Invitation Role Permissions:**
+
+| Inviter Role | Can Invite |
+|---|---|
+| `super_admin` | `admin`, `org_executive`, `org_staff` |
+| `admin` | `org_executive`, `org_staff` |
+| `org_executive` | `org_executive`, `org_staff` (own organisation only) |
+| `org_staff` | Cannot invite |
+
+> **Note:** Org Executives are automatically locked to their own organisation. If they omit `org_id`, it is auto-filled from their DB record. They cannot invite users into a different organisation.
 
 ---
 
@@ -310,15 +321,15 @@ Users are created exclusively through Clerk invitations — there is no public s
 
 Sends an invitation to a new user via Clerk. The invitee receives an email with a sign-up link. When they sign up, the webhook automatically assigns the specified `org_id` and `role`.
 
-**Auth:** Required + `admin` role or higher
+**Auth:** Required + `org_executive` role or higher
 
 **Request Body:**
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `email_address` | `string` | Yes | Email address to invite |
-| `role` | `string` | No | Clerk role key (default: `org_staff`). Valid: `super_admin`, `admin`, `org_executive`, `org_staff` |
-| `org_id` | `string` (UUID) | No | Organisation to assign the user to on sign-up |
+| `role` | `string` | No | Clerk role key (default: `org_staff`). Must be within the inviter's allowed roles (see table above) |
+| `org_id` | `string` (UUID) | No | Organisation to assign the user to on sign-up. Auto-filled for Org Executives |
 
 **Response `201 Created`**
 
@@ -336,6 +347,8 @@ Sends an invitation to a new user via Clerk. The invitee receives an email with 
 ```
 
 **Error `400 Bad Request`** — Missing `email_address` or invalid `role`
+
+**Error `403 Forbidden`** — Role not allowed to invite the specified target role, or Org Executive attempting to invite into a different organisation
 
 **Error `404 Not Found`** — `org_id` does not exist
 

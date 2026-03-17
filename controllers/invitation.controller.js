@@ -2,10 +2,15 @@
  * Invitation Controller
  *
  * Manages user invitations via Clerk's built-in invitation API.
- * Only admins (or higher) can invite new users. The invitation email
- * is sent by Clerk; when the invitee signs up, their publicMetadata
- * (role + org_id) is copied to the new Clerk user and picked up by
- * the webhook handler to auto-assign org and role in the database.
+ * Role-based invitation permissions:
+ *   - super_admin → can invite admin, org_executive, org_staff
+ *   - admin       → can invite org_executive, org_staff
+ *   - org_executive → can invite org_executive, org_staff (own org only)
+ *
+ * The invitation email is sent by Clerk; when the invitee signs up,
+ * their publicMetadata (role + org_id) is copied to the new Clerk user
+ * and picked up by the webhook handler to auto-assign org and role in
+ * the database.
  *
  * POST   /api/user/invite              — Send an invitation
  * GET    /api/user/invitations          — List all invitations
@@ -15,6 +20,13 @@
 const { clerkClient } = require("@clerk/express");
 const prisma = require("../lib/prisma");
 const { VALID_CLERK_ROLES } = require("../config/roles");
+
+// Roles each inviter is allowed to assign
+const ALLOWED_INVITE_ROLES = {
+  super_admin: ["admin", "org_executive", "org_staff"],
+  admin: ["org_executive", "org_staff"],
+  org_executive: ["org_executive", "org_staff"],
+};
 
 // ---------------------------------------------------------------------------
 // POST /api/user/invite — Create and send an invitation
@@ -26,20 +38,63 @@ exports.createInvitation = async (req, res) => {
     return res.status(400).json({ message: "email_address is required" });
   }
 
-  if (role && !VALID_CLERK_ROLES.includes(role)) {
+  // --- Determine the inviter's role and permissions ---
+  const { sessionClaims, userId: clerkId } = req.auth();
+  const inviterRole = sessionClaims?.publicMetadata?.role;
+
+  const allowedRoles = ALLOWED_INVITE_ROLES[inviterRole];
+  if (!allowedRoles) {
+    return res.status(403).json({ message: "You do not have permission to invite users" });
+  }
+
+  const targetRole = role || "org_staff";
+
+  if (!VALID_CLERK_ROLES.includes(targetRole)) {
     return res.status(400).json({
-      message: `Invalid role "${role}". Valid roles: ${VALID_CLERK_ROLES.join(", ")}`,
+      message: `Invalid role "${targetRole}". Valid roles: ${VALID_CLERK_ROLES.join(", ")}`,
     });
   }
 
+  if (!allowedRoles.includes(targetRole)) {
+    return res.status(403).json({
+      message: `Your role (${inviterRole}) cannot invite users with role "${targetRole}". Allowed: ${allowedRoles.join(", ")}`,
+    });
+  }
+
+  // --- Resolve org_id (org_executives are locked to their own org) ---
+  let resolvedOrgId = org_id || null;
+
+  if (inviterRole === "org_executive") {
+    // Look up the inviter's org from the database
+    const inviter = await prisma.user.findUnique({
+      where: { clerk_id: clerkId },
+      select: { org_id: true },
+    });
+
+    if (!inviter?.org_id) {
+      return res.status(400).json({
+        message: "You must be assigned to an organisation before you can invite users",
+      });
+    }
+
+    // Org executives can only invite into their own org
+    if (org_id && org_id !== inviter.org_id) {
+      return res.status(403).json({
+        message: "Org Executives can only invite users into their own organisation",
+      });
+    }
+
+    resolvedOrgId = inviter.org_id;
+  }
+
   // Validate that the organisation exists (if provided)
-  if (org_id) {
+  if (resolvedOrgId) {
     try {
       const org = await prisma.organisation.findUnique({
-        where: { org_id },
+        where: { org_id: resolvedOrgId },
       });
       if (!org) {
-        return res.status(404).json({ message: `Organisation with ID ${org_id} not found` });
+        return res.status(404).json({ message: `Organisation with ID ${resolvedOrgId} not found` });
       }
     } catch (error) {
       console.error("[invitation] Failed to validate organisation:", error.message);
@@ -51,12 +106,12 @@ exports.createInvitation = async (req, res) => {
     const invitation = await clerkClient.invitations.createInvitation({
       emailAddress: email_address,
       publicMetadata: {
-        role: role || "org_staff",
-        org_id: org_id || null,
+        role: targetRole,
+        org_id: resolvedOrgId,
       },
     });
 
-    console.log(`[invitation] Invited ${email_address} (role: ${role || "org_staff"}, org: ${org_id || "none"})`);
+    console.log(`[invitation] ${inviterRole} invited ${email_address} (role: ${targetRole}, org: ${resolvedOrgId || "none"})`);
     return res.status(201).json(invitation);
   } catch (error) {
     // Clerk throws specific errors for duplicate invitations / existing users

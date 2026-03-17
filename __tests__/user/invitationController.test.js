@@ -3,6 +3,9 @@ jest.mock("../../lib/prisma", () => ({
   organisation: {
     findUnique: jest.fn(),
   },
+  user: {
+    findUnique: jest.fn(),
+  },
 }));
 
 // Mock @clerk/express
@@ -31,6 +34,11 @@ const createRes = () => {
   return res;
 };
 
+const mockAuth = (role, clerkId = "clerk_user_123") => () => ({
+  sessionClaims: { publicMetadata: { role } },
+  userId: clerkId,
+});
+
 const MOCK_INVITATION = {
   id: "inv_abc123",
   email_address: "newuser@example.com",
@@ -55,14 +63,17 @@ describe("Invitation Controller - Unit Tests", () => {
   // POST /invite — createInvitation
   // ========================================================================
   describe("createInvitation", () => {
-    test("returns 201 with invitation on success", async () => {
+    // --- Success cases ---
+
+    test("super_admin can invite admin with org_id", async () => {
       prisma.organisation.findUnique.mockResolvedValue(MOCK_ORG);
       clerkClient.invitations.createInvitation.mockResolvedValue(MOCK_INVITATION);
 
       const req = {
+        auth: mockAuth("super_admin"),
         body: {
           email_address: "newuser@example.com",
-          role: "org_staff",
+          role: "admin",
           org_id: "a1b2c3d4-uuid",
         },
       };
@@ -70,22 +81,39 @@ describe("Invitation Controller - Unit Tests", () => {
 
       await invitationController.createInvitation(req, res);
 
-      expect(prisma.organisation.findUnique).toHaveBeenCalledWith({
-        where: { org_id: "a1b2c3d4-uuid" },
-      });
       expect(clerkClient.invitations.createInvitation).toHaveBeenCalledWith({
         emailAddress: "newuser@example.com",
-        publicMetadata: { role: "org_staff", org_id: "a1b2c3d4-uuid" },
+        publicMetadata: { role: "admin", org_id: "a1b2c3d4-uuid" },
       });
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.json).toHaveBeenCalledWith(MOCK_INVITATION);
     });
 
-    test("returns 201 without org_id (admin-level invite)", async () => {
+    test("admin can invite org_executive", async () => {
+      prisma.organisation.findUnique.mockResolvedValue(MOCK_ORG);
       clerkClient.invitations.createInvitation.mockResolvedValue(MOCK_INVITATION);
 
       const req = {
-        body: { email_address: "newuser@example.com", role: "admin" },
+        auth: mockAuth("admin"),
+        body: {
+          email_address: "exec@example.com",
+          role: "org_executive",
+          org_id: "a1b2c3d4-uuid",
+        },
+      };
+      const res = createRes();
+
+      await invitationController.createInvitation(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(201);
+    });
+
+    test("admin can invite org_staff without org_id", async () => {
+      clerkClient.invitations.createInvitation.mockResolvedValue(MOCK_INVITATION);
+
+      const req = {
+        auth: mockAuth("admin"),
+        body: { email_address: "staff@example.com", role: "org_staff" },
       };
       const res = createRes();
 
@@ -93,8 +121,8 @@ describe("Invitation Controller - Unit Tests", () => {
 
       expect(prisma.organisation.findUnique).not.toHaveBeenCalled();
       expect(clerkClient.invitations.createInvitation).toHaveBeenCalledWith({
-        emailAddress: "newuser@example.com",
-        publicMetadata: { role: "admin", org_id: null },
+        emailAddress: "staff@example.com",
+        publicMetadata: { role: "org_staff", org_id: null },
       });
       expect(res.status).toHaveBeenCalledWith(201);
     });
@@ -103,6 +131,7 @@ describe("Invitation Controller - Unit Tests", () => {
       clerkClient.invitations.createInvitation.mockResolvedValue(MOCK_INVITATION);
 
       const req = {
+        auth: mockAuth("admin"),
         body: { email_address: "newuser@example.com" },
       };
       const res = createRes();
@@ -116,8 +145,153 @@ describe("Invitation Controller - Unit Tests", () => {
       expect(res.status).toHaveBeenCalledWith(201);
     });
 
+    // --- Org Executive restrictions ---
+
+    test("org_executive can invite org_staff into their own org", async () => {
+      prisma.user.findUnique.mockResolvedValue({ org_id: "a1b2c3d4-uuid" });
+      prisma.organisation.findUnique.mockResolvedValue(MOCK_ORG);
+      clerkClient.invitations.createInvitation.mockResolvedValue(MOCK_INVITATION);
+
+      const req = {
+        auth: mockAuth("org_executive"),
+        body: {
+          email_address: "staff@example.com",
+          role: "org_staff",
+          org_id: "a1b2c3d4-uuid",
+        },
+      };
+      const res = createRes();
+
+      await invitationController.createInvitation(req, res);
+
+      expect(clerkClient.invitations.createInvitation).toHaveBeenCalledWith({
+        emailAddress: "staff@example.com",
+        publicMetadata: { role: "org_staff", org_id: "a1b2c3d4-uuid" },
+      });
+      expect(res.status).toHaveBeenCalledWith(201);
+    });
+
+    test("org_executive auto-fills org_id from their own record when not provided", async () => {
+      prisma.user.findUnique.mockResolvedValue({ org_id: "a1b2c3d4-uuid" });
+      prisma.organisation.findUnique.mockResolvedValue(MOCK_ORG);
+      clerkClient.invitations.createInvitation.mockResolvedValue(MOCK_INVITATION);
+
+      const req = {
+        auth: mockAuth("org_executive"),
+        body: { email_address: "staff@example.com", role: "org_staff" },
+      };
+      const res = createRes();
+
+      await invitationController.createInvitation(req, res);
+
+      expect(clerkClient.invitations.createInvitation).toHaveBeenCalledWith({
+        emailAddress: "staff@example.com",
+        publicMetadata: { role: "org_staff", org_id: "a1b2c3d4-uuid" },
+      });
+      expect(res.status).toHaveBeenCalledWith(201);
+    });
+
+    test("org_executive cannot invite into a different org", async () => {
+      prisma.user.findUnique.mockResolvedValue({ org_id: "a1b2c3d4-uuid" });
+
+      const req = {
+        auth: mockAuth("org_executive"),
+        body: {
+          email_address: "staff@example.com",
+          role: "org_staff",
+          org_id: "different-org-uuid",
+        },
+      };
+      const res = createRes();
+
+      await invitationController.createInvitation(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("own organisation") }),
+      );
+    });
+
+    test("org_executive without an org cannot invite", async () => {
+      prisma.user.findUnique.mockResolvedValue({ org_id: null });
+
+      const req = {
+        auth: mockAuth("org_executive"),
+        body: { email_address: "staff@example.com", role: "org_staff" },
+      };
+      const res = createRes();
+
+      await invitationController.createInvitation(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("assigned to an organisation") }),
+      );
+    });
+
+    // --- Role permission restrictions ---
+
+    test("admin cannot invite super_admin", async () => {
+      const req = {
+        auth: mockAuth("admin"),
+        body: { email_address: "boss@example.com", role: "super_admin" },
+      };
+      const res = createRes();
+
+      await invitationController.createInvitation(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("cannot invite") }),
+      );
+    });
+
+    test("admin cannot invite admin", async () => {
+      const req = {
+        auth: mockAuth("admin"),
+        body: { email_address: "otheradmin@example.com", role: "admin" },
+      };
+      const res = createRes();
+
+      await invitationController.createInvitation(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    test("org_executive cannot invite admin", async () => {
+      const req = {
+        auth: mockAuth("org_executive"),
+        body: { email_address: "admin@example.com", role: "admin" },
+      };
+      const res = createRes();
+
+      await invitationController.createInvitation(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    test("org_staff cannot invite anyone", async () => {
+      const req = {
+        auth: mockAuth("org_staff"),
+        body: { email_address: "someone@example.com", role: "org_staff" },
+      };
+      const res = createRes();
+
+      await invitationController.createInvitation(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "You do not have permission to invite users" }),
+      );
+    });
+
+    // --- Validation errors ---
+
     test("returns 400 when email_address is missing", async () => {
-      const req = { body: { role: "org_staff" } };
+      const req = {
+        auth: mockAuth("admin"),
+        body: { role: "org_staff" },
+      };
       const res = createRes();
 
       await invitationController.createInvitation(req, res);
@@ -130,6 +304,7 @@ describe("Invitation Controller - Unit Tests", () => {
 
     test("returns 400 when role is invalid", async () => {
       const req = {
+        auth: mockAuth("admin"),
         body: { email_address: "newuser@example.com", role: "ceo" },
       };
       const res = createRes();
@@ -146,6 +321,7 @@ describe("Invitation Controller - Unit Tests", () => {
       prisma.organisation.findUnique.mockResolvedValue(null);
 
       const req = {
+        auth: mockAuth("admin"),
         body: {
           email_address: "newuser@example.com",
           role: "org_staff",
@@ -162,6 +338,8 @@ describe("Invitation Controller - Unit Tests", () => {
       );
     });
 
+    // --- Clerk errors ---
+
     test("returns 409 when invitation already exists", async () => {
       const clerkError = new Error("duplicate");
       clerkError.status = 422;
@@ -169,6 +347,7 @@ describe("Invitation Controller - Unit Tests", () => {
       clerkClient.invitations.createInvitation.mockRejectedValue(clerkError);
 
       const req = {
+        auth: mockAuth("admin"),
         body: { email_address: "existing@example.com" },
       };
       const res = createRes();
@@ -182,6 +361,7 @@ describe("Invitation Controller - Unit Tests", () => {
       clerkClient.invitations.createInvitation.mockRejectedValue(new Error("Clerk API down"));
 
       const req = {
+        auth: mockAuth("admin"),
         body: { email_address: "newuser@example.com" },
       };
       const res = createRes();

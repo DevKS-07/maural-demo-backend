@@ -11,7 +11,7 @@ router.get("/", userController.user_Testing);
 // **************************  INVITATION ROUTES **************************
 // (must be before /:userId to avoid Express matching "invite" as a userId)
 
-router.post("/invite", requireRole("admin"), invitationController.createInvitation);
+router.post("/invite", requireRole("org_executive"), invitationController.createInvitation);
 router.get("/invitations", requireRole("admin"), invitationController.listInvitations);
 router.delete("/invite/:invitationId", requireRole("admin"), invitationController.revokeInvitation);
 
