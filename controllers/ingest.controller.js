@@ -245,6 +245,7 @@ async function ingestSingleFile(file) {
       ctg_id: file.ctg_id ? Number(file.ctg_id) : null,
       chunk_index: chunk.chunkIndex,
     },
+    org_id: file.org_id || null,
     embedding: vectors[i],
   }));
 
@@ -325,6 +326,7 @@ exports.ingest = async (req, res) => {
             ctg_id: file.ctg_id ? Number(file.ctg_id) : null,
             chunk_index: chunk.chunkIndex,
           },
+          org_id: file.org_id || null,
           embedding: vectors[i],
         }));
 

@@ -297,6 +297,7 @@ async function main() {
           ctg_id: null, // assign after migrating File table (FK → Category)
           chunk_index: chunk.chunkIndex,
         },
+        org_id: null, // assign after associating File with an organisation
         embedding: vectors[i],
       }));
 

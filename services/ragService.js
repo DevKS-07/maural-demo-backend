@@ -126,26 +126,18 @@ async function retrieveDocuments(query, orgIds, topK = 15) {
   }
 
   // -------------------------------------------------------------------------
-  // Build the JSONB filter for the match_documents RPC.
-  // The RPC uses `metadata @> filter` (JSONB containment).
-  // Single-organisation: pass directly. Multi-organisation: no RPC filter — post-filter in JS.
+  // Build the filter for the match_documents RPC.
+  // Uses the real org_id column for fast, indexed tenant isolation.
+  // Pass org_ids as a UUID array; null means "all" (admin).
   // -------------------------------------------------------------------------
-  const rpcFilter =
-    orgIdList && orgIdList.length === 1
-      ? { org_id: orgIdList[0] }
-      : {};
-
-  // Fetch more rows for multi-organisation so post-filter still gets topK results
-  const fetchCount =
-    orgIdList && orgIdList.length > 1 ? topK * orgIdList.length : topK;
 
   // Embed the incoming query
   const queryEmbedding = await embeddings.embedQuery(query);
 
   const { data, error } = await supabase.rpc("match_documents", {
     query_embedding: queryEmbedding,
-    match_count: fetchCount,
-    filter: rpcFilter,
+    match_count: topK,
+    filter_org_ids: orgIdList, // null = all orgs (admin), array = scoped
   });
 
   if (error) {
@@ -157,13 +149,6 @@ async function retrieveDocuments(query, orgIds, topK = 15) {
   }
 
   let chunks = data || [];
-
-  // Post-filter: for multiple organisations, keep only chunks belonging to those organisations.
-  if (orgIdList && orgIdList.length > 1) {
-    chunks = chunks
-      .filter((c) => orgIdList.includes(c.metadata?.org_id))
-      .slice(0, topK);
-  }
 
   // -------------------------------------------------------------------------
   // Document coverage guarantee: every file the organisation owns should have at

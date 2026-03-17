@@ -33,6 +33,7 @@ model Organisation {
     quickbooksTokens QuickbooksToken[]
     mondayTokens     MondayToken[]
     clickupTokens    ClickUpToken[]
+    documentEmbeddings document_embeddings[]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -173,12 +174,15 @@ model RolePermission {
 }
 
 model document_embeddings {
-    id        BigInt                @id @default(autoincrement())
-    content   String
-    metadata  Json?                 @default("{}")
-    embedding Unsupported("vector")
+    id           BigInt                @id @default(autoincrement())
+    content      String
+    metadata     Json?                 @default("{}")
+    embedding    Unsupported("vector")
+    org_id       String?               @db.Uuid
+    Organisation Organisation?         @relation(fields: [org_id], references: [org_id], onDelete: Cascade)
 
     @@index([embedding])
+    @@index([org_id])
 }
 
 model FinanceKpi {
