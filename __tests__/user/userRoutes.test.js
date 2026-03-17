@@ -227,43 +227,6 @@ describe("User Routes - Integration Tests", () => {
   });
 
   // ========================================================================
-  // POST /user/
-  // ========================================================================
-  describe("POST /user/", () => {
-    test("returns 201 with created user", async () => {
-      prisma.user.create.mockResolvedValue(MOCK_USER);
-
-      const res = await request(app).post("/user/").send({
-        first_name: "Jane",
-        last_name: "Doe",
-        email: "jane@example.com",
-      });
-
-      expect(res.status).toBe(201);
-      expect(res.body).toMatchObject({ first_name: "Jane" });
-    });
-
-    test("returns 400 when required fields are missing", async () => {
-      const res = await request(app).post("/user/").send({ first_name: "Jane" });
-
-      expect(res.status).toBe(400);
-      expect(res.body).toHaveProperty("message", "first_name, last_name, and email are required");
-    });
-
-    test("returns 500 on database error", async () => {
-      prisma.user.create.mockRejectedValue(new Error("DB error"));
-
-      const res = await request(app).post("/user/").send({
-        first_name: "Jane",
-        last_name: "Doe",
-        email: "jane@example.com",
-      });
-
-      expect(res.status).toBe(500);
-    });
-  });
-
-  // ========================================================================
   // PUT /user/:userId
   // ========================================================================
   describe("PUT /user/:userId", () => {

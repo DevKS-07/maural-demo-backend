@@ -481,35 +481,9 @@ Returns all permissions associated with a user's role.
 
 ---
 
-#### `POST /api/user/`
-
-Creates a new user.
-
-**Auth:** Required
-
-**Request Body:**
-
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `first_name` | `string` | Yes | User's first name |
-| `last_name` | `string` | Yes | User's last name |
-| `email` | `string` | Yes | User's email address |
-| `org_id` | `string` (UUID) | No | Associated organisation ID |
-| `role_id` | `BigInt` | No | Role ID to assign |
-| `phone` | `string` | No | Phone number |
-| `gender` | `string` | No | Gender |
-| `status` | `string` | No | Account status |
-| `job_title` | `string` | No | Job title |
-
-**Response `201 Created`** — The created User object
-
-**Error `400 Bad Request`** — Missing required fields
-
----
-
 #### `PUT /api/user/:userId`
 
-Updates an existing user.
+Updates an existing user. Users are created exclusively via Clerk webhook (`user.created` event) — there is no manual `POST` endpoint. Use this endpoint to assign `org_id`, `job_title`, `role_id`, and other profile fields after the user signs up through Clerk.
 
 **Auth:** Required
 
@@ -519,7 +493,19 @@ Updates an existing user.
 |---|---|---|
 | `userId` | `BigInt` (string) | The user's ID |
 
-**Request Body:** Any subset of the fields from `POST /api/user/`
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `first_name` | `string` | No | User's first name |
+| `last_name` | `string` | No | User's last name |
+| `email` | `string` | No | User's email address |
+| `org_id` | `string` (UUID) | No | Associated organisation ID |
+| `role_id` | `BigInt` | No | Role ID to assign |
+| `phone` | `string` | No | Phone number |
+| `gender` | `string` | No | Gender |
+| `status` | `string` | No | Account status |
+| `job_title` | `string` | No | Job title |
 
 **Response `200 OK`** — The updated User object
 
