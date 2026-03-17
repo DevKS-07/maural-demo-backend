@@ -2,20 +2,9 @@ const { Webhook } = require("svix");
 const { clerkClient } = require("@clerk/express");
 const prisma = require("../lib/prisma");
 const { CLERK_WEBHOOK_SECRET } = require("../config/env");
+const { CLERK_ROLE_TO_DB_ROLE } = require("../config/roles");
 
 const DEFAULT_CLERK_ROLE = "org_staff";
-
-// ---------------------------------------------------------------------------
-// Clerk role name → DB role_name mapping
-// These must match exactly what is defined in the Clerk dashboard
-// and what exists in the Role table in the database.
-// ---------------------------------------------------------------------------
-const CLERK_ROLE_TO_DB_ROLE = {
-  super_admin: "Super Admin",
-  admin: "Admin",
-  org_executive: "Org Executive",
-  org_staff: "Org Staff",
-};
 
 // ---------------------------------------------------------------------------
 // handleClerkWebhook
@@ -67,6 +56,7 @@ exports.handleClerkWebhook = async (req, res) => {
     switch (type) {
       case "user.created": {
         const clerkRole = data.public_metadata?.role || DEFAULT_CLERK_ROLE;
+        const orgId = data.public_metadata?.org_id || null;
         let role_id = undefined;
 
         if (CLERK_ROLE_TO_DB_ROLE[clerkRole]) {
@@ -96,10 +86,11 @@ exports.handleClerkWebhook = async (req, res) => {
             last_name: data.last_name || "",
             email: primaryEmail || "",
             role_id: role_id ?? undefined,
+            org_id: orgId ?? undefined,
           },
         });
 
-        console.log(`[Clerk Webhook] Created user: ${data.id}`);
+        console.log(`[Clerk Webhook] Created user: ${data.id}${orgId ? ` (org: ${orgId})` : ""}`);
         break;
       }
 

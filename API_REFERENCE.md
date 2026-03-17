@@ -197,7 +197,7 @@ Receives webhook events from Clerk for user lifecycle management. Verified using
 
 | Event | Action |
 |---|---|
-| `user.created` | Creates a new user in the database. Maps Clerk public metadata role to a DB role. |
+| `user.created` | Creates a new user in the database. Maps Clerk public metadata `role` to a DB role and auto-assigns `org_id` from public metadata (set by invitations). |
 | `user.updated` | Updates user fields (name, email, phone, etc.) based on Clerk data. |
 | `user.deleted` | Deletes user from the database by `clerk_id`. |
 
@@ -300,7 +300,99 @@ Returns the organisation of the currently authenticated user.
 
 ### Users
 
-All user endpoints require authentication (`requireAuth`).
+All user endpoints require authentication (`requireAuth`). Invitation endpoints additionally require `requireRole("admin")`.
+
+Users are created exclusively through Clerk invitations — there is no public sign-up. Admins invite users via `POST /api/user/invite`, Clerk sends the invitation email, and when the invitee signs up, the webhook auto-assigns their `org_id` and `role` from the invitation metadata.
+
+---
+
+#### `POST /api/user/invite`
+
+Sends an invitation to a new user via Clerk. The invitee receives an email with a sign-up link. When they sign up, the webhook automatically assigns the specified `org_id` and `role`.
+
+**Auth:** Required + `admin` role or higher
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `email_address` | `string` | Yes | Email address to invite |
+| `role` | `string` | No | Clerk role key (default: `org_staff`). Valid: `super_admin`, `admin`, `org_executive`, `org_staff` |
+| `org_id` | `string` (UUID) | No | Organisation to assign the user to on sign-up |
+
+**Response `201 Created`**
+
+```json
+{
+  "id": "inv_abc123",
+  "email_address": "newuser@example.com",
+  "status": "pending",
+  "public_metadata": {
+    "role": "org_staff",
+    "org_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  },
+  "created_at": 1700000000000
+}
+```
+
+**Error `400 Bad Request`** — Missing `email_address` or invalid `role`
+
+**Error `404 Not Found`** — `org_id` does not exist
+
+**Error `409 Conflict`** — Email already invited or user already exists
+
+---
+
+#### `GET /api/user/invitations`
+
+Lists all invitations. Optionally filter by status.
+
+**Auth:** Required + `admin` role or higher
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `status` | `string` | Filter by status: `pending`, `accepted`, or `revoked` |
+
+**Response `200 OK`**
+
+```json
+[
+  {
+    "id": "inv_abc123",
+    "email_address": "newuser@example.com",
+    "status": "pending",
+    "public_metadata": { "role": "org_staff", "org_id": "..." },
+    "created_at": 1700000000000
+  }
+]
+```
+
+---
+
+#### `DELETE /api/user/invite/:invitationId`
+
+Revokes a pending invitation.
+
+**Auth:** Required + `admin` role or higher
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `invitationId` | `string` | The Clerk invitation ID |
+
+**Response `200 OK`**
+
+```json
+{
+  "message": "Invitation revoked",
+  "invitation": { "id": "inv_abc123", "status": "revoked" }
+}
+```
+
+**Error `404 Not Found`** — Invitation does not exist
 
 ---
 
