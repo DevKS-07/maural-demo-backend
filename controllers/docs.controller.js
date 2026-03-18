@@ -1,9 +1,6 @@
-const { createClient } = require("@supabase/supabase-js");
 const prisma = require("../lib/prisma");
 const mime = require("mime-types");
-const { SUPABASE_URL, SUPABASE_ANON_KEY } = require("../config/env");
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const { getSupabase } = require("../lib/supabase");
 
 ///////////////////////////////  HOME ROUTE (Test Route) ///////////////////////////////
 
@@ -71,10 +68,13 @@ exports.getDocumentById = async (req, res) => {
       return res.status(404).json({ message: "File not found" });
     }
 
-    const filePath = file_meta.file_source.split("file_storage/")[1];
+    // Parse bucket name and path from file_source (e.g. "bucket-uuid/uploads/file.pdf")
+    const firstSlash = file_meta.file_source.indexOf("/");
+    const bucketName = file_meta.file_source.substring(0, firstSlash);
+    const filePath = file_meta.file_source.substring(firstSlash + 1);
 
-    const { data: fileBlob, error } = await supabase.storage
-      .from("file_storage")
+    const { data: fileBlob, error } = await getSupabase().storage
+      .from(bucketName)
       .download(filePath);
 
     if (error) {
@@ -154,11 +154,27 @@ exports.createDocument = async (req, res) => {
   }
 
   const { ctg_id, org_id, user_id } = req.body;
+
+  if (!org_id) {
+    return res.status(400).json({ message: "org_id is required" });
+  }
+
+  // Resolve the org's storage bucket
+  const org = await prisma.organisation.findUnique({
+    where: { org_id },
+    select: { storage_bucket: true },
+  });
+
+  if (!org) {
+    return res.status(404).json({ message: `Organisation with ID ${org_id} not found` });
+  }
+
   const safeName = encodeURIComponent(req.file.originalname);
+  const bucketName = org.storage_bucket;
 
   try {
-    const { data, error } = await supabase.storage
-      .from("file_storage")
+    const { data, error } = await getSupabase().storage
+      .from(bucketName)
       .upload(`uploads/${safeName}`, req.file.buffer, {
         contentType: req.file.mimetype,
         upsert: true,
@@ -176,7 +192,7 @@ exports.createDocument = async (req, res) => {
         file_size: req.file.size,
         file_source: data.fullPath,
         ctg_id: ctg_id ? BigInt(ctg_id) : undefined,
-        org_id: org_id || undefined,
+        org_id,
         user_id: user_id ? BigInt(user_id) : undefined,
       },
     });
@@ -267,8 +283,13 @@ exports.deleteDocument = async (req, res) => {
       where: { file_id: id },
     });
 
-    const filePath = file.file_source.split("file_storage/")[1];
-    await supabase.storage.from("file_storage").remove([filePath]);
+    // Parse bucket name and path from file_source
+    const firstSlash = file.file_source.indexOf("/");
+    const bucketName = file.file_source.substring(0, firstSlash);
+    const storagePath = file.file_source.substring(firstSlash + 1);
+
+    const supabase = getSupabase();
+    await supabase.storage.from(bucketName).remove([storagePath]);
 
     // Remove all embedding chunks for this file so the AI no longer sees it
     await supabase

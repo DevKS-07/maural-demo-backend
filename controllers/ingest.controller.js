@@ -10,35 +10,19 @@
  *   — It is idempotent: re-running re-embeds files already processed.
  */
 
-const { createClient } = require("@supabase/supabase-js");
 const { OllamaEmbeddings } = require("@langchain/ollama");
 const prisma = require("../lib/prisma");
 const pdfParse = require("pdf-parse");
 const XLSX = require("xlsx");
 const mammoth = require("mammoth");
 const { createWorker } = require("tesseract.js");
-const {
-  SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY,
-  SUPABASE_ANON_KEY,
-  OLLAMA_BASE_URL,
-  OLLAMA_EMBED_MODEL,
-} = require("../config/env");
+const { getSupabase } = require("../lib/supabase");
+const { OLLAMA_BASE_URL, OLLAMA_EMBED_MODEL } = require("../config/env");
 // Polyfill DOMMatrix and Path2D before loading pdfjs-dist so it can render pages correctly
 const { createCanvas, DOMMatrix, Path2D } = require("@napi-rs/canvas");
 globalThis.DOMMatrix = DOMMatrix;
 globalThis.Path2D = Path2D;
 const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
-
-// ---------------------------------------------------------------------------
-// Supabase client (same project as the rest of the app)
-// ---------------------------------------------------------------------------
-function getSupabase() {
-  return createClient(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY,
-  );
-}
 
 // ---------------------------------------------------------------------------
 // OCR helpers — used when pdf-parse finds no selectable text (image-based PDF)
@@ -106,14 +90,15 @@ async function ocrPdf(pdfBuffer) {
 
 /**
  * Download a file from Supabase Storage and return its raw Buffer.
- * file_source is stored as "file_storage/filename.ext" (the fullPath from upload).
+ * file_source is stored as "{bucket}/uploads/filename.ext" (the fullPath from upload).
+ * Parses bucket name generically from the first path segment.
  */
 async function downloadFile(supabase, fileSource) {
-  // file_source example: "file_storage/report.pdf"
-  // We need just the path inside the bucket: "report.pdf"
-  const pathInBucket = fileSource.split("/").slice(1).join("/");
+  const firstSlash = fileSource.indexOf("/");
+  const bucketName = fileSource.substring(0, firstSlash);
+  const pathInBucket = fileSource.substring(firstSlash + 1);
   const { data, error } = await supabase.storage
-    .from("file_storage")
+    .from(bucketName)
     .download(pathInBucket);
 
   if (error)

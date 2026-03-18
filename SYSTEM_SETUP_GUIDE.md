@@ -81,7 +81,7 @@ The Super Admin can now create organisations via the API.
 }
 ```
 
-**Response:** Returns the created Organisation object with a UUID `org_id`.
+**Response:** Returns the created Organisation object with a UUID `org_id`. A dedicated Supabase storage bucket is automatically created for the organisation using its `storage_bucket` UUID — no manual bucket setup is needed.
 
 Repeat this step for each organisation that needs to be onboarded.
 

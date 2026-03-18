@@ -1,3 +1,24 @@
+// ---------------------------------------------------------------------------
+// Supabase storage mock
+// ---------------------------------------------------------------------------
+const mockStorageFrom = {
+  list: jest.fn(),
+  remove: jest.fn(),
+};
+
+const mockCreateBucket = jest.fn();
+const mockDeleteBucket = jest.fn();
+
+jest.mock("../../lib/supabase", () => ({
+  getSupabase: jest.fn().mockReturnValue({
+    storage: {
+      createBucket: mockCreateBucket,
+      deleteBucket: mockDeleteBucket,
+      from: jest.fn().mockReturnValue(mockStorageFrom),
+    },
+  }),
+}));
+
 // Mock lib/prisma before any require() calls
 jest.mock("../../lib/prisma", () => ({
   organisation: {
@@ -39,6 +60,7 @@ const MOCK_ORG = {
   company_location: "Seattle, WA",
   organization_chart: "https://example.com/chart",
   gpt_types: "standard",
+  storage_bucket: "bucket-uuid-1234",
 };
 
 // ---------------------------------------------------------------------------
@@ -209,8 +231,10 @@ describe("Org Controller - Unit Tests", () => {
   // POST / — createOrg
   // ========================================================================
   describe("createOrg", () => {
-    test("returns 201 with created organisation", async () => {
+    test("returns 201 and creates Supabase storage bucket", async () => {
       prisma.organisation.create.mockResolvedValue(MOCK_ORG);
+      mockCreateBucket.mockResolvedValue({ error: null });
+
       const req = {
         body: {
           org_name: "Acme Corp",
@@ -218,6 +242,20 @@ describe("Org Controller - Unit Tests", () => {
           company_location: "Seattle, WA",
         },
       };
+      const res = createRes();
+
+      await orgController.createOrg(req, res);
+
+      expect(mockCreateBucket).toHaveBeenCalledWith("bucket-uuid-1234", { public: false });
+      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.json).toHaveBeenCalledWith(MOCK_ORG);
+    });
+
+    test("returns 201 even if bucket creation fails (best-effort)", async () => {
+      prisma.organisation.create.mockResolvedValue(MOCK_ORG);
+      mockCreateBucket.mockResolvedValue({ error: { message: "Bucket limit reached" } });
+
+      const req = { body: { org_name: "Acme Corp" } };
       const res = createRes();
 
       await orgController.createOrg(req, res);
@@ -292,8 +330,38 @@ describe("Org Controller - Unit Tests", () => {
   // DELETE /:orgId — deleteOrg
   // ========================================================================
   describe("deleteOrg", () => {
-    test("returns 200 with success message", async () => {
+    test("returns 200, deletes org and cleans up storage bucket", async () => {
+      prisma.organisation.findUnique.mockResolvedValue({ storage_bucket: "bucket-uuid-1234" });
       prisma.organisation.delete.mockResolvedValue(MOCK_ORG);
+      mockStorageFrom.list.mockResolvedValue({
+        data: [{ name: "report.pdf" }, { name: "contract.docx" }],
+      });
+      mockStorageFrom.remove.mockResolvedValue({ error: null });
+      mockDeleteBucket.mockResolvedValue({ error: null });
+
+      const req = { params: { orgId: "a1b2c3d4-uuid" } };
+      const res = createRes();
+
+      await orgController.deleteOrg(req, res);
+
+      expect(prisma.organisation.findUnique).toHaveBeenCalledWith({
+        where: { org_id: "a1b2c3d4-uuid" },
+        select: { storage_bucket: true },
+      });
+      expect(mockStorageFrom.remove).toHaveBeenCalledWith([
+        "uploads/report.pdf",
+        "uploads/contract.docx",
+      ]);
+      expect(mockDeleteBucket).toHaveBeenCalledWith("bucket-uuid-1234");
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ message: "Organisation with ID a1b2c3d4-uuid deleted" });
+    });
+
+    test("returns 200 even if bucket cleanup fails (best-effort)", async () => {
+      prisma.organisation.findUnique.mockResolvedValue({ storage_bucket: "bucket-uuid-1234" });
+      prisma.organisation.delete.mockResolvedValue(MOCK_ORG);
+      mockStorageFrom.list.mockRejectedValue(new Error("Storage error"));
+
       const req = { params: { orgId: "a1b2c3d4-uuid" } };
       const res = createRes();
 
@@ -304,6 +372,7 @@ describe("Org Controller - Unit Tests", () => {
     });
 
     test("returns 500 when prisma throws", async () => {
+      prisma.organisation.findUnique.mockResolvedValue({ storage_bucket: "bucket-uuid-1234" });
       prisma.organisation.delete.mockRejectedValue(new Error("DB error"));
       const req = { params: { orgId: "a1b2c3d4-uuid" } };
       const res = createRes();

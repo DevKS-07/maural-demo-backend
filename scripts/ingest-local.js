@@ -18,7 +18,7 @@ require("dotenv").config();
 
 const fs = require("fs");
 const path = require("path");
-const { createClient } = require("@supabase/supabase-js");
+const { getSupabase } = require("../lib/supabase");
 const { OllamaEmbeddings } = require("@langchain/ollama");
 const prisma = require("../lib/prisma");
 const pdfParse = require("pdf-parse");
@@ -107,12 +107,7 @@ async function ocrPdf(pdfBuffer) {
   return pageTexts.join("\n\n");
 }
 
-function getSupabase() {
-  return createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY,
-  );
-}
+// Supabase client is now centralized in lib/supabase.js
 
 function sanitizeText(text) {
   return text

@@ -517,7 +517,7 @@ Returns all files uploaded by a user.
     "file_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "file_name": "report.pdf",
     "file_size": "2048",
-    "file_source": "file_storage/report.pdf",
+    "file_source": "b2c3d4e5-bucket-uuid/uploads/report.pdf",
     "ctg_id": "1",
     "org_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "user_id": "1",
@@ -754,7 +754,7 @@ Creates a new organisation.
 | `organization_chart` | `string` | No | URL to org chart |
 | `gpt_types` | `string` | No | AI model preferences |
 
-**Response `201 Created`** — The created Organisation object
+**Response `201 Created`** — The created Organisation object. A dedicated Supabase storage bucket is automatically created using the organisation's `storage_bucket` UUID.
 
 **Error `400 Bad Request`** — Missing `org_name`
 
@@ -780,7 +780,7 @@ Updates an existing organisation.
 
 #### `DELETE /api/org/:orgId`
 
-Deletes an organisation.
+Deletes an organisation. Also empties and deletes the organisation's Supabase storage bucket (best-effort — bucket cleanup failures do not block the deletion).
 
 **Auth:** Required
 
@@ -832,7 +832,7 @@ Returns metadata for all documents.
     "file_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "file_name": "report.pdf",
     "file_size": "2048576",
-    "file_source": "file_storage/report.pdf",
+    "file_source": "b2c3d4e5-bucket-uuid/uploads/report.pdf",
     "ctg_id": "1",
     "org_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "user_id": "1",
@@ -864,7 +864,7 @@ Returns all documents in a specific category.
     "file_id": "a1b2c3d4-...",
     "file_name": "report.pdf",
     "file_size": "2048576",
-    "file_source": "file_storage/report.pdf",
+    "file_source": "b2c3d4e5-bucket-uuid/uploads/report.pdf",
     "ctg_id": "1",
     "org_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "user_id": "1",
@@ -913,7 +913,7 @@ Uploads a new document to Supabase Storage and creates metadata in the database.
 |---|---|---|---|
 | `file` | `File` | Yes | The file to upload (max 50 MB) |
 | `ctg_id` | `BigInt` | No | Category ID |
-| `org_id` | `string` (UUID) | No | Organisation owner ID |
+| `org_id` | `string` (UUID) | **Yes** | Organisation owner ID (determines storage bucket) |
 | `user_id` | `BigInt` | No | Uploader user ID |
 
 **Response `201 Created`**
@@ -923,7 +923,7 @@ Uploads a new document to Supabase Storage and creates metadata in the database.
   "file_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "file_name": "report.pdf",
   "file_size": "2048576",
-  "file_source": "file_storage/report.pdf",
+  "file_source": "b2c3d4e5-bucket-uuid/uploads/report.pdf",
   "ctg_id": "1",
   "org_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "user_id": "1",
@@ -932,7 +932,7 @@ Uploads a new document to Supabase Storage and creates metadata in the database.
 }
 ```
 
-**Error `400 Bad Request`** — No file provided
+**Error `400 Bad Request`** — No file provided, or `org_id` is missing
 
 ---
 
@@ -1759,7 +1759,7 @@ OAuth callback handler. Exchanges code for token and fetches the ClickUp user ID
 | `company_location` | `String?` | Headquarters |
 | `organization_chart` | `String?` | Org chart URL |
 | `gpt_types` | `String?` | AI model preferences |
-| `storage_bucket` | `String` (UUID) | Supabase storage bucket |
+| `storage_bucket` | `String` (UUID) | Auto-generated Supabase storage bucket ID (a dedicated bucket is created per org) |
 | `hubspot_connected` | `Boolean` | HubSpot integration connected |
 | `quickbooks_connected` | `Boolean` | QuickBooks integration connected |
 | `monday_connected` | `Boolean` | Monday.com integration connected |

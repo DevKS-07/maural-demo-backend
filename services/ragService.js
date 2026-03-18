@@ -22,29 +22,9 @@
  */
 
 const { OllamaEmbeddings } = require("@langchain/ollama");
-const { createClient } = require("@supabase/supabase-js");
 const prisma = require("../lib/prisma");
-const {
-  SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY,
-  SUPABASE_ANON_KEY,
-  OLLAMA_BASE_URL,
-  OLLAMA_EMBED_MODEL,
-} = require("../config/env");
-
-// ---------------------------------------------------------------------------
-// Supabase client — same project the rest of the app uses
-// ---------------------------------------------------------------------------
-let _supabase = null;
-function getSupabase() {
-  if (!_supabase) {
-    _supabase = createClient(
-      SUPABASE_URL,
-      SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY,
-    );
-  }
-  return _supabase;
-}
+const { getSupabase } = require("../lib/supabase");
+const { OLLAMA_BASE_URL, OLLAMA_EMBED_MODEL } = require("../config/env");
 
 // ---------------------------------------------------------------------------
 // Embeddings model (lazy singleton)

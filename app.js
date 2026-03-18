@@ -58,9 +58,10 @@ app.use(compression());
 app.use(cookieParser());
 
 // Rate limiting — protects against brute-force and denial-of-service
+// Relaxed limits in development to avoid 429s during testing
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per window per IP
+  max: 1000, // TODO: lower back to 100 after development
   standardHeaders: true, // Return rate limit info in RateLimit-* headers
   legacyHeaders: false, // Disable X-RateLimit-* headers
   message: { error: "Too many requests, please try again later." },
@@ -70,7 +71,7 @@ app.use(globalLimiter);
 // Stricter limit for chat — LLM calls are expensive
 const chatLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: 200, // TODO: lower back to 20 after development
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Chat rate limit exceeded, please try again later." },

@@ -1,4 +1,5 @@
 const prisma = require("../lib/prisma");
+const { getSupabase } = require("../lib/supabase");
 
 ///////////////////////////////  HOME ROUTE (Test Route) ///////////////////////////////
 
@@ -133,6 +134,24 @@ exports.createOrg = async (req, res) => {
         gpt_types,
       },
     });
+
+    // Create a dedicated Supabase storage bucket for this organisation
+    const { error: bucketError } = await getSupabase().storage.createBucket(
+      newOrg.storage_bucket,
+      { public: false },
+    );
+
+    if (bucketError) {
+      console.error(
+        `[org] Failed to create storage bucket "${newOrg.storage_bucket}":`,
+        bucketError.message,
+      );
+      // Don't roll back — the org record is the source of truth.
+      // A missing bucket will cause clear upload failures that can be diagnosed.
+    } else {
+      console.log(`[org] Created storage bucket: ${newOrg.storage_bucket}`);
+    }
+
     res.status(201).json(newOrg);
   } catch (error) {
     console.error("Failed to create organisation:", error.message);
@@ -201,9 +220,39 @@ exports.updateOrg = async (req, res) => {
 exports.deleteOrg = async (req, res) => {
   const { orgId } = req.params;
   try {
+    // Look up the org's storage bucket before deleting the record
+    const org = await prisma.organisation.findUnique({
+      where: { org_id: orgId },
+      select: { storage_bucket: true },
+    });
+
     await prisma.organisation.delete({
       where: { org_id: orgId },
     });
+
+    // Best-effort cleanup of the Supabase storage bucket
+    if (org?.storage_bucket) {
+      try {
+        const supabase = getSupabase();
+        // Empty the bucket first (required before deletion)
+        const { data: files } = await supabase.storage
+          .from(org.storage_bucket)
+          .list("uploads");
+        if (files && files.length > 0) {
+          await supabase.storage
+            .from(org.storage_bucket)
+            .remove(files.map((f) => `uploads/${f.name}`));
+        }
+        await supabase.storage.deleteBucket(org.storage_bucket);
+        console.log(`[org] Deleted storage bucket: ${org.storage_bucket}`);
+      } catch (bucketErr) {
+        console.error(
+          `[org] Failed to clean up storage bucket "${org.storage_bucket}":`,
+          bucketErr.message,
+        );
+      }
+    }
+
     res.status(200).json({ message: `Organisation with ID ${orgId} deleted` });
   } catch (_error) {
     res

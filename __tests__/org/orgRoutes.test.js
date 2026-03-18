@@ -1,3 +1,22 @@
+// Mock Supabase before any require() calls
+const mockStorageFrom = {
+  list: jest.fn(),
+  remove: jest.fn(),
+};
+
+const mockCreateBucket = jest.fn().mockResolvedValue({ error: null });
+const mockDeleteBucket = jest.fn().mockResolvedValue({ error: null });
+
+jest.mock("../../lib/supabase", () => ({
+  getSupabase: jest.fn().mockReturnValue({
+    storage: {
+      createBucket: mockCreateBucket,
+      deleteBucket: mockDeleteBucket,
+      from: jest.fn().mockReturnValue(mockStorageFrom),
+    },
+  }),
+}));
+
 // Mock lib/prisma before any require() calls
 jest.mock("../../lib/prisma", () => ({
   organisation: {
@@ -44,6 +63,7 @@ const MOCK_ORG = {
   industry: "Technology",
   founded: "2010-01-01",
   company_location: "Seattle, WA",
+  storage_bucket: "bucket-uuid-1234",
   gpt_types: "standard",
 };
 
@@ -234,7 +254,9 @@ describe("Org Routes - Integration Tests", () => {
   // ========================================================================
   describe("DELETE /org/:orgId", () => {
     test("returns 200 with success message", async () => {
+      prisma.organisation.findUnique.mockResolvedValue({ storage_bucket: "bucket-uuid-1234" });
       prisma.organisation.delete.mockResolvedValue(MOCK_ORG);
+      mockStorageFrom.list.mockResolvedValue({ data: [] });
 
       const res = await request(app).delete("/org/a1b2c3d4-uuid");
 
@@ -243,6 +265,7 @@ describe("Org Routes - Integration Tests", () => {
     });
 
     test("returns 500 on database error", async () => {
+      prisma.organisation.findUnique.mockResolvedValue({ storage_bucket: "bucket-uuid-1234" });
       prisma.organisation.delete.mockRejectedValue(new Error("DB error"));
 
       const res = await request(app).delete("/org/a1b2c3d4-uuid");

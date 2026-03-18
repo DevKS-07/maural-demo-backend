@@ -13,8 +13,8 @@ const mockFromTable = jest.fn().mockReturnValue({
   delete: jest.fn().mockReturnValue(mockDeleteChain),
 });
 
-jest.mock("@supabase/supabase-js", () => ({
-  createClient: jest.fn().mockReturnValue({
+jest.mock("../../lib/supabase", () => ({
+  getSupabase: jest.fn().mockReturnValue({
     storage: {
       from: jest.fn().mockReturnValue(mockStorageFrom),
     },
@@ -29,6 +29,9 @@ jest.mock("../../lib/prisma", () => ({
     create: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+  },
+  organisation: {
+    findUnique: jest.fn(),
   },
   comment: {
     findMany: jest.fn(),
@@ -233,8 +236,9 @@ describe("Docs Routes - Integration Tests", () => {
   // ========================================================================
   describe("POST /docs/", () => {
     test("returns 201 with created file record", async () => {
+      prisma.organisation.findUnique.mockResolvedValue({ storage_bucket: "bucket-uuid-1234" });
       mockStorageFrom.upload.mockResolvedValue({
-        data: { fullPath: "file_storage/uploads/report.pdf" },
+        data: { fullPath: "bucket-uuid-1234/uploads/report.pdf" },
         error: null,
       });
       prisma.file.create.mockResolvedValue(MOCK_FILE_META);
@@ -257,7 +261,17 @@ describe("Docs Routes - Integration Tests", () => {
       expect(res.body).toHaveProperty("message", "No file provided");
     });
 
+    test("returns 400 when org_id is missing", async () => {
+      const res = await request(app)
+        .post("/docs/")
+        .attach("file", Buffer.from("fake pdf content"), "report.pdf");
+
+      expect(res.status).toBe(400);
+      expect(res.body).toHaveProperty("message", "org_id is required");
+    });
+
     test("returns 500 when Supabase upload fails", async () => {
+      prisma.organisation.findUnique.mockResolvedValue({ storage_bucket: "bucket-uuid-1234" });
       mockStorageFrom.upload.mockResolvedValue({
         data: null,
         error: { message: "Storage error" },
@@ -265,6 +279,7 @@ describe("Docs Routes - Integration Tests", () => {
 
       const res = await request(app)
         .post("/docs/")
+        .field("org_id", "a1b2c3d4-uuid")
         .attach("file", Buffer.from("fake pdf content"), "report.pdf");
 
       expect(res.status).toBe(500);

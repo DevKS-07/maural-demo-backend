@@ -14,8 +14,8 @@ const mockFromTable = jest.fn().mockReturnValue({
   delete: jest.fn().mockReturnValue(mockDeleteChain),
 });
 
-jest.mock("@supabase/supabase-js", () => ({
-  createClient: jest.fn().mockReturnValue({
+jest.mock("../../lib/supabase", () => ({
+  getSupabase: jest.fn().mockReturnValue({
     storage: {
       from: jest.fn().mockReturnValue(mockStorageFrom),
     },
@@ -30,6 +30,9 @@ jest.mock("../../lib/prisma", () => ({
     create: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+  },
+  organisation: {
+    findUnique: jest.fn(),
   },
   comment: {
     findMany: jest.fn(),
@@ -70,6 +73,10 @@ const MOCK_FILE_META = {
   ctg_id: 1,
   org_id: "a1b2c3d4-uuid",
   user_id: 5,
+};
+
+const MOCK_ORG = {
+  storage_bucket: "bucket-uuid-1234",
 };
 
 // ---------------------------------------------------------------------------
@@ -299,8 +306,9 @@ describe("Docs Controller - Unit Tests", () => {
     };
 
     test("returns 201 with created file record on success", async () => {
+      prisma.organisation.findUnique.mockResolvedValue(MOCK_ORG);
       mockStorageFrom.upload.mockResolvedValue({
-        data: { fullPath: "file_storage/uploads/report.pdf" },
+        data: { fullPath: "bucket-uuid-1234/uploads/report.pdf" },
         error: null,
       });
       prisma.file.create.mockResolvedValue(MOCK_FILE_META);
@@ -310,6 +318,10 @@ describe("Docs Controller - Unit Tests", () => {
 
       await docsController.createDocument(req, res);
 
+      expect(prisma.organisation.findUnique).toHaveBeenCalledWith({
+        where: { org_id: "a1b2c3d4-uuid" },
+        select: { storage_bucket: true },
+      });
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.json).toHaveBeenCalledWith(MOCK_FILE_META);
     });
@@ -324,13 +336,38 @@ describe("Docs Controller - Unit Tests", () => {
       expect(res.json).toHaveBeenCalledWith({ message: "No file provided" });
     });
 
+    test("returns 400 when org_id is missing", async () => {
+      const req = { file: mockFile, body: {} };
+      const res = createRes();
+
+      await docsController.createDocument(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ message: "org_id is required" });
+    });
+
+    test("returns 404 when org_id does not exist", async () => {
+      prisma.organisation.findUnique.mockResolvedValue(null);
+
+      const req = { file: mockFile, body: { org_id: "nonexistent-uuid" } };
+      const res = createRes();
+
+      await docsController.createDocument(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("not found") }),
+      );
+    });
+
     test("returns 500 when Supabase upload fails", async () => {
+      prisma.organisation.findUnique.mockResolvedValue(MOCK_ORG);
       mockStorageFrom.upload.mockResolvedValue({
         data: null,
         error: { message: "Storage quota exceeded" },
       });
 
-      const req = { file: mockFile, body: {} };
+      const req = { file: mockFile, body: { org_id: "a1b2c3d4-uuid" } };
       const res = createRes();
 
       await docsController.createDocument(req, res);
@@ -342,13 +379,14 @@ describe("Docs Controller - Unit Tests", () => {
     });
 
     test("returns 500 when prisma.file.create throws", async () => {
+      prisma.organisation.findUnique.mockResolvedValue(MOCK_ORG);
       mockStorageFrom.upload.mockResolvedValue({
-        data: { fullPath: "file_storage/uploads/report.pdf" },
+        data: { fullPath: "bucket-uuid-1234/uploads/report.pdf" },
         error: null,
       });
       prisma.file.create.mockRejectedValue(new Error("DB error"));
 
-      const req = { file: mockFile, body: {} };
+      const req = { file: mockFile, body: { org_id: "a1b2c3d4-uuid" } };
       const res = createRes();
 
       await docsController.createDocument(req, res);

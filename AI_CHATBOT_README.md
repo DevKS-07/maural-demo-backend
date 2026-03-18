@@ -18,7 +18,7 @@ All AI inference runs **100% locally** — no data is sent to any third-party AI
 | Vector Database | Supabase pgvector (PostgreSQL) | Stores and searches document embeddings |
 | ORM | Prisma | File metadata queries (File table) |
 | LLM SDK | LangChain (`@langchain/ollama`) | ChatOllama and OllamaEmbeddings wrappers |
-| File Storage | Supabase Storage (`file_storage` bucket) | Stores the original uploaded files |
+| File Storage | Supabase Storage (per-org buckets) | Stores the original uploaded files in organisation-specific buckets |
 | PDF Parsing | `pdf-parse` v1 | Extracts text from PDF files |
 | Excel Parsing | `xlsx` (SheetJS) | Extracts text from `.xlsx` / `.xls` files |
 | Word Parsing | `mammoth` | Extracts text from `.docx` files |
