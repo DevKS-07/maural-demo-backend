@@ -159,6 +159,33 @@ exports.createDocument = async (req, res) => {
     return res.status(400).json({ message: "org_id is required" });
   }
 
+  // --- Org-level authorization ---
+  if (typeof req.auth === "function") {
+    const { sessionClaims, userId: clerkId } = req.auth();
+    const userRole = sessionClaims?.publicMetadata?.role;
+    const isAdmin = userRole === "admin" || userRole === "super_admin";
+
+    if (!isAdmin) {
+      const dbUser = await prisma.user.findUnique({
+        where: { clerk_id: clerkId },
+        select: { org_id: true },
+      });
+
+      if (!dbUser?.org_id) {
+        return res
+          .status(403)
+          .json({ message: "You are not assigned to any organisation" });
+      }
+
+      if (dbUser.org_id !== org_id) {
+        return res.status(403).json({
+          message:
+            "You can only upload documents to your own organisation",
+        });
+      }
+    }
+  }
+
   // Resolve the org's storage bucket
   const org = await prisma.organisation.findUnique({
     where: { org_id },

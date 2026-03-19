@@ -56,7 +56,16 @@ exports.handleClerkWebhook = async (req, res) => {
     switch (type) {
       case "user.created": {
         const clerkRole = data.public_metadata?.role || DEFAULT_CLERK_ROLE;
-        const orgId = data.public_metadata?.org_id || null;
+        let orgId = data.public_metadata?.org_id || null;
+
+        // Auto-assign admin/super_admin to the platform org if no org specified
+        if (!orgId && (clerkRole === "admin" || clerkRole === "super_admin")) {
+          const platformOrg = await prisma.organisation.findFirst({
+            where: { is_platform: true },
+          });
+          if (platformOrg) orgId = platformOrg.org_id;
+        }
+
         let role_id = undefined;
 
         if (CLERK_ROLE_TO_DB_ROLE[clerkRole]) {

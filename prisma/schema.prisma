@@ -18,6 +18,9 @@ model Organisation {
     gpt_types          String?
     storage_bucket     String    @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 
+    // Platform flag — true only for the "Maural Solutions" admin org
+    is_platform          Boolean @default(false)
+
     // Integration connection flags (auto-set when tokens are created/deleted)
     hubspot_connected    Boolean @default(false)
     quickbooks_connected Boolean @default(false)

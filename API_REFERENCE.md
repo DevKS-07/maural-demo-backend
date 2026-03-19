@@ -906,6 +906,11 @@ Uploads a new document to Supabase Storage and creates metadata in the database.
 
 **Auth:** Required
 
+**Authorization:**
+
+- `admin` / `super_admin` — can upload to **any** organisation's bucket by passing any valid `org_id`
+- `org_executive` / `org_staff` — can only upload to their **own** organisation (the `org_id` must match their assigned org)
+
 **Content-Type:** `multipart/form-data`
 
 **Form Fields:**
@@ -934,6 +939,8 @@ Uploads a new document to Supabase Storage and creates metadata in the database.
 ```
 
 **Error `400 Bad Request`** — No file provided, or `org_id` is missing
+
+**Error `403 Forbidden`** — Non-admin user attempting to upload to a different organisation
 
 ---
 

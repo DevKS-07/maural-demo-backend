@@ -64,6 +64,14 @@ exports.createInvitation = async (req, res) => {
   // --- Resolve org_id (org_executives are locked to their own org) ---
   let resolvedOrgId = org_id || null;
 
+  // Auto-resolve platform org for admin/super_admin invitations
+  if (!resolvedOrgId && (targetRole === "admin" || targetRole === "super_admin")) {
+    const platformOrg = await prisma.organisation.findFirst({
+      where: { is_platform: true },
+    });
+    if (platformOrg) resolvedOrgId = platformOrg.org_id;
+  }
+
   if (inviterRole === "org_executive") {
     // Look up the inviter's org from the database
     const inviter = await prisma.user.findUnique({
