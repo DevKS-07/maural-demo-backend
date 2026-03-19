@@ -68,7 +68,6 @@ const callbackHandler = async (req, res) => {
     const metaRes = await axios.get(
       `https://api.hubapi.com/oauth/v1/access-tokens/${access_token}`,
     );
-    // TODO: Replace with org_id from authenticated user's organisation
     const org_id = String(metaRes.data.hub_id);
     req.session.org_id = org_id;
 

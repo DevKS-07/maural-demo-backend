@@ -22,6 +22,7 @@
   - [Organisations](#organisations)
   - [Documents](#documents)
   - [Chat / AI](#chat--ai)
+  - [KPI Summary](#kpi-summary)
   - [Integrations — HubSpot](#integrations--hubspot)
   - [Integrations — QuickBooks](#integrations--quickbooks)
   - [Integrations — Monday.com](#integrations--mondaycom)
@@ -1247,6 +1248,205 @@ Triggers the document ingestion pipeline. Processes **all** files in the databas
 | `successFiles` | `number` | Files successfully processed |
 | `totalChunks` | `number` | Total chunks created and embedded |
 | `errors` | `array` | Files that failed processing (omitted if none) |
+
+---
+
+### KPI Summary
+
+All KPI summary endpoints require authentication (`requireAuth`). These endpoints aggregate data from connected integrations (QuickBooks, HubSpot, Monday.com) to provide financial, leads, and labor KPIs for a specific organisation.
+
+---
+
+#### `GET /api/summary/financial/:orgId`
+
+Returns financial KPIs for the specified organisation (sourced from QuickBooks).
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `orgId` | `string` (UUID) | The organisation's ID |
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `startDate` | `string` (ISO date) | Period start date |
+| `endDate` | `string` (ISO date) | Period end date |
+| `asOfDate` | `string` (ISO date) | Balance sheet as-of date |
+
+**Response `200 OK`**
+
+```json
+{
+  "financial": {
+    "totalIncome": 250000.00,
+    "netIncome": 45000.00,
+    "ebitda": 62000.00,
+    "grossMargin": 0.42,
+    "laborCost": 120000.00,
+    "workingCapital": 85000.00
+  }
+}
+```
+
+**Error `400 Bad Request`** — Missing `orgId` parameter
+
+---
+
+#### `GET /api/summary/leads/:orgId`
+
+Returns leads/pipeline KPIs for the specified organisation (sourced from HubSpot).
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `orgId` | `string` (UUID) | The organisation's ID |
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `startDate` | `string` (ISO date) | Period start date |
+| `endDate` | `string` (ISO date) | Period end date |
+
+**Response `200 OK`**
+
+```json
+{
+  "leads": {
+    "pipelineCoverage": 500000.00,
+    "leads": 42,
+    "dealsWon": 8,
+    "conversionRate": 0.19,
+    "recurringPercent": 0.65
+  }
+}
+```
+
+**Error `400 Bad Request`** — Missing `orgId` parameter
+
+---
+
+#### `GET /api/summary/labor/:orgId`
+
+Returns labor/workforce KPIs for the specified organisation (sourced from Monday.com/ClickUp).
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `orgId` | `string` (UUID) | The organisation's ID |
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `startDate` | `string` (ISO date) | Period start date |
+| `endDate` | `string` (ISO date) | Period end date |
+
+**Response `200 OK`**
+
+```json
+{
+  "labor": {
+    "directLaborHours": 1200,
+    "billableFTEs": 8,
+    "nonBillableFTEs": 3,
+    "billableUtilization": 0.73,
+    "laborSource": "monday",
+    "hasBillableColumn": true
+  }
+}
+```
+
+**Error `400 Bad Request`** — Missing `orgId` parameter
+
+---
+
+#### `GET /api/summary/summary/:orgId`
+
+Master dashboard endpoint — returns financial, leads, and labor KPIs in parallel for the specified organisation. Each integration fails independently via `Promise.allSettled`.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `orgId` | `string` (UUID) | The organisation's ID |
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `startDate` | `string` (ISO date) | Period start date |
+| `endDate` | `string` (ISO date) | Period end date |
+| `asOfDate` | `string` (ISO date) | Balance sheet as-of date |
+
+**Response `200 OK`**
+
+```json
+{
+  "financial": { "totalIncome": 250000.00, "..." : "..." },
+  "leads": { "pipelineCoverage": 500000.00, "..." : "..." },
+  "labor": { "directLaborHours": 1200, "..." : "..." },
+  "fetchedAt": "2026-03-19T12:00:00.000Z"
+}
+```
+
+> **Note:** If an individual integration fails, its key will contain an `error` field instead of KPI data. The other integrations still return successfully.
+
+**Error `400 Bad Request`** — Missing `orgId` parameter
+
+---
+
+#### `GET /api/summary/scorecard`
+
+Returns a scorecard entry for every organisation in the system. Uses a DB-first strategy with a 6-hour cache TTL — stale or missing data triggers a background API refresh.
+
+**Auth:** Required
+
+**Query Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `startDate` | `string` (ISO date) | Period start date |
+| `endDate` | `string` (ISO date) | Period end date |
+| `asOfDate` | `string` (ISO date) | Balance sheet as-of date |
+
+**Response `200 OK`**
+
+```json
+{
+  "orgs": [
+    {
+      "org_id": "a1b2c3d4-...",
+      "name": "Acme Corp",
+      "score": {
+        "totalPipelineValue": 500000.00,
+        "pipelineCoverageRatio": 2.00,
+        "totalRevenue": 250000.00,
+        "netRevenue": 45000.00,
+        "ebitda": 62000.00,
+        "ebitdaPct": 13.8,
+        "revenuePerHead": 22727,
+        "headcount": 11,
+        "workingCapital": 85000.00,
+        "billableUtilization": 0.73
+      }
+    }
+  ],
+  "fetchedAt": "2026-03-19T12:00:00.000Z"
+}
+```
 
 ---
 

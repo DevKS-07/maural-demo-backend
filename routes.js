@@ -2,7 +2,6 @@ const express = require("express");
 
 // Route modules
 const homeRoutes = require("./routes/home.routes");
-const adminRoutes = require("./routes/admin.routes");
 const authRoutes = require("./routes/auth.routes");
 const userRoutes = require("./routes/user.routes");
 const orgRoutes = require("./routes/org.routes");
@@ -32,8 +31,6 @@ router.use("/webhooks", authRoutes);
 
 router.use("/auth", requireAuth, authRoutes); // GET /api/auth/me
 
-router.use("/admin", requireAuth, adminRoutes); // Admin-only management routes
-
 router.use("/user", requireAuth, userRoutes); // User CRUD + activity/files/comments/permissions
 
 router.use("/org", requireAuth, orgRoutes); // Organisation CRUD + users/files
@@ -42,7 +39,7 @@ router.use("/docs", requireAuth, docsRoutes); // Documents + comments + activity
 
 router.use("/integrations", requireAuth, integrations); // HubSpot, QuickBooks, Monday, ClickUp
 
-router.use("/summary", summaryRoutes); // KPI summary routes (some may be public, some protected depending on use case)
+router.use("/summary", requireAuth, summaryRoutes); // KPI summary routes
 
 router.use("/chat", requireAuth, chatRoutes); // AI chat
 

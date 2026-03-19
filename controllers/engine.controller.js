@@ -4,11 +4,11 @@ const { getLaborKPIsService } = require("../services/labour.service");
 const prisma = require("../lib/prisma");
 
 /**
- * GET /api/summary/financial
+ * GET /api/summary/financial/:orgId
  */
 const getFinancialSummary = async (req, res) => {
-  const org_id = req.session.org_id;
-  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
+  const { orgId: org_id } = req.params;
+  if (!org_id) return res.status(400).json({ error: "Missing orgId parameter" });
 
   const { startDate, endDate, asOfDate } = req.query;
   try {
@@ -25,11 +25,11 @@ const getFinancialSummary = async (req, res) => {
 };
 
 /**
- * GET /api/summary/leads
+ * GET /api/summary/leads/:orgId
  */
 const getLeadsSummary = async (req, res) => {
-  const org_id = req.session.org_id;
-  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
+  const { orgId: org_id } = req.params;
+  if (!org_id) return res.status(400).json({ error: "Missing orgId parameter" });
 
   const { startDate, endDate } = req.query;
   try {
@@ -42,11 +42,11 @@ const getLeadsSummary = async (req, res) => {
 };
 
 /**
- * GET /api/summary/labor
+ * GET /api/summary/labor/:orgId
  */
 const getLaborSummary = async (req, res) => {
-  const org_id = req.session.org_id;
-  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
+  const { orgId: org_id } = req.params;
+  if (!org_id) return res.status(400).json({ error: "Missing orgId parameter" });
 
   const { startDate, endDate } = req.query;
   try {
@@ -59,13 +59,13 @@ const getLaborSummary = async (req, res) => {
 };
 
 /**
- * GET /api/summary
+ * GET /api/summary/summary/:orgId
  * Master dashboard — all integrations in parallel.
  * Each fails independently via Promise.allSettled.
  */
 const getFullDashboardSummary = async (req, res) => {
-  const org_id = req.session.org_id;
-  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
+  const { orgId: org_id } = req.params;
+  if (!org_id) return res.status(400).json({ error: "Missing orgId parameter" });
 
   const { startDate, endDate, asOfDate } = req.query;
 
@@ -141,9 +141,6 @@ const getFullDashboardSummary = async (req, res) => {
  * }
  */
 const getScorecardSummary = async (req, res) => {
-  if (!req.session.org_id)
-    return res.status(401).json({ error: "Not authenticated" });
-
   const { startDate, endDate, asOfDate } = req.query;
 
   try {

@@ -11,10 +11,10 @@ const router = require("express").Router();
 //  ROUTES
 // ────────────────────────────────────────────────────────────────────────────
 
-router.get("/financial", getFinancialSummary);
-router.get("/leads", getLeadsSummary);
-router.get("/labor", getLaborSummary);
+router.get("/financial/:orgId", getFinancialSummary);
+router.get("/leads/:orgId", getLeadsSummary);
+router.get("/labor/:orgId", getLaborSummary);
 router.get("/scorecard", getScorecardSummary);
-router.get("/summary", getFullDashboardSummary);
+router.get("/summary/:orgId", getFullDashboardSummary);
 
 module.exports = router;
