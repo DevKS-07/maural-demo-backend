@@ -1119,10 +1119,11 @@ Welcome to the ChatBot!
 Sends a message to the AI chatbot. The pipeline:
 
 1. Detects user intents (summarize, predict, reason, compare, etc.)
-2. Retrieves relevant document chunks via pgvector semantic search
-3. Runs specialized agents per detected intent
-4. Combines multi-intent answers
-5. Runs guardrail checks for confidence and hallucination
+1. Retrieves relevant document chunks via pgvector semantic search
+1. Fetches business data context (Financial/Leads/Labor KPIs + VTO) from the database for the scoped organisation(s)
+1. Runs specialized agents per detected intent (with both document and business data context)
+1. Combines multi-intent answers
+1. Runs guardrail checks for confidence and hallucination
 
 **Auth:** Required
 **Rate Limit:** 20 requests / 15 minutes
@@ -1158,12 +1159,12 @@ Sends a message to the AI chatbot. The pipeline:
 | Field | Type | Description |
 |---|---|---|
 | `answer` | `string` | The AI-generated response |
-| `sources` | `array` | Documents used to generate the answer |
-| `sources[].file_id` | `string` (UUID) | Source document ID |
-| `sources[].file_name` | `string` | Source document name |
-| `sources[].similarity` | `number` | Cosine similarity score (0–1) |
+| `sources` | `array` | Documents and business data sources used to generate the answer |
+| `sources[].title` | `string` | Source name (document filename, or KPI/VTO label like "Financial KPIs (Jan–Mar 2026)") |
+| `sources[].type` | `string` | Source type: `"Knowledge Base"`, `"KPI Data"`, or `"VTO"` |
+| `sources[].snippet` | `string` | Short preview of the source content (max ~200 chars) |
 | `intents` | `string[]` | Detected user intents |
-| `guardrail.confidence` | `number` | Confidence score (0–1) |
+| `guardrail.confidence` | `number` | Confidence score (0–100) |
 | `guardrail.issues` | `string[]` | Any flagged issues (e.g., potential hallucination) |
 
 ---
@@ -1971,8 +1972,9 @@ OAuth callback handler. Exchanges code for token and fetches the ClickUp user ID
 | `quickbooks_connected` | `Boolean` | QuickBooks integration connected |
 | `monday_connected` | `Boolean` | Monday.com integration connected |
 | `clickup_connected` | `Boolean` | ClickUp integration connected |
+| `is_platform` | `Boolean` | Marks the platform org (Maural Solutions) — used for admin auto-assignment |
 
-**Relations:** `User[]`, `File[]`, `FinanceKpi[]`, `LeadsKpi[]`, `LaborKpi[]`, `HubspotToken`, `QuickbooksToken`, `MondayToken`, `ClickUpToken`, `document_embeddings[]`
+**Relations:** `User[]`, `File[]`, `FinanceKpi[]`, `LeadsKpi[]`, `LaborKpi[]`, `VTO?`, `HubspotToken`, `QuickbooksToken`, `MondayToken`, `ClickUpToken`, `document_embeddings[]`
 
 ---
 
@@ -2074,6 +2076,36 @@ OAuth callback handler. Exchanges code for token and fetches the ClickUp user ID
 | `ctg_name` | `String?` | Category label |
 
 **Relations:** `File[]`
+
+---
+
+### VTO (Vision/Traction Organizer)
+
+| Field | Type | Description |
+|---|---|---|
+| `vto_id` | `String` (PK, UUID) | Unique identifier |
+| `title` | `String` | VTO document title |
+| `year` | `String` | Planning year |
+| `created_at` | `DateTime` | Creation timestamp |
+| `updated_at` | `DateTime` | Last modified timestamp |
+| `org_id` | `String` (FK → Organisation, UUID, unique) | Owning organisation (1:1) |
+| `core_values` | `Json` | Array of core values |
+| `mission` | `String?` | Organisation mission statement |
+| `vision` | `String?` | Organisation vision statement |
+| `ten_year_targets` | `Json` | Array of 10-year target strings |
+| `target_market` | `String?` | Target market description |
+| `proven_process` | `String?` | Proven process description |
+| `differentiators` | `String?` | Key differentiators |
+| `guarantee` | `String?` | Organisation guarantee |
+| `future_date` | `String?` | 3-year picture target date |
+| `revenue` | `String?` | 3-year revenue target |
+| `profit` | `String?` | 3-year profit target |
+| `measurables` | `String?` | 3-year measurables |
+| `look_like` | `String?` | "What it looks like" description |
+
+**Relations:** `Organisation` (one-to-one via unique `org_id`)
+
+> The VTO data is also injected into the AI chatbot's context so it can answer questions about the organisation's vision, strategy, and goals.
 
 ---
 

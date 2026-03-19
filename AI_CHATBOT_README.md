@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Maural KMS AI Chatbot is a multi-agent RAG (Retrieval-Augmented Generation) pipeline built on top of **Ollama (local LLM)** and Supabase pgvector. It answers questions about uploaded documents with high accuracy, streaming responses to the frontend in real time.
+The Maural KMS AI Chatbot is a multi-agent RAG (Retrieval-Augmented Generation) pipeline built on top of **Ollama (local LLM)** and Supabase pgvector. It answers questions about uploaded documents, business KPIs, and strategic VTO data with high accuracy, streaming responses to the frontend in real time.
 
 All AI inference runs **100% locally** — no data is sent to any third-party AI service. Models are served by Ollama running on `http://localhost:11434`.
 
@@ -274,7 +274,7 @@ Supabase pgvector uses the `<=>` operator for cosine distance. The `match_docume
 The frontend sends the full conversation history with each request in the `history` array. The backend trims this to the most recent 10 turns and injects them into the LLM messages array between the system prompt and the current user message.
 
 ```
-[System Prompt + Retrieved Docs]
+[System Prompt + Business Data (KPIs & VTO) + Retrieved Docs]
 [User turn 1]
 [Assistant turn 1]
 ...
@@ -286,6 +286,55 @@ There is no server-side session storage — memory lives entirely in the fronten
 
 ---
 
+## Business Data Context (KPIs & VTO)
+
+In addition to document embeddings, the chatbot has access to **live business data** for the requesting organisation. This data is fetched from the database (not from external APIs) on every chat request and injected into the system prompt alongside document chunks.
+
+### Data Sources
+
+| Source | Database Table | What It Contains |
+|---|---|---|
+| **Financial KPIs** | `FinanceKpi` | Revenue, profit, EBITDA, cash position, burn rate, runway, DSO, valuation metrics, budget variance |
+| **Leads KPIs** | `LeadsKpi` | Sales funnel (leads → deals won), conversion rate, pipeline coverage, recurring revenue, client concentration |
+| **Labor KPIs** | `LaborKpi` | Headcount, utilization, labor cost/hour, revenue per FTE, founder dependency |
+| **VTO** | `VTO` | Core values, mission, vision, 10-year targets, marketing strategy, 3-year picture |
+
+### How It Works
+
+1. When a chat request arrives with `orgIds`, the **Business Data Service** (`services/businessDataService.js`) queries the database for the latest KPI snapshots and VTO data for those organisation(s) — in parallel with intent detection and document retrieval.
+2. Each data source (financial, leads, labor, VTO) is formatted as a human-readable text block.
+3. The formatted text is injected into the system prompt in a dedicated section between the intent-specific instructions and the document context:
+
+```
+[Intent-specific system prompt + shared rules]
+
+--- BUSINESS DATA (KPIs & VTO) ---
+=== FINANCIAL KPIs (Period: Jan 1, 2026 – Mar 1, 2026) ===
+Total Income: $450,000
+Net Income: $112,500 (Net Margin: 25.0%)
+...
+
+=== VTO — Vision/Traction Organizer (2026 Strategic Plan, 2026) ===
+Core Values: Innovation, Integrity, Client-First
+Mission: ...
+--- END OF BUSINESS DATA ---
+
+--- RETRIEVED DOCUMENTS ---
+[1] report.pdf
+...
+--- END OF DOCUMENTS ---
+```
+
+4. Business data sources appear as **citation chips** in the frontend alongside document sources (e.g., "Financial KPIs (Jan–Mar 2026)", "VTO — 2026 Strategic Plan").
+
+### Scoping
+
+- Business data is **only injected when orgIds are scoped** to specific organisation(s). When `orgIds` is `"all"` (admin cross-org mode), business data is omitted to avoid bloating the prompt.
+- If no KPI or VTO data exists for an organisation, those sections are simply omitted — the chatbot falls back to document-only context gracefully.
+- All database queries use `.catch(() => null)` so a failure in one data source never blocks the others.
+
+---
+
 ## Multi-Agent Architecture
 
 Each request passes through a 5-step pipeline:
@@ -293,16 +342,17 @@ Each request passes through a 5-step pipeline:
 ```
 User Message
      │
-     ├────────────────────────────┐
-     ▓                            ▓
-[Intent Router]          [Document Retrieval]
-qwen3.5:9b, temp=0       pgvector top-15 chunks
-→ ["summarize","predict"] → relevant document text
-     │                            │
-     └──────────┬─────────────────┘
+     ├────────────────────────────┬────────────────────────────┐
+     ▓                            ▓                            ▓
+[Intent Router]          [Document Retrieval]       [Business Data Service]
+qwen3.5:9b, temp=0       pgvector top-15 chunks     DB queries (no LLM call)
+→ ["summarize","predict"] → relevant document text   → KPI snapshots + VTO data
+     │                            │                            │
+     └──────────┬─────────────────┴────────────────────────────┘
                 ▓
      [Parallel Specialized Agents]
       One qwen3.5:9b agent per detected intent
+      System prompt includes: business data + document context
       ┌──────────┬──────────┬──────────┬──────────┬──────────┐
       summarize  analyze    predict    explain    qa
       └──────────┴──────────┴──────────┴──────────┴──────────┘
@@ -312,7 +362,7 @@ qwen3.5:9b, temp=0       pgvector top-15 chunks
                 ▓
      [Guardrail Agent]
       qwen3.5:9b, temp=0, JSON output
-      • Checks every claim against source documents
+      • Checks every claim against source documents and business data
       • Labels unlabeled general knowledge
       • Revises hallucinated claims
       • Returns: { validatedAnswer, confidence, issues[] }
@@ -378,6 +428,7 @@ maural-kms-api/
 │   └── ingest.controller.js     # Document ingestion pipeline (Supabase Storage)
 ├── services/
 │   ├── ragService.js            # Document retrieval + prompt construction
+│   ├── businessDataService.js   # KPI + VTO data fetching and formatting for chat context
 │   ├── intentRouter.js          # Multi-intent detection (qwen3.5:9b, local)
 │   ├── promptTemplates.js       # Per-intent system prompts
 │   └── guardrail.js             # Answer accuracy verification (qwen3.5:9b, local)

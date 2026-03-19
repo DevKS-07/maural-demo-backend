@@ -24,6 +24,7 @@ const {
   buildMessagesForIntent,
   mapSources,
 } = require("../services/ragService");
+const { getBusinessContext } = require("../services/businessDataService");
 const { checkAndRefine } = require("../services/guardrail");
 const {
   OLLAMA_BASE_URL,
@@ -53,9 +54,9 @@ function getLLM({ temperature = 0.3 } = {}) {
 // ---------------------------------------------------------------------------
 // Run a single specialized agent for one intent
 // ---------------------------------------------------------------------------
-async function runAgent(intent, message, docs, history) {
+async function runAgent(intent, message, docs, history, businessContext) {
   const systemPrompt = getSystemPrompt(intent);
-  const messages = buildMessagesForIntent(message, docs, history, systemPrompt);
+  const messages = buildMessagesForIntent(message, docs, history, systemPrompt, businessContext);
 
   // Temperature varies by intent: predictions slightly higher, factual QA lower
   const temperature =
@@ -136,17 +137,21 @@ function estimatePreConfidence(docs, intents) {
 // Shared orchestration logic (used by both streaming + non-streaming)
 // ---------------------------------------------------------------------------
 async function orchestrate(message, orgIds, history) {
-  // Step 1 — intent detection and document retrieval run in parallel
-  const [intents, docs] = await Promise.all([
+  // Step 1 — intent detection, document retrieval, and business data all in parallel
+  const [intents, docs, businessData] = await Promise.all([
     detectIntents(message),
     retrieveDocuments(message, orgIds, 5),
+    getBusinessContext(orgIds),
   ]);
 
   console.log(`[chat] Detected intents: [${intents.join(", ")}]`);
+  if (businessData.text) {
+    console.log(`[chat] Business context: ${businessData.sources.length} data source(s) injected`);
+  }
 
   // Step 2 — one specialized agent per intent, all run in parallel
   const agentAnswers = await Promise.all(
-    intents.map((intent) => runAgent(intent, message, docs, history)),
+    intents.map((intent) => runAgent(intent, message, docs, history, businessData.text)),
   );
 
   // Step 3 — combine if multiple intents detected
@@ -179,8 +184,8 @@ async function orchestrate(message, orgIds, history) {
     ));
   }
 
-  // Step 5 — map sources for frontend citation chips
-  const sources = mapSources(docs);
+  // Step 5 — map sources for frontend citation chips (docs + business data)
+  const sources = [...mapSources(docs), ...businessData.sources];
 
   return { validatedAnswer, intents, sources, confidence, issues };
 }

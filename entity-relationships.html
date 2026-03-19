@@ -174,6 +174,7 @@
         </p>
         <div class="relationship-list">
             <p><strong>Has many:</strong> Users, Files, FinanceKpis, LeadsKpis, LaborKpis, document_embeddings</p>
+            <p><strong>Has one:</strong> VTO (strategic plan — vision, values, goals)</p>
             <p><strong>Has one (per service):</strong> HubspotToken, QuickbooksToken, MondayToken, ClickUpToken</p>
             <p><strong>Business meaning:</strong> "This is one of the companies we serve."</p>
         </div>
@@ -352,15 +353,19 @@
         </div>
     </div>
 
-    <!-- EXTERNAL SYSTEM -->
+    <!-- VTO -->
     <div class="entity-card">
-        <h3>ExternalSystem <span class="entity-badge badge-integration">Integrations</span></h3>
+        <h3>VTO (Vision/Traction Organizer) <span class="entity-badge badge-data">Knowledge Base</span></h3>
         <p>
-            The <strong>ExternalSystem</strong> entity is a registry of third-party platforms that the KMS can connect to. Each record describes an external service — its name, type (e.g., CRM, accounting, project management), authentication method (e.g., OAuth2, API key), and a URL reference. This serves as a <strong>catalog</strong> of available integrations, providing a centralized place to document what external systems exist and how they authenticate.
+            The <strong>VTO</strong> entity stores an organisation's strategic planning document — the Vision/Traction Organizer. Each Organisation has at most one VTO (enforced by a unique constraint on <code>org_id</code>). The VTO captures the organisation's <strong>core values</strong>, <strong>mission</strong> and <strong>vision</strong> statements, <strong>10-year targets</strong>, <strong>marketing strategy</strong> (target market, proven process, differentiators, guarantee), and a <strong>3-year picture</strong> (revenue targets, profit targets, measurables).
+        </p>
+        <p>
+            VTO data is not just stored — it is <strong>actively used by the AI chatbot</strong>. When a user asks a business strategy question, the Business Data Service fetches the organisation's VTO from the database and injects it into the chatbot's system prompt alongside KPI data and document embeddings. This means the chatbot can answer questions like "What are our core values?" or "What's our 3-year revenue target?" using authoritative strategic data rather than relying on general knowledge.
         </p>
         <div class="relationship-list">
-            <p><strong>Standalone:</strong> Not directly linked to other entities via foreign keys</p>
-            <p><strong>Business meaning:</strong> "These are the third-party tools we can pull data from."</p>
+            <p><strong>Belongs to:</strong> Organisation (one-to-one via unique <code>org_id</code>, ON DELETE CASCADE)</p>
+            <p><strong>Used by:</strong> Business Data Service → Chat controller → AI chatbot responses</p>
+            <p><strong>Business meaning:</strong> "This is the organisation's strategic plan — its vision, values, and goals."</p>
         </div>
     </div>
 
@@ -410,27 +415,29 @@
     │  │  Users   │   │  Files   │   │  Finance │   │  Leads   │              │
     │  │(Exec +  │──▶│(Docs in  │   │  KPIs    │   │  KPIs    │              │
     │  │ Staff)  │   │ bucket)  │   │(from QB) │   │(from HS) │              │
-    │  └────┬────┘   └─────┬───┘   └──────────┘   └──────────┘              │
-    │       │              │                                                   │
-    │       │        ┌─────▼────┐   ┌──────────┐                              │
-    │       │        │Embeddings│   │  Labor   │                              │
-    │       │        │(for AI)  │   │  KPIs    │                              │
-    │       │        └─────┬───┘   │(Mon/CU)  │                              │
-    │       │              │       └──────────┘                               │
-    │       │        ┌─────▼────┐                                             │
-    │       └───────▶│ Chatbot  │ ◀── User asks question                     │
-    │                │ (RAG)    │ ──▶ Retrieves relevant embeddings           │
-    │                └──────────┘     within tenant boundary                   │
+    │  └────┬────┘   └─────┬───┘   └─────┬────┘   └─────┬────┘              │
+    │       │              │             │               │                    │
+    │       │        ┌─────▼────┐   ┌────┴─────┐   ┌────▼────┐              │
+    │       │        │Embeddings│   │  Labor   │   │  VTO    │              │
+    │       │        │(for AI)  │   │  KPIs    │   │(Strategy│              │
+    │       │        └─────┬───┘   │(Mon/CU)  │   │ & Goals)│              │
+    │       │              │       └────┬─────┘   └────┬────┘              │
+    │       │              │            │              │                    │
+    │       │        ┌─────▼────────────▼──────────────▼────┐              │
+    │       └───────▶│         AI Chatbot (RAG)             │              │
+    │                │  Embeddings + KPIs + VTO → LLM       │              │
+    │                │  User asks question → scoped answer   │              │
+    │                └──────────────────────────────────────┘              │
     └─────────────────────────────────────────────────────────────────────────┘
 
     ┌─────────────────────────────────────────────────────────────────────────┐
     │  Cross-Cutting Entities (not tenant-scoped):                            │
     │                                                                         │
-    │  ┌──────────┐  ┌────────────┐  ┌───────────────┐  ┌─────────────────┐  │
-    │  │  Roles   │  │Permissions │  │  Categories   │  │ ExternalSystems │  │
-    │  │(4-tier   │──│(granular   │  │(shared labels │  │(integration     │  │
-    │  │hierarchy)│  │ actions)   │  │ for all docs) │  │ catalog)        │  │
-    │  └──────────┘  └────────────┘  └───────────────┘  └─────────────────┘  │
+    │  ┌──────────┐  ┌────────────┐  ┌───────────────┐                       │
+    │  │  Roles   │  │Permissions │  │  Categories   │                       │
+    │  │(4-tier   │──│(granular   │  │(shared labels │                       │
+    │  │hierarchy)│  │ actions)   │  │ for all docs) │                       │
+    │  └──────────┘  └────────────┘  └───────────────┘                       │
     │                                                                         │
     │  ┌─────────────────────────────────────────────────────────────┐        │
     │  │  OAuth Tokens (HubSpot, QuickBooks, Monday, ClickUp)       │        │
@@ -471,6 +478,9 @@
         </p>
         <p>
             This pipeline transforms a static document (a PDF sitting in storage) into searchable, AI-queryable knowledge. The File entity represents the document as an organizational asset; the document_embeddings entity represents the same content as semantic vectors that the AI can reason over. They are two representations of the same underlying knowledge, connected through the ingestion pipeline.
+        </p>
+        <p>
+            In addition to document embeddings, the chatbot also receives <strong>live business data context</strong> on every request. The Business Data Service fetches the latest KPI snapshots (Financial, Leads, Labor) and VTO data from the database — in parallel with intent detection and document retrieval — and injects them into the LLM system prompt. This means the chatbot can answer questions grounded in three data sources simultaneously: document embeddings (RAG), structured KPI metrics, and strategic VTO data — all scoped to the requesting user's organisation.
         </p>
     </div>
 
@@ -513,6 +523,7 @@
             <tr><td>User</td><td>File</td><td>One-to-Many</td><td>A user can upload multiple documents</td></tr>
             <tr><td>Role</td><td>Permission</td><td>Many-to-Many (via RolePermission)</td><td>A role bundles multiple permissions; a permission can belong to multiple roles</td></tr>
             <tr><td>File</td><td>Category</td><td>Many-to-One</td><td>A file is classified under one category (e.g., "Financial")</td></tr>
+            <tr><td>Organisation</td><td>VTO</td><td>One-to-One</td><td>An organisation has one strategic plan (vision, values, goals) used by the AI chatbot</td></tr>
             <tr><td>File</td><td>document_embeddings</td><td>One-to-Many (implicit)</td><td>A file's content is split into multiple embedded chunks for AI search</td></tr>
         </tbody>
     </table>

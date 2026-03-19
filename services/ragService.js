@@ -200,13 +200,24 @@ function formatContext(docs) {
  * @param {Array}  docs             Retrieved document chunks
  * @param {Array}  history          Prior conversation turns [{role, content}]
  * @param {string} systemPrompt     Intent-specific system prompt (from promptTemplates.js)
+ * @param {string} [businessContext] Formatted KPI/VTO text block (optional)
  * @returns {Array<{role:string, content:string}>}
  */
-function buildMessagesForIntent(message, docs, history = [], systemPrompt) {
+function buildMessagesForIntent(message, docs, history = [], systemPrompt, businessContext) {
   const context = formatContext(docs);
 
-  // Append the retrieved document context to the system prompt
-  const fullSystemPrompt = `${systemPrompt}
+  // Build the full system prompt with optional business data + document context
+  let fullSystemPrompt = systemPrompt;
+
+  if (businessContext) {
+    fullSystemPrompt += `
+
+--- BUSINESS DATA (KPIs & VTO) ---
+${businessContext}
+--- END OF BUSINESS DATA ---`;
+  }
+
+  fullSystemPrompt += `
 
 --- RETRIEVED DOCUMENTS ---
 ${context}
