@@ -71,7 +71,7 @@ function normaliseOrgIds(raw) {
  * @param {number}                    topK       - Number of chunks to return
  * @returns {Promise<Array<{content:string, metadata:object, similarity:number}>>}
  */
-async function retrieveDocuments(query, orgIds, topK = 15) {
+async function retrieveDocuments(query, orgIds, topK = 5) {
   const supabase = getSupabase();
   const embeddings = getEmbeddings();
 
@@ -211,6 +211,10 @@ function buildMessagesForIntent(message, docs, history = [], systemPrompt, busin
 
   if (businessContext) {
     fullSystemPrompt += `
+
+CRITICAL INSTRUCTION: The section below contains REAL, LIVE financial KPI data for this organisation.
+You MUST use these exact numbers when answering questions about financial performance, gross margin,
+EBITDA, revenue, labor, or sales. Do NOT say data is unavailable if it appears below.
 
 --- BUSINESS DATA (KPIs & VTO) ---
 ${businessContext}

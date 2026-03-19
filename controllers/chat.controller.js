@@ -214,7 +214,7 @@ exports.streamChat = async (req, res) => {
   };
 
   try {
-    const { validatedAnswer, intents, sources, confidence, issues } =
+    const { validatedAnswer, intents, confidence, issues } =
       await orchestrate(message, orgIds, history);
 
     // 1. Send detected intents (frontend can show intent badge)
@@ -223,13 +223,10 @@ exports.streamChat = async (req, res) => {
     // 2. Stream the guardrail-validated answer word-by-word from buffer
     await streamFromBuffer(validatedAnswer, sendEvent);
 
-    // 3. Send source citations
-    sendEvent({ type: "sources", sources });
-
-    // 4. Send guardrail metadata
+    // 3. Send guardrail metadata
     sendEvent({ type: "guardrail", confidence, issues });
 
-    // 5. Done
+    // 4. Done
     sendEvent("[DONE]");
   } catch (err) {
     console.error("[chat.controller] streamChat error:", err.message);
@@ -254,12 +251,11 @@ exports.chat = async (req, res) => {
   }
 
   try {
-    const { validatedAnswer, intents, sources, confidence, issues } =
+    const { validatedAnswer, intents, confidence, issues } =
       await orchestrate(message, orgIds, history);
 
     return res.status(200).json({
       answer: validatedAnswer,
-      sources,
       intents,
       guardrail: { confidence, issues },
     });
