@@ -21,6 +21,11 @@ model Organisation {
     // Platform flag — true only for the "Maural Solutions" admin org
     is_platform          Boolean @default(false)
 
+    // Labour integration routing
+    laborSource          String?   // "monday" | "clickup"
+    mondayBoardId        String?
+    clickupWorkspaceId   String?
+
     // Integration connection flags (auto-set when tokens are created/deleted)
     hubspot_connected    Boolean @default(false)
     quickbooks_connected Boolean @default(false)

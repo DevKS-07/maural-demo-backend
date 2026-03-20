@@ -9,6 +9,7 @@ const docsRoutes = require("./routes/docs.routes");
 const chatRoutes = require("./routes/chat.routes");
 const integrations = require("./routes/integrations.routes");
 const summaryRoutes = require("./routes/summary.routes");
+const vtoRoutes = require("./routes/vto.routes");
 
 // Auth middleware
 const { requireAuth } = require("./middleware/auth.middleware");
@@ -42,5 +43,7 @@ router.use("/integrations", requireAuth, integrations); // HubSpot, QuickBooks, 
 router.use("/summary", requireAuth, summaryRoutes); // KPI summary routes
 
 router.use("/chat", requireAuth, chatRoutes); // AI chat
+
+router.use("/vto", requireAuth, vtoRoutes); // VTO CRUD
 
 module.exports = router;
