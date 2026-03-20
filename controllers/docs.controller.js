@@ -198,16 +198,39 @@ exports.createDocument = async (req, res) => {
 
   const safeName = encodeURIComponent(req.file.originalname);
   const bucketName = org.storage_bucket;
+  const supabase = getSupabase();
 
   try {
-    const { data, error } = await getSupabase().storage
+    let { data, error } = await supabase.storage
       .from(bucketName)
       .upload(`uploads/${safeName}`, req.file.buffer, {
         contentType: req.file.mimetype,
         upsert: true,
       });
 
+    // Auto-create the bucket if it doesn't exist, then retry
+    if (error && error.message === "Bucket not found") {
+      console.log(`[docs] Bucket "${bucketName}" not found — creating it now`);
+      const { error: bucketError } = await supabase.storage.createBucket(
+        bucketName,
+        { public: false },
+      );
+      if (bucketError) {
+        console.error("Failed to create bucket:", bucketError.message);
+        return res
+          .status(500)
+          .json({ message: "Failed to create storage bucket" });
+      }
+      ({ data, error } = await supabase.storage
+        .from(bucketName)
+        .upload(`uploads/${safeName}`, req.file.buffer, {
+          contentType: req.file.mimetype,
+          upsert: true,
+        }));
+    }
+
     if (error) {
+      console.error("Supabase upload error:", error.message);
       return res
         .status(500)
         .json({ message: "Failed to upload file to storage" });

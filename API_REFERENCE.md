@@ -22,6 +22,7 @@
   - [Organisations](#organisations)
   - [Documents](#documents)
   - [Chat / AI](#chat--ai)
+  - [VTO (Vision/Traction Organizer)](#vto-visiontraction-organizer)
   - [KPI Summary](#kpi-summary)
   - [Integrations — HubSpot](#integrations--hubspot)
   - [Integrations — QuickBooks](#integrations--quickbooks)
@@ -1256,6 +1257,138 @@ Triggers the document ingestion pipeline. Processes **all** files in the databas
 | `successFiles` | `number` | Files successfully processed |
 | `totalChunks` | `number` | Total chunks created and embedded |
 | `errors` | `array` | Files that failed processing (omitted if none) |
+
+---
+
+### VTO (Vision/Traction Organizer)
+
+CRUD endpoints for managing an organisation's VTO document. Each organisation has at most one VTO (one-to-one relationship). All endpoints require authentication (`requireAuth`). Write operations (create, update, delete) additionally require `requireRole("org_executive")` or higher.
+
+---
+
+#### `GET /api/vto/:orgId`
+
+Returns the VTO for a given organisation.
+
+**Auth:** Required (Clerk JWT)
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `orgId` | `string` (UUID) | The organisation's ID |
+
+**Response `200 OK`**
+
+```json
+{
+  "vto_id": "a1b2c3d4-...",
+  "title": "2026 Vision",
+  "year": "2026",
+  "org_id": "e9d52719-...",
+  "core_values": ["Integrity", "Innovation"],
+  "mission": "To empower businesses...",
+  "vision": "A world where every team...",
+  "ten_year_targets": ["$100M revenue", "5000 customers"],
+  "target_market": "Mid-market SaaS companies",
+  "proven_process": "Discovery → Onboarding → Growth",
+  "differentiators": "AI-powered insights",
+  "guarantee": "ROI within 90 days",
+  "future_date": "2029-12-31",
+  "revenue": "$50M",
+  "profit": "$10M",
+  "measurables": "NPS > 70, churn < 5%",
+  "look_like": "500 employees, 3 offices",
+  "created_at": "2026-01-15T10:00:00.000Z",
+  "updated_at": "2026-03-10T14:30:00.000Z"
+}
+```
+
+**Error `404 Not Found`** — No VTO exists for this organisation
+
+---
+
+#### `POST /api/vto/:orgId`
+
+Creates a VTO for the organisation. Fails with `409` if one already exists.
+
+**Auth:** Required + `org_executive` role or higher
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `orgId` | `string` (UUID) | The organisation's ID |
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `title` | `string` | Yes | VTO title |
+| `year` | `string` | Yes | Target year |
+| `core_values` | `JSON array` | No | List of core values (default `[]`) |
+| `mission` | `string` | No | Mission statement |
+| `vision` | `string` | No | Vision statement |
+| `ten_year_targets` | `JSON array` | No | Long-term targets (default `[]`) |
+| `target_market` | `string` | No | Target market description |
+| `proven_process` | `string` | No | Proven process description |
+| `differentiators` | `string` | No | Unique differentiators |
+| `guarantee` | `string` | No | Company guarantee |
+| `future_date` | `string` | No | 3-year picture target date |
+| `revenue` | `string` | No | 3-year revenue target |
+| `profit` | `string` | No | 3-year profit target |
+| `measurables` | `string` | No | 3-year measurables |
+| `look_like` | `string` | No | What the company looks like in 3 years |
+
+**Response `201 Created`** — The created VTO object
+
+**Error `400 Bad Request`** — Missing `title` or `year`
+
+**Error `409 Conflict`** — A VTO already exists for this organisation
+
+---
+
+#### `PUT /api/vto/:orgId`
+
+Updates the existing VTO for the organisation.
+
+**Auth:** Required + `org_executive` role or higher
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `orgId` | `string` (UUID) | The organisation's ID |
+
+**Request Body:** Same fields as `POST` (all optional — only provided fields are updated)
+
+**Response `200 OK`** — The updated VTO object
+
+**Error `500 Internal Server Error`** — No VTO found for this organisation (Prisma record-not-found)
+
+---
+
+#### `DELETE /api/vto/:orgId`
+
+Deletes the VTO for the organisation.
+
+**Auth:** Required + `org_executive` role or higher
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `orgId` | `string` (UUID) | The organisation's ID |
+
+**Response `200 OK`**
+
+```json
+{
+  "message": "VTO for organisation e9d52719-... deleted"
+}
+```
+
+**Error `500 Internal Server Error`** — No VTO found for this organisation
 
 ---
 
