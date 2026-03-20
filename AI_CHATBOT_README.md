@@ -239,9 +239,17 @@ When a user sends a message, the query is embedded and compared against all stor
 
 ### Organisation-scoped retrieval (tenant isolation)
 
-Every document chunk is associated with an organisation via the `org_id` column on `document_embeddings`. The `match_documents` RPC accepts a `filter_org_ids` parameter (UUID array) that enforces tenant isolation at the database level — only chunks belonging to the specified organisation(s) are searched. Passing `NULL` searches all organisations (admin use).
+Tenant isolation is enforced at **two layers**:
 
-The chat endpoints pass the authenticated user's `orgIds` through to the RAG service, which normalises the value and forwards it to the RPC. This ensures users only see answers grounded in their own organisation's documents.
+**Layer 1 — Middleware (`requireOrgAccess`):** Before any chat logic runs, the `requireOrgAccess("body")` middleware checks the authenticated user's role:
+- **`admin` / `super_admin`**: Cross-org access allowed — `orgIds` from the request body is passed through as-is.
+- **`org_executive` / `org_staff`**: The middleware looks up the user's `org_id` from the database (via their Clerk `clerk_id`) and **force-overrides** `req.body.orgIds` with that value. Any client-supplied `orgIds` is ignored.
+
+This prevents non-admin users from querying documents or business data belonging to other organisations.
+
+**Layer 2 — Database (`filter_org_ids`):** Every document chunk is associated with an organisation via the `org_id` column on `document_embeddings`. The `match_documents` RPC accepts a `filter_org_ids` parameter (UUID array) that enforces tenant isolation at the database level — only chunks belonging to the specified organisation(s) are searched. Passing `NULL` searches all organisations (admin use).
+
+The chat controller passes the (middleware-validated) `orgIds` through to the RAG service, which normalises the value and forwards it to the RPC. This ensures users only see answers grounded in their own organisation's documents.
 
 ### Document coverage guarantee
 

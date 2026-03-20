@@ -78,6 +78,22 @@ The `requireRole(minRole)` middleware enforces a role hierarchy:
 
 A user must have a role level **≥ the minimum required level** to access the endpoint.
 
+### Organisation-Level Access Control
+
+The `requireOrgAccess(orgIdSource)` middleware enforces tenant isolation, preventing users from accessing data belonging to other organisations:
+
+| Role | Access Scope |
+|---|---|
+| `super_admin` / `admin` | Cross-org — can access any organisation's data |
+| `org_executive` / `org_staff` | Own org only — locked to their assigned organisation |
+
+**How it works:**
+
+- **Param-based routes** (e.g. `/api/summary/financial/:orgId`): The middleware validates that `req.params.orgId` matches the authenticated user's organisation. Returns `403` if the user attempts to access a different org.
+- **Body-based routes** (e.g. `/api/chat`): The middleware force-overrides `req.body.orgIds` with the user's own organisation ID, regardless of what was sent in the request.
+
+This middleware is applied to all chat, KPI summary, and VTO endpoints. The user's `org_id` is looked up from the database using their Clerk `clerk_id`.
+
 ---
 
 ## Rate Limiting
@@ -1103,6 +1119,8 @@ Returns the activity log for a document.
 
 All chat endpoints require authentication (`requireAuth`) and are subject to the **stricter rate limit** of 20 requests per 15 minutes.
 
+> **Org-level isolation:** For `org_executive` and `org_staff` users, the `orgIds` field in the request body is **automatically overridden** with the user's own organisation ID. Admins and super admins retain cross-org access. See [Organisation-Level Access Control](#organisation-level-access-control).
+
 ---
 
 #### `GET /api/chat/`
@@ -1264,6 +1282,8 @@ Triggers the document ingestion pipeline. Processes **all** files in the databas
 
 CRUD endpoints for managing an organisation's VTO document. Each organisation has at most one VTO (one-to-one relationship). All endpoints require authentication (`requireAuth`). Write operations (create, update, delete) additionally require `requireRole("org_executive")` or higher.
 
+> **Org-level isolation:** All VTO endpoints are protected by `requireOrgAccess("params")` — `org_executive` and `org_staff` users can only access their own organisation's VTO (403 otherwise). See [Organisation-Level Access Control](#organisation-level-access-control).
+
 ---
 
 #### `GET /api/vto/:orgId`
@@ -1395,6 +1415,8 @@ Deletes the VTO for the organisation.
 ### KPI Summary
 
 All KPI summary endpoints require authentication (`requireAuth`). These endpoints aggregate data from connected integrations (QuickBooks, HubSpot, Monday.com) to provide financial, leads, and labor KPIs for a specific organisation.
+
+> **Org-level isolation:** Endpoints with `:orgId` are protected by `requireOrgAccess("params")` — `org_executive` and `org_staff` users can only access their own organisation's data (403 otherwise). The scorecard endpoint requires `admin` role or higher. See [Organisation-Level Access Control](#organisation-level-access-control).
 
 ---
 

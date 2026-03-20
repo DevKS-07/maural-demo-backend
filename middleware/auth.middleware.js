@@ -1,5 +1,6 @@
 const { requireAuth: clerkRequireAuth } = require("@clerk/express");
 const { DISABLE_AUTH } = require("../config/env");
+const prisma = require("../lib/prisma");
 
 // ---------------------------------------------------------------------------
 // Auth toggle — set DISABLE_AUTH=true in .env.development.local or
@@ -64,6 +65,58 @@ exports.requireRole = (minRole) => {
       return res.status(403).json({
         message: `Insufficient permissions. Required: ${minRole}, your role: ${userRole}`,
       });
+    }
+
+    next();
+  };
+};
+
+// ---------------------------------------------------------------------------
+// requireOrgAccess(orgIdSource)
+// Ensures non-admin users can only access their own organisation's data.
+// Admins and super_admins bypass the check (cross-org access allowed).
+//
+// @param {"params"|"body"} orgIdSource
+//   - "params": validates req.params.orgId matches the user's org (403 if not)
+//   - "body":   force-overrides req.body.orgIds with the user's org
+//
+// Usage:
+//   router.get("/:orgId", requireOrgAccess("params"), handler);
+//   router.post("/", requireOrgAccess("body"), handler);
+// ---------------------------------------------------------------------------
+exports.requireOrgAccess = (orgIdSource = "params") => {
+  if (AUTH_DISABLED) return passThrough;
+
+  return async (req, res, next) => {
+    const { sessionClaims, userId: clerkId } = req.auth();
+    const userRole = sessionClaims?.publicMetadata?.role;
+
+    // Admins have cross-org access
+    if (userRole === "admin" || userRole === "super_admin") {
+      return next();
+    }
+
+    // Look up user's org from DB
+    const user = await prisma.user.findUnique({
+      where: { clerk_id: clerkId },
+      select: { org_id: true },
+    });
+
+    if (!user?.org_id) {
+      return res
+        .status(403)
+        .json({ message: "You are not assigned to any organisation" });
+    }
+
+    if (orgIdSource === "params") {
+      const requestedOrgId = req.params.orgId;
+      if (requestedOrgId && requestedOrgId !== user.org_id) {
+        return res.status(403).json({
+          message: "You can only access your own organisation's data",
+        });
+      }
+    } else if (orgIdSource === "body") {
+      req.body.orgIds = user.org_id;
     }
 
     next();
