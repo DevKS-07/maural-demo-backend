@@ -79,4 +79,7 @@ module.exports = {
   CLICKUP_CLIENT_ID: process.env.CLICKUP_CLIENT_ID,
   CLICKUP_CLIENT_SECRET: process.env.CLICKUP_CLIENT_SECRET,
   CLICKUP_REDIRECT_URI: process.env.CLICKUP_REDIRECT_URI,
+
+  // Frontend
+  FRONTEND_REDIRECT_URI: process.env.FRONTEND_REDIRECT_URI || "http://localhost:5173/integrations",
 };

@@ -1,115 +1,131 @@
-//* TODO: Remove this import if not needed, instead import prisma client directly from lib/prisma.js
-// const { createClient } = require("@supabase/supabase-js");
-// const { PrismaClient } = require("@prisma/client");
-// const { PrismaPg } = require("@prisma/adapter-pg");
-// const adapter = new PrismaPg({
-//   connectionString: process.env.DATABASE_URL,
-// });
-// const prisma = new PrismaClient({ adapter });
+// clickup.controller.js
 
+const axios = require("axios");
+const crypto = require("crypto");
 const prisma = require("../lib/prisma");
+
 const {
   CLICKUP_CLIENT_ID,
   CLICKUP_CLIENT_SECRET,
   CLICKUP_REDIRECT_URI,
 } = require("../config/env");
 
-const axios = require("axios");
-const _e = require("express");
-
 const CLIENT_ID = CLICKUP_CLIENT_ID;
 const CLIENT_SECRET = CLICKUP_CLIENT_SECRET;
 const REDIRECT_URI = CLICKUP_REDIRECT_URI;
-
-// TODO: Adjust scopes as needed
-// TODO: Implement refresh token logic
-// TODO: Fetch more data from ClickUp APIs as needed
 
 let SCOPES = ["read", "write"];
 if (process.env.SCOPE) {
   SCOPES = process.env.SCOPE.split(/ |, ?|%20/).join(" ");
 }
 
-/**
- * Build the authorization URL to redirect a user to when they choose to install the app
- * @param {*} req
- * @param {*} res
- */
-const installClickUp = (req, res) => {
+// In-memory store for OAuth state tokens (expires after 10 min)
+// Maps state → { org_id }
+const STATE_TTL_MS = 10 * 60 * 1000;
+const oauthStates = new Map();
+
+// Resolves org_id from the Clerk JWT on the request
+const getOrgId = async (req) => {
+  const { userId: clerkId } = req.auth();
+  if (!clerkId) return null;
+  const user = await prisma.user.findUnique({
+    where: { clerk_id: clerkId },
+    select: { org_id: true },
+  });
+  return user?.org_id ?? null;
+};
+
+const installClickUp = async (req, res) => {
+  const org_id = await getOrgId(req);
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
+
+  const state = crypto.randomBytes(32).toString("hex");
+  oauthStates.set(state, { org_id });
+  setTimeout(() => oauthStates.delete(state), STATE_TTL_MS);
+
   const authUrl =
     "https://app.clickup.com/api" +
     `?client_id=${encodeURIComponent(CLIENT_ID)}` +
     `&scope=${encodeURIComponent(SCOPES)}` +
-    `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+    `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
+    `&state=${state}`;
 
   res.redirect(authUrl);
 };
 
 const callbackHandler = async (req, res) => {
-  if (req.query.code) {
-    const authCodeProof = {
-      grant_type: "authorization_code",
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
-      redirect_uri: REDIRECT_URI,
-      code: req.query.code,
-    };
+  const { code, state } = req.query;
+  if (!code) return res.status(400).send("Missing authorization code.");
+  if (!state || !oauthStates.has(state))
+    return res.status(400).send("Invalid authentication request.");
 
-    // Exchange the authorization code for an access token and refresh token
-    // TODO: Later use userID from clerk auth to identify the user
-    const tokenData = await exchangeAuthCodeForTokens(authCodeProof);
+  const { org_id } = oauthStates.get(state);
+  oauthStates.delete(state);
 
-    if (tokenData.message) {
-      res.status(500).send("Error during token exchange. Please try again.");
-    }
+  try {
+    const response = await axios.post(
+      "https://api.clickup.com/api/v2/oauth/token",
+      new URLSearchParams({
+        grant_type: "authorization_code",
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        redirect_uri: REDIRECT_URI,
+        code,
+      }),
+    );
 
-    req.session.org_id = tokenData.org_id;
+    const { access_token, refresh_token, token_type, expires_in } =
+      response.data;
+    const expires_at = new Date(Date.now() + expires_in * 1000);
+
+    await prisma.clickUpToken.upsert({
+      where: { org_id },
+      create: {
+        org_id,
+        access_token,
+        refresh_token,
+        token_type,
+        expires_at,
+      },
+      update: {
+        access_token,
+        refresh_token,
+        token_type,
+        expires_at,
+      },
+    });
+
+    await prisma.organisation.update({
+      where: { org_id },
+      data: { clickup_connected: true },
+    });
 
     res.redirect("/api/integrations/clickup/success");
+  } catch (error) {
+    console.error("[ClickUp] Token exchange error:", error.message);
+    res.status(500).send("Error connecting ClickUp. Please try again.");
   }
 };
 
-/**
- * Handle logic after successful connection to ClickUp
- * @param {*} req
- * @param {*} res
- */
-const connectionSuccessHandler = (req, res) => {
-  const org_id = req.session.org_id;
-  console.log(`Organisation: ${org_id}`);
-
-  // const token = prisma.clickupToken.findUnique({
-  //  where: { org_id },
-  //});
-  // console.log(`Token: ${token}`);
-
-  console.log(`ClickUp Integration Successful!`);
-  res.redirect("http://localhost:3000/integrations");
+const connectionSuccessHandler = async (req, res) => {
+  const org_id = await getOrgId(req);
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
+  try {
+    const token = await prisma.clickUpToken.findUnique({ where: { org_id } });
+    if (!token) return res.status(404).send("Token not found.");
+    res.redirect("/api/integrations/clickup/status");
+  } catch (_error) {
+    res.status(500).send("Error connecting ClickUp!");
+  }
 };
 
-/**
- * Check if the logged-in user has connected their ClickUp account
- * @param {*} req
- * @param {*} res
- * @returns true/false based on connection status
- */
 const connectionStatus = async (req, res) => {
   try {
-    const org_id = req.session.org_id;
-
-    if (!org_id) {
-      return res.status(200).json({ connected: false });
-    }
-
-    const token = await prisma.clickupToken.findUnique({
-      where: { org_id },
-    });
-
-    return res.status(200).json({
-      connected: Boolean(token),
-    });
-  } catch (error) {
-    console.error("ClickUp status error:", error);
+    const org_id = await getOrgId(req);
+    if (!org_id) return res.status(200).json({ connected: false });
+    const token = await prisma.clickUpToken.findUnique({ where: { org_id } });
+    return res.status(200).json({ connected: Boolean(token) });
+  } catch (_error) {
     return res.status(500).json({
       connected: false,
       error: "Failed to check ClickUp connection status",
@@ -126,68 +142,6 @@ module.exports = {
 
 // ##################### Utility Functions #####################
 
-/**
- * Exchange the authorization code for an access token and refresh token
- * @param {*} userId
- * @param {*} authCodeProof
- */
-const exchangeAuthCodeForTokens = async (exchangeProof) => {
-  try {
-    const response = await axios.post(
-      "https://api.clickup.com/api/v2/oauth/token",
-      new URLSearchParams(exchangeProof),
-    );
-
-    const { access_token, _refresh_token, expires_in } = response.data;
-    const _expires_at = new Date(Date.now() + expires_in * 1000);
-
-    // Fetching user metadata using access token
-    const userMetadataRes = await axios.get(
-      `https://api.clickup.com/api/v2/user`,
-      {
-        headers: {
-          Authorization: `Bearer ${access_token}`,
-        },
-      },
-    );
-
-    const org_id = userMetadataRes.data.user.id;
-
-    // console.log(
-    //   `Organisation ${org_id} Tokens:\n
-    //   \nAccess Token: ${access_token} \nRefresh Token: ${refresh_token}\nExpires In: ${expires_in} seconds`
-    // );
-
-    // Storing these tokens in DB
-    // TODO: When this upsert is uncommented, also add:
-    //   await prisma.organisation.update({ where: { org_id }, data: { clickup_connected: true } });
-    /*
-    await prisma.clickupToken.upsert({
-      where: { org_id },
-      create: {
-        org_id,
-        access_token,
-        refresh_token,
-        expires_at,
-      },
-      update: {
-        access_token,
-        refresh_token,
-        expires_at,
-      },
-    });
-    */
-
-    return { org_id, access_token };
-  } catch (err) {
-    console.error(
-      `> Error exchanging ${exchangeProof.grant_type} for access token`,
-    );
-    console.error(err);
-    return err;
-  }
-};
-
 const refreshClickUpToken = async (refreshToken) => {
   const response = await axios.post(
     "https://api.clickup.com/api/v2/oauth/token",
@@ -198,17 +152,11 @@ const refreshClickUpToken = async (refreshToken) => {
       refresh_token: refreshToken,
     }),
   );
-
   return response.data;
 };
 
-/**
- * Get the token record for a specific organisation
- * @param {*} org_id organisation ID
- * @returns The token record from the database
- */
 const getTokenRecord = async (org_id) => {
-  return await prisma.clickupToken.findUnique({
+  return await prisma.clickUpToken.findUnique({
     where: { org_id },
   });
 };
@@ -223,12 +171,12 @@ const _checkAndRefreshToken = async (org_id) => {
     console.log("> Access token has expired. Refreshing...");
     const newTokens = await refreshClickUpToken(tokenRecord.refresh_token);
     const expires_at = new Date(Date.now() + newTokens.expires_in * 1000);
-    await prisma.clickupToken.update({
+    await prisma.clickUpToken.update({
       where: { org_id },
       data: {
         access_token: newTokens.access_token,
         refresh_token: newTokens.refresh_token,
-        expires_at: expires_at,
+        expires_at,
       },
     });
     return newTokens.access_token;

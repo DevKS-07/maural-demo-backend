@@ -11,25 +11,48 @@ const {
   HUBSPOT_CLIENT_ID,
   HUBSPOT_CLIENT_SECRET,
   HUBSPOT_REDIRECT_URI,
+  FRONTEND_REDIRECT_URI,
 } = require("../config/env");
 
 const CLIENT_ID = HUBSPOT_CLIENT_ID;
 const CLIENT_SECRET = HUBSPOT_CLIENT_SECRET;
 const REDIRECT_URI = HUBSPOT_REDIRECT_URI;
 
-const SCOPES = [
-  "crm.objects.deals.read",
-  "crm.objects.contacts.read",
-  "crm.objects.companies.read",
-].join(" ");
+const SCOPES = ["crm.objects.contacts.read"].join(" ");
+
+// In-memory store for OAuth state tokens (expires after 10 min)
+// Maps state → { org_id, createdAt }
+const STATE_TTL_MS = 10 * 60 * 1000;
+const oauthStates = new Map();
+
+// Resolves org_id from the Clerk JWT on the request
+const getOrgId = async (req) => {
+  const { userId: clerkId } = req.auth();
+  if (!clerkId) return null;
+  const user = await prisma.user.findUnique({
+    where: { clerk_id: clerkId },
+    select: { org_id: true },
+  });
+  return user?.org_id ?? null;
+};
 
 // ─────────────────────────────────────────────────────────────────
 //  OAUTH HANDLERS
 // ─────────────────────────────────────────────────────────────────
 
-const installHubSpot = (req, res) => {
+const installHubSpot = async (req, res) => {
+  const org_id = await getOrgId(req);
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
+
+  // Skip OAuth if the org already has a valid (non-expired) access token
+  const existing = await prisma.hubspotToken.findUnique({ where: { org_id } });
+  if (existing && existing.expires_at > new Date()) {
+    return res.redirect(FRONTEND_REDIRECT_URI);
+  }
+
   const state = crypto.randomBytes(32).toString("hex");
-  req.session.oauthState = state;
+  oauthStates.set(state, { org_id });
+  setTimeout(() => oauthStates.delete(state), STATE_TTL_MS);
 
   const authUrl =
     "https://app.hubspot.com/oauth/authorize" +
@@ -44,9 +67,11 @@ const installHubSpot = (req, res) => {
 const callbackHandler = async (req, res) => {
   const { code, state } = req.query;
   if (!code) return res.status(400).send("Missing authorization code.");
-  if (!req.session.oauthState || state !== req.session.oauthState)
+  if (!state || !oauthStates.has(state))
     return res.status(400).send("Invalid authentication request.");
-  delete req.session.oauthState;
+
+  const { org_id } = oauthStates.get(state);
+  oauthStates.delete(state);
 
   try {
     // Exchange code for tokens
@@ -63,13 +88,6 @@ const callbackHandler = async (req, res) => {
 
     const { access_token, refresh_token, expires_in } = response.data;
     const expires_at = new Date(Date.now() + expires_in * 1000);
-
-    // Get portal ID
-    const metaRes = await axios.get(
-      `https://api.hubapi.com/oauth/v1/access-tokens/${access_token}`,
-    );
-    const org_id = String(metaRes.data.hub_id);
-    req.session.org_id = org_id;
 
     await prisma.hubspotToken.upsert({
       where: { org_id },
@@ -90,11 +108,12 @@ const callbackHandler = async (req, res) => {
 };
 
 const connectionSuccessHandler = async (req, res) => {
-  const org_id = req.session.org_id;
+  const org_id = await getOrgId(req);
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
   try {
     const token = await prisma.hubspotToken.findUnique({ where: { org_id } });
     if (!token) return res.status(404).send("Token not found.");
-    res.redirect("/api/integrations/hubspot/status");
+    res.redirect(FRONTEND_REDIRECT_URI);
   } catch (_error) {
     res.status(500).send("Error connecting HubSpot!");
   }
@@ -102,7 +121,7 @@ const connectionSuccessHandler = async (req, res) => {
 
 const connectionStatus = async (req, res) => {
   try {
-    const org_id = req.session.org_id;
+    const org_id = await getOrgId(req);
     if (!org_id) return res.status(200).json({ connected: false });
     const token = await prisma.hubspotToken.findUnique({ where: { org_id } });
     return res.status(200).json({ connected: Boolean(token) });
@@ -122,7 +141,7 @@ const connectionStatus = async (req, res) => {
  * GET /api/integrations/hubspot/kpis/leads
  */
 const getLeadsKPIs = async (req, res) => {
-  const org_id = req.session.org_id;
+  const org_id = await getOrgId(req);
   if (!org_id) return res.status(401).json({ error: "Not authenticated" });
 
   const { startDate, endDate } = req.query;

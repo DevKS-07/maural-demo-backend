@@ -14,7 +14,6 @@ const {
 const CLIENT_ID = MONDAY_CLIENT_ID;
 const CLIENT_SECRET = MONDAY_CLIENT_SECRET;
 const REDIRECT_URI = MONDAY_REDIRECT_URI;
-const API_VERSION = "2025-07";
 
 const SCOPES = [
   "boards:read",
@@ -24,13 +23,33 @@ const SCOPES = [
   "me:read",
 ].join(" ");
 
+// In-memory store for OAuth state tokens (expires after 10 min)
+// Maps state → { org_id }
+const STATE_TTL_MS = 10 * 60 * 1000;
+const oauthStates = new Map();
+
+// Resolves org_id from the Clerk JWT on the request
+const getOrgId = async (req) => {
+  const { userId: clerkId } = req.auth();
+  if (!clerkId) return null;
+  const user = await prisma.user.findUnique({
+    where: { clerk_id: clerkId },
+    select: { org_id: true },
+  });
+  return user?.org_id ?? null;
+};
+
 // ─────────────────────────────────────────────────────────────────
 //  OAUTH HANDLERS
 // ─────────────────────────────────────────────────────────────────
 
-const installMonday = (req, res) => {
+const installMonday = async (req, res) => {
+  const org_id = await getOrgId(req);
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
+
   const state = crypto.randomBytes(32).toString("hex");
-  req.session.oauthState = state;
+  oauthStates.set(state, { org_id });
+  setTimeout(() => oauthStates.delete(state), STATE_TTL_MS);
 
   const authUrl =
     "https://auth.monday.com/oauth2/authorize" +
@@ -45,9 +64,11 @@ const installMonday = (req, res) => {
 const callbackHandler = async (req, res) => {
   const { code, state } = req.query;
   if (!code) return res.status(400).send("Missing authorization code.");
-  if (!req.session.oauthState || state !== req.session.oauthState)
+  if (!state || !oauthStates.has(state))
     return res.status(400).send("Invalid authentication request.");
-  delete req.session.oauthState;
+
+  const { org_id } = oauthStates.get(state);
+  oauthStates.delete(state);
 
   try {
     const response = await axios.post(
@@ -62,24 +83,6 @@ const callbackHandler = async (req, res) => {
     );
 
     const { access_token, refresh_token, expires_in } = response.data;
-
-    // Monday access tokens are long-lived and don't always include expires_in.
-    // Default to 1 year if not provided.
-    // Get Monday user ID
-    const userRes = await axios.post(
-      "https://api.monday.com/v2",
-      { query: "query { me { id } }" },
-      {
-        headers: {
-          Authorization: `Bearer ${access_token}`,
-          "Content-Type": "application/json",
-          "API-Version": API_VERSION,
-        },
-      },
-    );
-    // TODO: Replace with org_id from authenticated user's organisation
-    const org_id = String(userRes.data.data.me.id);
-    req.session.org_id = org_id;
 
     await prisma.mondayToken.upsert({
       where: { org_id },
@@ -109,9 +112,10 @@ const callbackHandler = async (req, res) => {
 };
 
 const connectionSuccessHandler = async (req, res) => {
-  const org_id = req.session.org_id;
+  const org_id = await getOrgId(req);
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
   try {
-    const token = await prisma.mondayToken.findUnique({ where: { org_id } }); // fixed: added await
+    const token = await prisma.mondayToken.findUnique({ where: { org_id } });
     if (!token) return res.status(404).send("Token not found.");
     res.redirect("/api/integrations/monday/status");
   } catch (_error) {
@@ -121,7 +125,7 @@ const connectionSuccessHandler = async (req, res) => {
 
 const connectionStatus = async (req, res) => {
   try {
-    const org_id = req.session.org_id;
+    const org_id = await getOrgId(req);
     if (!org_id) return res.status(200).json({ connected: false });
     const token = await prisma.mondayToken.findUnique({ where: { org_id } });
     return res.status(200).json({ connected: Boolean(token) });

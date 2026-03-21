@@ -13,12 +13,29 @@ const {
   QUICKBOOKS_CLIENT_SECRET,
   QUICKBOOKS_REDIRECT_URI,
   QUICKBOOKS_ENVIRONMENT,
+  FRONTEND_REDIRECT_URI,
 } = require("../config/env");
 
 const CLIENT_ID = QUICKBOOKS_CLIENT_ID;
 const CLIENT_SECRET = QUICKBOOKS_CLIENT_SECRET;
 const REDIRECT_URI = QUICKBOOKS_REDIRECT_URI;
 const ENVIRONMENT = QUICKBOOKS_ENVIRONMENT;
+
+// In-memory store for OAuth state tokens (expires after 10 min)
+// Maps state → { org_id }
+const STATE_TTL_MS = 10 * 60 * 1000;
+const oauthStates = new Map();
+
+// Resolves org_id from the Clerk JWT on the request
+const getOrgId = async (req) => {
+  const { userId: clerkId } = req.auth();
+  if (!clerkId) return null;
+  const user = await prisma.user.findUnique({
+    where: { clerk_id: clerkId },
+    select: { org_id: true },
+  });
+  return user?.org_id ?? null;
+};
 
 /**
  * Install QuickBooks - Initiates the OAuth 2.0 flow
@@ -28,6 +45,16 @@ const installQuickbooks = async (req, res) => {
     return res
       .status(400)
       .send("QuickBooks integration is not properly configured.");
+
+  const org_id = await getOrgId(req);
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
+
+  // Skip OAuth if the org already has a connected token
+  const existing = await prisma.quickbooksToken.findUnique({ where: { org_id } });
+  if (existing) {
+    return res.redirect(FRONTEND_REDIRECT_URI);
+  }
+
   try {
     const client = new OAuthClient({
       clientId: CLIENT_ID,
@@ -37,7 +64,8 @@ const installQuickbooks = async (req, res) => {
       logging: false,
     });
     const authState = crypto.randomBytes(32).toString("hex");
-    req.session.oauthState = authState;
+    oauthStates.set(authState, { org_id });
+    setTimeout(() => oauthStates.delete(authState), STATE_TTL_MS);
     const authUri = client.authorizeUri({
       scope: [OAuthClient.scopes.Accounting],
       state: authState,
@@ -59,9 +87,12 @@ const callbackHandler = async (req, res) => {
   const { code, state, realmId } = req.query;
   if (!code || !state)
     return res.status(400).send("Missing required query parameters.");
-  if (!req.session.oauthState || state !== req.session.oauthState)
+  if (!oauthStates.has(state))
     return res.status(400).send("Invalid authentication request.");
-  delete req.session.oauthState;
+
+  const { org_id } = oauthStates.get(state);
+  oauthStates.delete(state);
+
   try {
     const client = new OAuthClient({
       clientId: CLIENT_ID,
@@ -78,9 +109,7 @@ const callbackHandler = async (req, res) => {
       x_refresh_token_expires_in,
       token_type,
     } = authResponse.json;
-    // TODO: Replace with org_id from authenticated user's organisation
-    const org_id = realmId;
-    req.session.org_id = org_id;
+
     await prisma.quickbooksToken.upsert({
       where: { org_id },
       create: {
@@ -117,15 +146,17 @@ const callbackHandler = async (req, res) => {
  * Handle logic after successful connection to QuickBooks
  */
 const connectionSuccessHandler = async (req, res) => {
+  const org_id = await getOrgId(req);
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
   try {
     const token = await prisma.quickbooksToken.findUnique({
-      where: { org_id: req.session.org_id },
+      where: { org_id },
     });
     if (!token)
       return res
         .status(404)
         .send("Token not found after successful connection.");
-    res.redirect("/api/integrations/quickbooks/status");
+    res.redirect(FRONTEND_REDIRECT_URI);
   } catch (_error) {
     res.status(500).send("Error connecting QuickBooks!");
   }
@@ -133,12 +164,10 @@ const connectionSuccessHandler = async (req, res) => {
 
 /**
  * Check if the user is connected to Quickbooks or not.
- * @param {*} req
- * @param {*} res sends {connected: true} if the user is connected, otherwise {connected: false}.
  */
 const connectionStatus = async (req, res) => {
   try {
-    const org_id = req.session.org_id;
+    const org_id = await getOrgId(req);
     if (!org_id) return res.status(200).json({ connected: false });
     const token = await prisma.quickbooksToken.findUnique({
       where: { org_id },
@@ -156,7 +185,7 @@ const connectionStatus = async (req, res) => {
  * Refresh the access-token
  */
 const refreshAccessToken = async (req, res) => {
-  const org_id = req.session.org_id;
+  const org_id = await getOrgId(req);
   if (!org_id) return res.status(401).json({ error: "Not authenticated" });
   try {
     const { access_token } = await refreshAndPersistTokenService(org_id);
@@ -170,11 +199,10 @@ const refreshAccessToken = async (req, res) => {
  * Retrieves all Financial & Cash KPIs in a Company.
  */
 const getFinancialKPIs = async (req, res) => {
-  const org_id = req.session.org_id;
+  const org_id = await getOrgId(req);
   if (!org_id) return res.status(401).json({ error: "Not authenticated" });
   const { startDate, endDate, asOfDate } = req.query;
   try {
-    // Calls the service — no business logic here
     const kpis = await getFinancialKPIsService(org_id, {
       startDate,
       endDate,
