@@ -11,7 +11,7 @@ const prisma = require("../lib/prisma");
 exports.getVTOByOrgId = async (req, res) => {
   const { orgId } = req.params;
   try {
-    const vto = await prisma.vto.findUnique({
+    const vto = await prisma.vTO.findUnique({
       where: { org_id: orgId },
     });
     if (!vto) {
@@ -61,7 +61,7 @@ exports.createVTO = async (req, res) => {
   }
 
   try {
-    const existing = await prisma.vto.findUnique({
+    const existing = await prisma.vTO.findUnique({
       where: { org_id: orgId },
     });
     if (existing) {
@@ -70,7 +70,7 @@ exports.createVTO = async (req, res) => {
         .json({ message: `A VTO already exists for organisation ${orgId}` });
     }
 
-    const newVTO = await prisma.vto.create({
+    const newVTO = await prisma.vTO.create({
       data: {
         org_id: orgId,
         title,
@@ -126,7 +126,7 @@ exports.updateVTO = async (req, res) => {
   } = req.body;
 
   try {
-    const updatedVTO = await prisma.vto.update({
+    const updatedVTO = await prisma.vTO.update({
       where: { org_id: orgId },
       data: {
         title,
@@ -164,7 +164,7 @@ exports.updateVTO = async (req, res) => {
 exports.deleteVTO = async (req, res) => {
   const { orgId } = req.params;
   try {
-    await prisma.vto.delete({
+    await prisma.vTO.delete({
       where: { org_id: orgId },
     });
     res.status(200).json({ message: `VTO for organisation ${orgId} deleted` });

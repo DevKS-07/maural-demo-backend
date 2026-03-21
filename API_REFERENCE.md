@@ -1615,7 +1615,7 @@ Returns a scorecard entry for every organisation in the system. Uses a DB-first 
 
 ### Integrations — HubSpot
 
-All integration endpoints (except OAuth callbacks and redirects) require authentication (`requireAuth`).
+All integration endpoints (except OAuth callbacks) require authentication (`requireAuth`). The authenticated user's `org_id` is resolved from the Clerk JWT via a database lookup — no session middleware is used.
 
 **Database Table:** `hubspot_tokens`
 
@@ -1633,28 +1633,30 @@ This is the HubSpot API.
 
 #### `GET /api/integrations/hubspot/install`
 
-Initiates the HubSpot OAuth 2.0 flow. Redirects the browser to HubSpot's authorization page.
+Initiates the HubSpot OAuth 2.0 flow. If the organisation already has a valid (non-expired) access token, skips OAuth and redirects directly to the frontend.
 
 **Auth:** Required
 
 **OAuth Scopes:** `crm.objects.contacts.read` (configurable)
 
-**Response:** `302 Redirect` → HubSpot OAuth authorize URL
+**Response:**
+- `302 Redirect` → `FRONTEND_REDIRECT_URI` (if already connected with valid token)
+- `302 Redirect` → HubSpot OAuth authorize URL (if not connected)
 
 ---
 
 #### `GET /api/integrations/hubspot/oauth-callback`
 
-OAuth callback handler. Exchanges the authorization code for access/refresh tokens and stores them.
+OAuth callback handler. Validates the `state` parameter against an in-memory store (which also carries the `org_id`), exchanges the authorization code for access/refresh tokens, and stores them keyed by `org_id`.
 
-**Auth:** None (OAuth callback)
+**Auth:** None (OAuth callback — `org_id` is retrieved from the OAuth state map)
 
 **Query Parameters:**
 
 | Parameter | Type | Description |
 |---|---|---|
 | `code` | `string` | Authorization code from HubSpot |
-| `state` | `string` | State parameter for CSRF protection |
+| `state` | `string` | State parameter for CSRF protection (also encodes `org_id`) |
 
 **Response:** `302 Redirect` → `/api/integrations/hubspot/success`
 
@@ -1664,9 +1666,9 @@ OAuth callback handler. Exchanges the authorization code for access/refresh toke
 
 Post-OAuth success redirect.
 
-**Auth:** None
+**Auth:** Required
 
-**Response:** `302 Redirect` → Frontend URL (`http://localhost:3000/hubspot`)
+**Response:** `302 Redirect` → `FRONTEND_REDIRECT_URI`
 
 ---
 
@@ -1718,6 +1720,8 @@ Returns companies from the connected HubSpot account.
 
 ### Integrations — QuickBooks
 
+All integration endpoints (except OAuth callbacks) require authentication (`requireAuth`). The authenticated user's `org_id` is resolved from the Clerk JWT via a database lookup.
+
 **Database Table:** `quickbooks_tokens`
 
 ---
@@ -1734,28 +1738,30 @@ This is the QuickBooks API.
 
 #### `GET /api/integrations/quickbooks/install`
 
-Initiates the QuickBooks OAuth 2.0 flow with a generated state secret for CSRF protection.
+Initiates the QuickBooks OAuth 2.0 flow with a generated state secret for CSRF protection. If the organisation already has a connected token, skips OAuth and redirects directly to the frontend.
 
 **Auth:** Required
 
 **OAuth Scopes:** `com.intuit.quickbooks.accounting`
 
-**Response:** `302 Redirect` → QuickBooks OAuth authorize URL
+**Response:**
+- `302 Redirect` → `FRONTEND_REDIRECT_URI` (if already connected)
+- `302 Redirect` → QuickBooks OAuth authorize URL (if not connected)
 
 ---
 
 #### `GET /api/integrations/quickbooks/oauth-callback`
 
-OAuth callback handler. Validates state, exchanges code for tokens, stores tokens.
+OAuth callback handler. Validates the `state` parameter against an in-memory store (which also carries the `org_id`), exchanges the code for tokens, and stores them keyed by `org_id`.
 
-**Auth:** None (OAuth callback)
+**Auth:** None (OAuth callback — `org_id` is retrieved from the OAuth state map)
 
 **Query Parameters:**
 
 | Parameter | Type | Description |
 |---|---|---|
 | `code` | `string` | Authorization code |
-| `state` | `string` | State for CSRF validation |
+| `state` | `string` | State for CSRF validation (also encodes `org_id`) |
 | `realmId` | `string` | QuickBooks company realm ID |
 
 **Response:** `302 Redirect` → `/api/integrations/quickbooks/success`
@@ -1766,9 +1772,9 @@ OAuth callback handler. Validates state, exchanges code for tokens, stores token
 
 Post-OAuth redirect.
 
-**Auth:** None
+**Auth:** Required
 
-**Response:** `302 Redirect` → `/api/integrations/quickbooks/status`
+**Response:** `302 Redirect` → `FRONTEND_REDIRECT_URI`
 
 ---
 
@@ -1957,6 +1963,8 @@ Returns a single tax agency by ID.
 
 ### Integrations — Monday.com
 
+All integration endpoints (except OAuth callbacks) require authentication (`requireAuth`). The authenticated user's `org_id` is resolved from the Clerk JWT via a database lookup.
+
 **Database Table:** `monday_tokens`
 
 ---
@@ -1977,7 +1985,7 @@ Initiates Monday.com OAuth 2.0 flow.
 
 **Auth:** Required
 
-**OAuth Scopes:** `boards:read`, `account:read`, `assets:read`, `teams:read`, `workspaces:read`, `tags:read`, `me:read`
+**OAuth Scopes:** `boards:read`, `account:read`, `teams:read`, `workspaces:read`, `me:read`
 
 **Response:** `302 Redirect` → Monday.com OAuth authorize URL
 
@@ -1985,15 +1993,16 @@ Initiates Monday.com OAuth 2.0 flow.
 
 #### `GET /api/integrations/monday/oauth-callback`
 
-OAuth callback handler.
+OAuth callback handler. Validates the `state` parameter against an in-memory store (which also carries the `org_id`), exchanges the code for tokens, and stores them keyed by `org_id`.
 
-**Auth:** None (OAuth callback)
+**Auth:** None (OAuth callback — `org_id` is retrieved from the OAuth state map)
 
 **Query Parameters:**
 
 | Parameter | Type | Description |
 |---|---|---|
 | `code` | `string` | Authorization code from Monday.com |
+| `state` | `string` | State parameter for CSRF protection (also encodes `org_id`) |
 
 **Response:** `302 Redirect` → `/api/integrations/monday/success`
 
@@ -2001,9 +2010,9 @@ OAuth callback handler.
 
 #### `GET /api/integrations/monday/success`
 
-**Auth:** None
+**Auth:** Required
 
-**Response:** `302 Redirect` → Frontend (`http://localhost:3000/integrations`)
+**Response:** `302 Redirect` → `/api/integrations/monday/status`
 
 ---
 
@@ -2023,9 +2032,9 @@ OAuth callback handler.
 
 ### Integrations — ClickUp
 
-**Database Table:** `clickup_tokens`
+All integration endpoints (except OAuth callbacks) require authentication (`requireAuth`). The authenticated user's `org_id` is resolved from the Clerk JWT via a database lookup.
 
-> **Note:** This integration is partially implemented. Token storage is commented out in the codebase.
+**Database Table:** `clickup_tokens`
 
 ---
 
@@ -2051,15 +2060,16 @@ Initiates ClickUp OAuth 2.0 flow.
 
 #### `GET /api/integrations/clickup/oauth-callback`
 
-OAuth callback handler. Exchanges code for token and fetches the ClickUp user ID.
+OAuth callback handler. Validates the `state` parameter against an in-memory store (which also carries the `org_id`), exchanges the code for tokens, and stores them keyed by `org_id`.
 
-**Auth:** None (OAuth callback)
+**Auth:** None (OAuth callback — `org_id` is retrieved from the OAuth state map)
 
 **Query Parameters:**
 
 | Parameter | Type | Description |
 |---|---|---|
 | `code` | `string` | Authorization code from ClickUp |
+| `state` | `string` | State parameter for CSRF protection (also encodes `org_id`) |
 
 **Response:** `302 Redirect` → `/api/integrations/clickup/success`
 
@@ -2067,9 +2077,9 @@ OAuth callback handler. Exchanges code for token and fetches the ClickUp user ID
 
 #### `GET /api/integrations/clickup/success`
 
-**Auth:** None
+**Auth:** Required
 
-**Response:** `302 Redirect` → Frontend (`http://localhost:3000/integrations`)
+**Response:** `302 Redirect` → `/api/integrations/clickup/status`
 
 ---
 

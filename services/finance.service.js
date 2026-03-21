@@ -205,7 +205,7 @@ const getProfitAndLossService = async (
 
 const getBalanceSheetService = async (orgId, { asOfDate } = {}) => {
   const params = asOfDate
-    ? { date_macro: "Custom", end_date: asOfDate }
+    ? { start_date: asOfDate, end_date: asOfDate }
     : { date_macro: "Today" };
   const report = await fetchQBReport(orgId, "BalanceSheet", params);
   const rows = report.Rows?.Row || [];
@@ -300,7 +300,10 @@ const getFinancialKPIsService = async (
   const [pl, bs, bva] = await Promise.all([
     getProfitAndLossService(orgId, { startDate, endDate }),
     getBalanceSheetService(orgId, { asOfDate: asOfDate || endDate }),
-    getBudgetVsActualsService(orgId, { startDate, endDate }),
+    getBudgetVsActualsService(orgId, { startDate, endDate }).catch((err) => {
+      console.warn(`[QB] BudgetVsActuals unavailable: ${err.message}`);
+      return null;
+    }),
   ]);
 
   const monthlyBurn = pl.cogs + pl.operatingExpenses;
@@ -336,11 +339,11 @@ const getFinancialKPIsService = async (
     netBurnRate,
     runwayMonths,
     dso,
-    varianceRevenuePct: bva.varianceRevenuePct,
-    varianceCOGSPct: bva.varianceCOGSPct,
-    varianceGrossProfitPct: bva.varianceGrossProfitPct,
-    varianceOperatingExpensesPct: bva.varianceOperatingExpensesPct,
-    varianceNetIncomePct: bva.varianceNetIncomePct,
+    varianceRevenuePct: bva?.varianceRevenuePct ?? null,
+    varianceCOGSPct: bva?.varianceCOGSPct ?? null,
+    varianceGrossProfitPct: bva?.varianceGrossProfitPct ?? null,
+    varianceOperatingExpensesPct: bva?.varianceOperatingExpensesPct ?? null,
+    varianceNetIncomePct: bva?.varianceNetIncomePct ?? null,
     fetchedAt: new Date().toISOString(),
     period: { startDate, endDate, asOfDate: asOfDate || endDate },
   };
