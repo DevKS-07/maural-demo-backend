@@ -9,19 +9,12 @@ const {
   MONDAY_CLIENT_ID,
   MONDAY_CLIENT_SECRET,
   MONDAY_REDIRECT_URI,
+  FRONTEND_REDIRECT_URI,
 } = require("../config/env");
 
 const CLIENT_ID = MONDAY_CLIENT_ID;
 const CLIENT_SECRET = MONDAY_CLIENT_SECRET;
 const REDIRECT_URI = MONDAY_REDIRECT_URI;
-
-const SCOPES = [
-  "boards:read",
-  "account:read",
-  "teams:read",
-  "workspaces:read",
-  "me:read",
-].join(" ");
 
 // In-memory store for OAuth state tokens (expires after 10 min)
 // Maps state → { org_id }
@@ -54,7 +47,6 @@ const installMonday = async (req, res) => {
   const authUrl =
     "https://auth.monday.com/oauth2/authorize" +
     `?client_id=${encodeURIComponent(CLIENT_ID)}` +
-    `&scope=${encodeURIComponent(SCOPES)}` +
     `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
     `&state=${state}`;
 
@@ -104,7 +96,7 @@ const callbackHandler = async (req, res) => {
       data: { monday_connected: true },
     });
 
-    res.redirect("/api/integrations/monday/success");
+    res.redirect(FRONTEND_REDIRECT_URI);
   } catch (error) {
     console.error("[Monday] Token exchange error:", error.message);
     res.status(500).send("Error connecting Monday. Please try again.");
@@ -117,7 +109,7 @@ const connectionSuccessHandler = async (req, res) => {
   try {
     const token = await prisma.mondayToken.findUnique({ where: { org_id } });
     if (!token) return res.status(404).send("Token not found.");
-    res.redirect("/api/integrations/monday/status");
+    res.redirect(FRONTEND_REDIRECT_URI);
   } catch (_error) {
     res.status(500).send("Error connecting Monday!");
   }
