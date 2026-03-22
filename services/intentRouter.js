@@ -14,6 +14,7 @@
 
 const { ChatOllama } = require("@langchain/ollama");
 const { OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL } = require("../config/env");
+const { getOllamaHeaders } = require("../config/ollama");
 
 const VALID_INTENTS = ["summarize", "analyze", "reason", "predict"];
 
@@ -53,6 +54,7 @@ function getRouterLLM() {
       temperature: 0,
       format: "json",
       numCtx: 4096,
+      headers: getOllamaHeaders(),
     });
   }
   return _routerLLM;

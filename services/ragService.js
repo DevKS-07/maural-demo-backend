@@ -25,6 +25,7 @@ const { OllamaEmbeddings } = require("@langchain/ollama");
 const prisma = require("../lib/prisma");
 const { getSupabase } = require("../lib/supabase");
 const { OLLAMA_BASE_URL, OLLAMA_EMBED_MODEL } = require("../config/env");
+const { getOllamaHeaders } = require("../config/ollama");
 
 // ---------------------------------------------------------------------------
 // Embeddings model (lazy singleton)
@@ -35,6 +36,7 @@ function getEmbeddings() {
     _embeddings = new OllamaEmbeddings({
       baseUrl: OLLAMA_BASE_URL,
       model: OLLAMA_EMBED_MODEL,
+      headers: getOllamaHeaders(),
     });
   }
   return _embeddings;

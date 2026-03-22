@@ -31,6 +31,7 @@ const {
   OLLAMA_CHAT_MODEL,
   GUARDRAIL_CONFIDENCE_THRESHOLD,
 } = require("../config/env");
+const { getOllamaHeaders } = require("../config/ollama");
 
 // ---------------------------------------------------------------------------
 // LLM singleton — keyed by temperature to avoid creating a new instance per call
@@ -45,6 +46,7 @@ function getLLM({ temperature = 0.3 } = {}) {
         model: OLLAMA_CHAT_MODEL,
         temperature,
         numCtx: 8192,
+        headers: getOllamaHeaders(),
       }),
     );
   }

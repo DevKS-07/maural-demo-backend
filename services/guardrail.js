@@ -14,6 +14,7 @@
 
 const { ChatOllama } = require("@langchain/ollama");
 const { OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL } = require("../config/env");
+const { getOllamaHeaders } = require("../config/ollama");
 
 const GUARDRAIL_SYSTEM_PROMPT = `You are an accuracy verifier for a Knowledge Management System (KMS) chatbot.
 
@@ -52,6 +53,7 @@ function getGuardrailLLM() {
       temperature: 0,
       format: "json",
       numCtx: 8192,
+      headers: getOllamaHeaders(),
     });
   }
   return _guardrailLLM;

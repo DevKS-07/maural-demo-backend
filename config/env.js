@@ -53,6 +53,7 @@ module.exports = {
 
   // Ollama / LLM
   OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
+  OLLAMA_API_KEY: process.env.OLLAMA_API_KEY || "",
   OLLAMA_CHAT_MODEL: process.env.OLLAMA_CHAT_MODEL || "qwen3.5:9b",
   OLLAMA_EMBED_MODEL: process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text",
   GUARDRAIL_CONFIDENCE_THRESHOLD:

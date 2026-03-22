@@ -18,6 +18,7 @@ const mammoth = require("mammoth");
 const { createWorker } = require("tesseract.js");
 const { getSupabase } = require("../lib/supabase");
 const { OLLAMA_BASE_URL, OLLAMA_EMBED_MODEL } = require("../config/env");
+const { getOllamaHeaders } = require("../config/ollama");
 // Polyfill DOMMatrix and Path2D before loading pdfjs-dist so it can render pages correctly
 const { createCanvas, DOMMatrix, Path2D } = require("@napi-rs/canvas");
 globalThis.DOMMatrix = DOMMatrix;
@@ -190,6 +191,7 @@ async function embedBatch(texts) {
   const embeddings = new OllamaEmbeddings({
     baseUrl: OLLAMA_BASE_URL,
     model: OLLAMA_EMBED_MODEL,
+    headers: getOllamaHeaders(),
   });
   return embeddings.embedDocuments(texts);
 }
