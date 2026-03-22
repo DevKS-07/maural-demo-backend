@@ -144,9 +144,9 @@ model MondayToken {
 model ClickUpToken {
     org_id        String       @id @db.Uuid
     access_token  String
-    refresh_token String
-    token_type    String
-    expires_at    DateTime
+    refresh_token String?
+    token_type    String?
+    expires_at    DateTime?
     created_at    DateTime?    @default(now())
     updated_at    DateTime?
     Organisation  Organisation @relation(fields: [org_id], references: [org_id], onDelete: Cascade)

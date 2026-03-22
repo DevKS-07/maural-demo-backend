@@ -373,7 +373,7 @@
     <div class="entity-card">
         <h3>HubspotToken / QuickbooksToken / MondayToken / ClickUpToken <span class="entity-badge badge-integration">Integrations</span></h3>
         <p>
-            The four <strong>Token models</strong> store OAuth2 credentials for each external integration. When an organisation connects their HubSpot, QuickBooks, Monday.com, or ClickUp account to the KMS, the OAuth2 handshake produces an access token and a refresh token, which are stored in these tables. The access token is used for API calls to the external service; the refresh token is used to obtain a new access token when the current one expires.
+            The four <strong>Token models</strong> store OAuth2 credentials for each external integration. When an organisation connects their HubSpot, QuickBooks, Monday.com, or ClickUp account to the KMS, the OAuth2 handshake produces tokens which are stored in these tables. The access token is used for API calls to the external service; the refresh token (where available) is used to obtain a new access token when the current one expires. Note that ClickUp tokens are long-lived and do not include a refresh token or expiry.
         </p>
         <p>
             Each token record is keyed by <code>org_id</code>, meaning the integration is tied to the <strong>organisation that authorized it</strong>. The tokens belong to the organisation as a whole, not to any individual user — this ensures that the integration persists regardless of which user initiated the OAuth flow. The system uses these stored tokens to periodically fetch KPI data and populate the FinanceKpi, LeadsKpi, and LaborKpi tables.

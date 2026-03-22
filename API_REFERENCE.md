@@ -2060,7 +2060,7 @@ Initiates ClickUp OAuth 2.0 flow.
 
 #### `GET /api/integrations/clickup/oauth-callback`
 
-OAuth callback handler. Validates the `state` parameter against an in-memory store (which also carries the `org_id`), exchanges the code for tokens, and stores them keyed by `org_id`.
+OAuth callback handler. Validates the `state` parameter against an in-memory store (which also carries the `org_id`), exchanges the code for an access token, and stores it keyed by `org_id`. ClickUp tokens are long-lived and do not include a refresh token or expiry.
 
 **Auth:** None (OAuth callback — `org_id` is retrieved from the OAuth state map)
 
@@ -2071,7 +2071,7 @@ OAuth callback handler. Validates the `state` parameter against an in-memory sto
 | `code` | `string` | Authorization code from ClickUp |
 | `state` | `string` | State parameter for CSRF protection (also encodes `org_id`) |
 
-**Response:** `302 Redirect` → `/api/integrations/clickup/success`
+**Response:** `302 Redirect` → `FRONTEND_REDIRECT_URI`
 
 ---
 
@@ -2079,7 +2079,7 @@ OAuth callback handler. Validates the `state` parameter against an in-memory sto
 
 **Auth:** Required
 
-**Response:** `302 Redirect` → `/api/integrations/clickup/status`
+**Response:** `302 Redirect` → `FRONTEND_REDIRECT_URI`
 
 ---
 
@@ -2320,11 +2320,13 @@ OAuth callback handler. Validates the `state` parameter against an in-memory sto
 |---|---|
 | `org_id` | `String` (PK, UUID, FK → Organisation) |
 | `access_token` | `String` |
-| `refresh_token` | `String` |
-| `token_type` | `String` |
-| `expires_at` | `DateTime` |
-| `created_at` | `DateTime` |
-| `updated_at` | `DateTime` |
+| `refresh_token` | `String?` |
+| `token_type` | `String?` |
+| `expires_at` | `DateTime?` |
+| `created_at` | `DateTime?` |
+| `updated_at` | `DateTime?` |
+
+> **Note:** ClickUp tokens are long-lived. `refresh_token`, `token_type`, and `expires_at` are nullable because ClickUp's OAuth response does not include these fields.
 
 ---
 

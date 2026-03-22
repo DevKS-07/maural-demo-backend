@@ -8,16 +8,12 @@ const {
   CLICKUP_CLIENT_ID,
   CLICKUP_CLIENT_SECRET,
   CLICKUP_REDIRECT_URI,
+  FRONTEND_REDIRECT_URI,
 } = require("../config/env");
 
 const CLIENT_ID = CLICKUP_CLIENT_ID;
 const CLIENT_SECRET = CLICKUP_CLIENT_SECRET;
 const REDIRECT_URI = CLICKUP_REDIRECT_URI;
-
-let SCOPES = ["read", "write"];
-if (process.env.SCOPE) {
-  SCOPES = process.env.SCOPE.split(/ |, ?|%20/).join(" ");
-}
 
 // In-memory store for OAuth state tokens (expires after 10 min)
 // Maps state → { org_id }
@@ -43,12 +39,13 @@ const installClickUp = async (req, res) => {
   oauthStates.set(state, { org_id });
   setTimeout(() => oauthStates.delete(state), STATE_TTL_MS);
 
+  // ClickUp v2 OAuth only accepts client_id and redirect_uri on the authorize URL.
+  // The state token is passed via redirect_uri as a query param so we can recover org_id on callback.
+  const callbackWithState = `${REDIRECT_URI}?state=${state}`;
   const authUrl =
     "https://app.clickup.com/api" +
     `?client_id=${encodeURIComponent(CLIENT_ID)}` +
-    `&scope=${encodeURIComponent(SCOPES)}` +
-    `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
-    `&state=${state}`;
+    `&redirect_uri=${encodeURIComponent(callbackWithState)}`;
 
   res.redirect(authUrl);
 };
@@ -66,32 +63,24 @@ const callbackHandler = async (req, res) => {
     const response = await axios.post(
       "https://api.clickup.com/api/v2/oauth/token",
       new URLSearchParams({
-        grant_type: "authorization_code",
         client_id: CLIENT_ID,
         client_secret: CLIENT_SECRET,
-        redirect_uri: REDIRECT_URI,
         code,
       }),
     );
 
-    const { access_token, refresh_token, token_type, expires_in } =
-      response.data;
-    const expires_at = new Date(Date.now() + expires_in * 1000);
+    const { access_token, token_type } = response.data;
 
     await prisma.clickUpToken.upsert({
       where: { org_id },
       create: {
         org_id,
         access_token,
-        refresh_token,
-        token_type,
-        expires_at,
+        token_type: token_type ?? null,
       },
       update: {
         access_token,
-        refresh_token,
-        token_type,
-        expires_at,
+        token_type: token_type ?? null,
       },
     });
 
@@ -100,7 +89,7 @@ const callbackHandler = async (req, res) => {
       data: { clickup_connected: true },
     });
 
-    res.redirect("/api/integrations/clickup/success");
+    res.redirect(FRONTEND_REDIRECT_URI);
   } catch (error) {
     console.error("[ClickUp] Token exchange error:", error.message);
     res.status(500).send("Error connecting ClickUp. Please try again.");
@@ -113,7 +102,7 @@ const connectionSuccessHandler = async (req, res) => {
   try {
     const token = await prisma.clickUpToken.findUnique({ where: { org_id } });
     if (!token) return res.status(404).send("Token not found.");
-    res.redirect("/api/integrations/clickup/status");
+    res.redirect(FRONTEND_REDIRECT_URI);
   } catch (_error) {
     res.status(500).send("Error connecting ClickUp!");
   }
