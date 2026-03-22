@@ -139,12 +139,17 @@ function estimatePreConfidence(docs, intents) {
 // Shared orchestration logic (used by both streaming + non-streaming)
 // ---------------------------------------------------------------------------
 async function orchestrate(message, orgIds, history) {
+  console.log("[chat] orgIds received:", JSON.stringify(orgIds));
+
   // Step 1 — intent detection, document retrieval, and business data all in parallel
   const [intents, docs, businessData] = await Promise.all([
     detectIntents(message),
     retrieveDocuments(message, orgIds, 5),
     getBusinessContext(orgIds),
   ]);
+
+  console.log("[chat] businessData.text length:", businessData.text?.length ?? 0);
+  console.log("[chat] businessData sources:", businessData.sources?.length ?? 0);
 
   console.log(`[chat] Detected intents: [${intents.join(", ")}]`);
   if (businessData.text) {
@@ -164,13 +169,15 @@ async function orchestrate(message, orgIds, history) {
     combinedAnswer = await combineAnswers(intents, agentAnswers, message);
   }
 
-  // Step 4 — guardrail: skip if pre-confidence is already high enough
+  // Step 4 — guardrail: skip if pre-confidence is already high enough,
+  // or if business data is present (KPI data comes from the verified DB —
+  // no document grounding check needed, guardrail would only lower confidence)
   const preConfidence = estimatePreConfidence(docs, intents);
   let validatedAnswer, confidence, issues;
 
-  if (preConfidence >= GUARDRAIL_THRESHOLD) {
+  if (preConfidence >= GUARDRAIL_THRESHOLD || businessData.text) {
     console.log(
-      `[chat] Guardrail skipped — pre-confidence ${preConfidence} >= threshold ${GUARDRAIL_THRESHOLD}`,
+      `[chat] Guardrail skipped — pre-confidence ${preConfidence}, hasBusinessData: ${Boolean(businessData.text)}`,
     );
     validatedAnswer = combinedAnswer;
     confidence = preConfidence;
@@ -183,6 +190,7 @@ async function orchestrate(message, orgIds, history) {
       combinedAnswer,
       docs,
       message,
+      businessData.text,
     ));
   }
 

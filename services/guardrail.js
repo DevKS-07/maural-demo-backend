@@ -67,7 +67,7 @@ function getGuardrailLLM() {
  * @param {string} question      - The original user question
  * @returns {Promise<{validatedAnswer: string, confidence: number, issues: string[]}>}
  */
-async function checkAndRefine(answer, docs, question) {
+async function checkAndRefine(answer, docs, question, businessContext = "") {
   // If no documents were retrieved, skip the grounding check
   // (answer is entirely from general knowledge — that's already the fallback behavior)
   if (!docs || docs.length === 0) {
@@ -85,13 +85,17 @@ async function checkAndRefine(answer, docs, question) {
     })
     .join("\n\n---\n\n");
 
+  const businessSection = businessContext
+    ? `\n\n--- LIVE KPI DATABASE (treat as verified ground truth — numbers here are real and must not be flagged as hallucinations) ---\n${businessContext}\n--- END OF KPI DATABASE ---`
+    : "";
+
   try {
     const llm = getGuardrailLLM();
     const response = await llm.invoke([
       { role: "system", content: GUARDRAIL_SYSTEM_PROMPT },
       {
         role: "user",
-        content: `QUESTION:\n${question}\n\nSOURCE DOCUMENTS:\n${docContext}\n\nGENERATED ANSWER:\n${answer}`,
+        content: `QUESTION:\n${question}\n\nSOURCE DOCUMENTS:\n${docContext}${businessSection}\n\nGENERATED ANSWER:\n${answer}`,
       },
     ]);
 
