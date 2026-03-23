@@ -38,7 +38,7 @@ router.use("/org", requireAuth, orgRoutes); // Organisation CRUD + users/files
 
 router.use("/docs", requireAuth, docsRoutes); // Documents + comments + activity
 
-router.use("/integrations", requireAuth, integrations); // HubSpot, QuickBooks, Monday, ClickUp
+router.use("/integrations", integrations); // HubSpot, QuickBooks, Monday, ClickUp (auth handled per-route)
 
 router.use("/summary", requireAuth, summaryRoutes); // KPI summary routes
 

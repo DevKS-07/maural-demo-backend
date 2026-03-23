@@ -1,6 +1,5 @@
 const express = require("express");
 const router = express.Router();
-const { requireAuth } = require("../middleware/auth.middleware");
 
 const quickbooksController = require("../controllers/quickbooks.controller");
 
@@ -9,13 +8,13 @@ router.get("/", (req, res) => {
   res.send("This is the QuickBooks API.");
 });
 
-router.get("/install", requireAuth, quickbooksController.installQuickbooks);
+router.get("/install", quickbooksController.installQuickbooks);
 
 router.get("/oauth-callback", quickbooksController.callbackHandler);
 
-router.get("/success", requireAuth, quickbooksController.connectionSuccessHandler);
+router.get("/success", quickbooksController.connectionSuccessHandler);
 
-router.get("/status", requireAuth, quickbooksController.connectionStatus);
+router.get("/status", quickbooksController.connectionStatus);
 
 /** 
 router.get("/accounts", quickbooksController.getAccounts); // Get All accounts in a company
