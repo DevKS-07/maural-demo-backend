@@ -51,6 +51,32 @@ const getLaborSummary = async (req, res) => {
   const { startDate, endDate } = req.query;
   try {
     const labor = await getLaborKPIsService(org_id, { startDate, endDate });
+
+    // Persist to DB for caching
+    const { start, end } = resolvePeriod(startDate, endDate);
+    if (labor?.laborSource) {
+      prisma.laborKpi
+        .upsert({
+          where: {
+            org_id_periodStart_periodEnd: {
+              org_id,
+              periodStart: start,
+              periodEnd: end,
+            },
+          },
+          create: {
+            org_id,
+            periodStart: start,
+            periodEnd: end,
+            ...mapLaborToSchema(labor),
+          },
+          update: { ...mapLaborToSchema(labor), isStale: false },
+        })
+        .catch((e) =>
+          console.warn("[SummaryEngine] Failed to persist labor:", e.message),
+        );
+    }
+
     return res.status(200).json({ labor });
   } catch (error) {
     console.error("[SummaryEngine] getLaborSummary error:", error.message);
@@ -91,6 +117,37 @@ const getFullDashboardSummary = async (req, res) => {
         qbTotalRevenue,
       }),
     ]);
+
+    // Persist labor data to DB for caching
+    if (laborResult.status === "fulfilled" && laborResult.value?.laborSource) {
+      const { start, end } = resolvePeriod(startDate, endDate);
+      prisma.laborKpi
+        .upsert({
+          where: {
+            org_id_periodStart_periodEnd: {
+              org_id,
+              periodStart: start,
+              periodEnd: end,
+            },
+          },
+          create: {
+            org_id,
+            periodStart: start,
+            periodEnd: end,
+            ...mapLaborToSchema(laborResult.value),
+          },
+          update: {
+            ...mapLaborToSchema(laborResult.value),
+            isStale: false,
+          },
+        })
+        .catch((e) =>
+          console.warn(
+            "[SummaryEngine] Failed to persist labor:",
+            e.message,
+          ),
+        );
+    }
 
     return res.status(200).json({
       financial: financial ?? {
@@ -406,6 +463,9 @@ const mapLaborToSchema = (l) => ({
   billableFTEs: l?.billableFTEs ?? null,
   nonBillableFTEs: l?.nonBillableFTEs ?? null,
   billableUtilization: l?.billableUtilization ?? null,
+  laborCostPerHour: l?.laborCostPerHour ?? null,
+  revenuePerBillableFTE: l?.revenuePerBillableFTE ?? null,
+  founderDependencyService: l?.founderDependencyService ?? null,
   laborSource: l?.laborSource ?? null,
   hasBillableColumn: l?.hasBillableColumn ?? false,
 });

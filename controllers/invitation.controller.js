@@ -139,14 +139,32 @@ exports.createInvitation = async (req, res) => {
 // ---------------------------------------------------------------------------
 exports.listInvitations = async (req, res) => {
   const { status } = req.query;
+  const { sessionClaims, userId: clerkId } = req.auth();
+  const userRole = sessionClaims?.publicMetadata?.role;
 
   try {
     const invitations = await clerkClient.invitations.getInvitationList();
 
+    let filtered = invitations.data;
+
     // Filter by status if query param provided (pending, accepted, revoked)
-    const filtered = status
-      ? invitations.data.filter((inv) => inv.status === status)
-      : invitations.data;
+    if (status) {
+      filtered = filtered.filter((inv) => inv.status === status);
+    }
+
+    // Org Executives can only see invitations for their own organisation
+    if (userRole === "org_executive") {
+      const user = await prisma.user.findUnique({
+        where: { clerk_id: clerkId },
+        select: { org_id: true },
+      });
+      if (!user?.org_id) {
+        return res.status(403).json({ message: "You are not assigned to any organisation" });
+      }
+      filtered = filtered.filter(
+        (inv) => inv.publicMetadata?.org_id === user.org_id,
+      );
+    }
 
     return res.status(200).json(filtered);
   } catch (error) {
@@ -160,8 +178,28 @@ exports.listInvitations = async (req, res) => {
 // ---------------------------------------------------------------------------
 exports.revokeInvitation = async (req, res) => {
   const { invitationId } = req.params;
+  const { sessionClaims, userId: clerkId } = req.auth();
+  const userRole = sessionClaims?.publicMetadata?.role;
 
   try {
+    // Org Executives can only revoke invitations for their own organisation
+    if (userRole === "org_executive") {
+      const [user, invitation] = await Promise.all([
+        prisma.user.findUnique({
+          where: { clerk_id: clerkId },
+          select: { org_id: true },
+        }),
+        clerkClient.invitations.getInvitation(invitationId),
+      ]);
+
+      if (!user?.org_id) {
+        return res.status(403).json({ message: "You are not assigned to any organisation" });
+      }
+      if (invitation.publicMetadata?.org_id !== user.org_id) {
+        return res.status(403).json({ message: "You can only revoke invitations for your own organisation" });
+      }
+    }
+
     const revoked = await clerkClient.invitations.revokeInvitation(invitationId);
 
     console.log(`[invitation] Revoked invitation: ${invitationId}`);

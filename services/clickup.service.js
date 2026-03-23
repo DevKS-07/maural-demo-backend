@@ -163,6 +163,13 @@ const getAllTimeEntries = async (userId, teamId, { startDate, endDate }) => {
   const startMs    = new Date(startDate).getTime();
   const endMs      = new Date(endDate).getTime();
 
+  console.log(`[ClickUp] Fetching time entries — team: ${teamId}, members: ${members.length}, range: ${startDate} → ${endDate} (${startMs}–${endMs})`);
+
+  if (members.length === 0) {
+    console.warn(`[ClickUp] No workspace members found for team ${teamId} — returning empty entries`);
+    return [];
+  }
+
   // Batch member calls — ClickUp rate limit is 100 req/min on most plans
   // Process in groups of 10 to stay safe
   const BATCH_SIZE = 10;
@@ -193,6 +200,7 @@ const getAllTimeEntries = async (userId, teamId, { startDate, endDate }) => {
     }
   }
 
+  console.log(`[ClickUp] Fetched ${allEntries.length} total time entries for ${members.length} members`);
   return allEntries;
 };
 
@@ -271,6 +279,7 @@ const getLaborKPIsService = async (userId, { startDate, endDate, founderUserId =
   return {
     ...kpis,
     laborSource: "clickup",
+    hasBillableColumn: true, // ClickUp natively supports billable flags on time entries
     fetchedAt:   new Date().toISOString(),
     period:      { startDate: start, endDate: end },
     // LABOR-2 and LABOR-7 are cross-source — calculated in summaryEngine:

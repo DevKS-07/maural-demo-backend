@@ -379,7 +379,9 @@ Sends an invitation to a new user via Clerk. The invitee receives an email with 
 
 Lists all invitations. Optionally filter by status.
 
-**Auth:** Required + `admin` role or higher
+**Auth:** Required + `org_executive` role or higher
+
+**Scoping:** Org Executives only see invitations where `publicMetadata.org_id` matches their own organisation. Admins and Super Admins see all invitations.
 
 **Query Parameters:**
 
@@ -401,13 +403,17 @@ Lists all invitations. Optionally filter by status.
 ]
 ```
 
+**Error `403 Forbidden`** — User is not assigned to any organisation
+
 ---
 
 #### `DELETE /api/user/invite/:invitationId`
 
 Revokes a pending invitation.
 
-**Auth:** Required + `admin` role or higher
+**Auth:** Required + `org_executive` role or higher
+
+**Scoping:** Org Executives can only revoke invitations where `publicMetadata.org_id` matches their own organisation. Returns `403` if the invitation belongs to a different organisation. Admins and Super Admins can revoke any invitation.
 
 **Path Parameters:**
 
@@ -423,6 +429,8 @@ Revokes a pending invitation.
   "invitation": { "id": "inv_abc123", "status": "revoked" }
 }
 ```
+
+**Error `403 Forbidden`** — Org Executive attempting to revoke another organisation's invitation, or user not assigned to any organisation
 
 **Error `404 Not Found`** — Invitation does not exist
 
