@@ -18,7 +18,7 @@ const CLIENT_SECRET = CLICKUP_CLIENT_SECRET;
 // ─────────────────────────────────────────────────────────────────
 
 const getTokenRecord = async (orgId) => {
-  const token = await prisma.clickupToken.findUnique({ where: { org_id: orgId } });
+  const token = await prisma.clickUpToken.findUnique({ where: { org_id: orgId } });
   if (!token) throw new Error(`No ClickUp token found for organisation: ${orgId}`);
   return token;
 };
@@ -37,7 +37,7 @@ const refreshAndPersistToken = async (orgId, refreshToken) => {
   const { access_token, refresh_token, expires_in } = response.data;
   const expires_at = new Date(Date.now() + expires_in * 1000);
 
-  await prisma.clickupToken.update({
+  await prisma.clickUpToken.update({
     where: { org_id: orgId },
     data:  { access_token, refresh_token, expires_at },
   });
@@ -51,7 +51,9 @@ const refreshAndPersistToken = async (orgId, refreshToken) => {
  */
 const getValidAccessToken = async (orgId) => {
   const token     = await getTokenRecord(orgId);
-  const isExpired = new Date() >= new Date(token.expires_at);
+  // ClickUp v2 OAuth tokens don't expire — expires_at will be null.
+  // Only attempt refresh if we have both an expiry date AND it's in the past.
+  const isExpired = token.expires_at && new Date() >= new Date(token.expires_at);
   if (isExpired) {
     console.log(`[ClickUp] Token expired for organisation: ${orgId} — refreshing...`);
     return await refreshAndPersistToken(orgId, token.refresh_token);
@@ -125,7 +127,7 @@ const getTeamId = async (orgId) => {
   if (!teamId) throw new Error("[ClickUp] No workspace found for organisation");
 
   // Persist for future calls
-  await prisma.clickupToken.update({
+  await prisma.clickUpToken.update({
     where: { org_id: orgId },
     data:  { team_id: teamId },
   });

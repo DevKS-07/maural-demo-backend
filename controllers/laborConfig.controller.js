@@ -96,7 +96,7 @@ const listClickUpWorkspaces = async (req, res) => {
   if (!org_id) return res.status(401).json({ error: "Not authenticated" });
 
   try {
-    const token = await prisma.clickupToken.findUnique({ where: { org_id } });
+    const token = await prisma.clickUpToken.findUnique({ where: { org_id } });
     if (!token)
       return res
         .status(400)
