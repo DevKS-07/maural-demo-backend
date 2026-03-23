@@ -12,6 +12,18 @@ const { detectDefaultWorkspace } = require("./clickup.service");
  */
 const autoConfigureMonday = async (orgId) => {
   try {
+    // Don't override if a labor source is already configured
+    const org = await prisma.organisation.findUnique({
+      where: { org_id: orgId },
+      select: { laborSource: true },
+    });
+    if (org?.laborSource) {
+      console.log(
+        `[LaborConfig] Skipping Monday auto-config for org ${orgId} — laborSource already set to "${org.laborSource}"`
+      );
+      return;
+    }
+
     const result = await detectDefaultBoard(orgId);
     if (!result) {
       console.warn(
@@ -43,6 +55,18 @@ const autoConfigureMonday = async (orgId) => {
  */
 const autoConfigureClickUp = async (orgId) => {
   try {
+    // Don't override if a labor source is already configured
+    const org = await prisma.organisation.findUnique({
+      where: { org_id: orgId },
+      select: { laborSource: true },
+    });
+    if (org?.laborSource) {
+      console.log(
+        `[LaborConfig] Skipping ClickUp auto-config for org ${orgId} — laborSource already set to "${org.laborSource}"`
+      );
+      return;
+    }
+
     const result = await detectDefaultWorkspace(orgId);
     if (!result) {
       console.warn(
