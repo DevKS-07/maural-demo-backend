@@ -44,7 +44,7 @@ const installMonday = async (req, res) => {
   // Skip OAuth if the org already has a connected token
   const existing = await prisma.mondayToken.findUnique({ where: { org_id } });
   if (existing) {
-    return res.redirect(`${FRONTEND_REDIRECT_URI}?already_connected=monday`);
+    return res.json({ redirect: `${FRONTEND_REDIRECT_URI}?already_connected=monday` });
   }
 
   const state = crypto.randomBytes(32).toString("hex");
@@ -57,7 +57,7 @@ const installMonday = async (req, res) => {
     `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
     `&state=${state}`;
 
-  res.redirect(authUrl);
+  res.json({ authUrl });
 };
 
 const callbackHandler = async (req, res) => {

@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const { requireAuth } = require("../middleware/auth.middleware");
 
 const hubspotController = require("../controllers/hubspot.controller");
 
@@ -8,13 +9,13 @@ router.get("/", (req, res) => {
   res.send("This is the HubSpot API.");
 });
 
-router.get("/install", hubspotController.installHubSpot);
+router.get("/install", requireAuth, hubspotController.installHubSpot);
 
 router.get("/oauth-callback", hubspotController.callbackHandler);
 
-router.get("/success", hubspotController.connectionSuccessHandler);
+router.get("/success", requireAuth, hubspotController.connectionSuccessHandler);
 
-router.get("/status", hubspotController.connectionStatus);
+router.get("/status", requireAuth, hubspotController.connectionStatus);
 
 /**
 router.get("/contacts", hubspotController.getContacts);

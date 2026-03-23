@@ -52,7 +52,7 @@ const installQuickbooks = async (req, res) => {
   // Skip OAuth if the org already has a connected token
   const existing = await prisma.quickbooksToken.findUnique({ where: { org_id } });
   if (existing) {
-    return res.redirect(`${FRONTEND_REDIRECT_URI}?already_connected=quickbooks`);
+    return res.json({ redirect: `${FRONTEND_REDIRECT_URI}?already_connected=quickbooks` });
   }
 
   try {
@@ -71,12 +71,12 @@ const installQuickbooks = async (req, res) => {
       state: authState,
       response_type: "code",
     });
-    res.redirect(authUri);
+    res.json({ authUrl: authUri });
   } catch (error) {
     console.error("Error generating QuickBooks authorization URL:", error);
     res
       .status(500)
-      .send("Error initiating QuickBooks installation. Please try again.");
+      .json({ error: "Error initiating QuickBooks installation. Please try again." });
   }
 };
 

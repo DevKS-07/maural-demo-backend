@@ -39,7 +39,7 @@ const installClickUp = async (req, res) => {
   // Skip OAuth if the org already has a connected token
   const existing = await prisma.clickUpToken.findUnique({ where: { org_id } });
   if (existing) {
-    return res.redirect(`${FRONTEND_REDIRECT_URI}?already_connected=clickup`);
+    return res.json({ redirect: `${FRONTEND_REDIRECT_URI}?already_connected=clickup` });
   }
 
   const state = crypto.randomBytes(32).toString("hex");
@@ -54,7 +54,7 @@ const installClickUp = async (req, res) => {
     `?client_id=${encodeURIComponent(CLIENT_ID)}` +
     `&redirect_uri=${encodeURIComponent(callbackWithState)}`;
 
-  res.redirect(authUrl);
+  res.json({ authUrl });
 };
 
 const callbackHandler = async (req, res) => {
