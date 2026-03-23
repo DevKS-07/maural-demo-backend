@@ -14,6 +14,7 @@ jest.mock("@clerk/express", () => ({
     invitations: {
       createInvitation: jest.fn(),
       getInvitationList: jest.fn(),
+      getInvitation: jest.fn(),
       revokeInvitation: jest.fn(),
     },
   },
@@ -387,10 +388,10 @@ describe("Invitation Controller - Unit Tests", () => {
       ],
     };
 
-    test("returns 200 with all invitations", async () => {
+    test("returns 200 with all invitations for admin", async () => {
       clerkClient.invitations.getInvitationList.mockResolvedValue(mockList);
 
-      const req = { query: {} };
+      const req = { query: {}, auth: mockAuth("admin") };
       const res = createRes();
 
       await invitationController.listInvitations(req, res);
@@ -402,7 +403,7 @@ describe("Invitation Controller - Unit Tests", () => {
     test("returns 200 filtered by status=pending", async () => {
       clerkClient.invitations.getInvitationList.mockResolvedValue(mockList);
 
-      const req = { query: { status: "pending" } };
+      const req = { query: { status: "pending" }, auth: mockAuth("admin") };
       const res = createRes();
 
       await invitationController.listInvitations(req, res);
@@ -413,10 +414,31 @@ describe("Invitation Controller - Unit Tests", () => {
       expect(result[0].status).toBe("pending");
     });
 
+    test("org_executive only sees own org invitations", async () => {
+      const mixedList = {
+        data: [
+          { ...MOCK_INVITATION, publicMetadata: { role: "org_staff", org_id: "a1b2c3d4-uuid" } },
+          { ...MOCK_INVITATION, id: "inv_other", publicMetadata: { role: "org_staff", org_id: "other-org-uuid" } },
+        ],
+      };
+      clerkClient.invitations.getInvitationList.mockResolvedValue(mixedList);
+      prisma.user.findUnique.mockResolvedValue({ org_id: "a1b2c3d4-uuid" });
+
+      const req = { query: {}, auth: mockAuth("org_executive") };
+      const res = createRes();
+
+      await invitationController.listInvitations(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      const result = res.json.mock.calls[0][0];
+      expect(result).toHaveLength(1);
+      expect(result[0].publicMetadata.org_id).toBe("a1b2c3d4-uuid");
+    });
+
     test("returns 500 on Clerk error", async () => {
       clerkClient.invitations.getInvitationList.mockRejectedValue(new Error("Clerk API down"));
 
-      const req = { query: {} };
+      const req = { query: {}, auth: mockAuth("admin") };
       const res = createRes();
 
       await invitationController.listInvitations(req, res);
@@ -432,11 +454,11 @@ describe("Invitation Controller - Unit Tests", () => {
   // DELETE /invite/:invitationId — revokeInvitation
   // ========================================================================
   describe("revokeInvitation", () => {
-    test("returns 200 on successful revocation", async () => {
+    test("returns 200 on successful revocation for admin", async () => {
       const revokedInvitation = { ...MOCK_INVITATION, status: "revoked" };
       clerkClient.invitations.revokeInvitation.mockResolvedValue(revokedInvitation);
 
-      const req = { params: { invitationId: "inv_abc123" } };
+      const req = { params: { invitationId: "inv_abc123" }, auth: mockAuth("admin") };
       const res = createRes();
 
       await invitationController.revokeInvitation(req, res);
@@ -448,12 +470,45 @@ describe("Invitation Controller - Unit Tests", () => {
       );
     });
 
+    test("org_executive can revoke own org invitation", async () => {
+      const invitation = { ...MOCK_INVITATION, publicMetadata: { role: "org_staff", org_id: "a1b2c3d4-uuid" } };
+      clerkClient.invitations.getInvitation.mockResolvedValue(invitation);
+      clerkClient.invitations.revokeInvitation.mockResolvedValue({ ...invitation, status: "revoked" });
+      prisma.user.findUnique.mockResolvedValue({ org_id: "a1b2c3d4-uuid" });
+
+      const req = { params: { invitationId: "inv_abc123" }, auth: mockAuth("org_executive") };
+      const res = createRes();
+
+      await invitationController.revokeInvitation(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "Invitation revoked" }),
+      );
+    });
+
+    test("org_executive cannot revoke another org invitation", async () => {
+      const invitation = { ...MOCK_INVITATION, publicMetadata: { role: "org_staff", org_id: "other-org-uuid" } };
+      clerkClient.invitations.getInvitation.mockResolvedValue(invitation);
+      prisma.user.findUnique.mockResolvedValue({ org_id: "a1b2c3d4-uuid" });
+
+      const req = { params: { invitationId: "inv_abc123" }, auth: mockAuth("org_executive") };
+      const res = createRes();
+
+      await invitationController.revokeInvitation(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining("own organisation") }),
+      );
+    });
+
     test("returns 404 when invitation not found", async () => {
       const clerkError = new Error("Not found");
       clerkError.status = 404;
       clerkClient.invitations.revokeInvitation.mockRejectedValue(clerkError);
 
-      const req = { params: { invitationId: "inv_nonexistent" } };
+      const req = { params: { invitationId: "inv_nonexistent" }, auth: mockAuth("admin") };
       const res = createRes();
 
       await invitationController.revokeInvitation(req, res);
@@ -467,7 +522,7 @@ describe("Invitation Controller - Unit Tests", () => {
     test("returns 500 on unexpected error", async () => {
       clerkClient.invitations.revokeInvitation.mockRejectedValue(new Error("Clerk API down"));
 
-      const req = { params: { invitationId: "inv_abc123" } };
+      const req = { params: { invitationId: "inv_abc123" }, auth: mockAuth("admin") };
       const res = createRes();
 
       await invitationController.revokeInvitation(req, res);
