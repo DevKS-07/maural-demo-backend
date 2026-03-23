@@ -277,10 +277,35 @@ const getLaborKPIsService = async (userId, { startDate, endDate, founderUserId =
   };
 };
 
+// ─────────────────────────────────────────────────────────────────
+//  WORKSPACE LISTING & AUTO-DETECTION
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * List all ClickUp workspaces (teams) the authenticated user has access to.
+ */
+const listWorkspaces = async (orgId) => {
+  const data = await fetchClickUp(orgId, "/team");
+  return (data.teams || []).map((t) => ({ id: String(t.id), name: t.name }));
+};
+
+/**
+ * Return the first workspace as the default.
+ * Most ClickUp accounts have a single workspace.
+ * Returns { workspaceId, workspaceName } or null.
+ */
+const detectDefaultWorkspace = async (orgId) => {
+  const workspaces = await listWorkspaces(orgId);
+  if (workspaces.length === 0) return null;
+  return { workspaceId: workspaces[0].id, workspaceName: workspaces[0].name };
+};
+
 module.exports = {
   getLaborKPIsService,        // primary export for summaryEngine
   getValidAccessToken,
   refreshAndPersistToken,
+  listWorkspaces,
+  detectDefaultWorkspace,
   // Exposed for testing
   _helpers: { parseTimeEntries, getAllTimeEntries },
 };

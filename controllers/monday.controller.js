@@ -11,6 +11,7 @@ const {
   MONDAY_REDIRECT_URI,
   FRONTEND_REDIRECT_URI,
 } = require("../config/env");
+const { autoConfigureMonday } = require("../services/laborConfig.service");
 
 const CLIENT_ID = MONDAY_CLIENT_ID;
 const CLIENT_SECRET = MONDAY_CLIENT_SECRET;
@@ -39,6 +40,12 @@ const getOrgId = async (req) => {
 const installMonday = async (req, res) => {
   const org_id = await getOrgId(req);
   if (!org_id) return res.status(401).json({ error: "Not authenticated" });
+
+  // Skip OAuth if the org already has a connected token
+  const existing = await prisma.mondayToken.findUnique({ where: { org_id } });
+  if (existing) {
+    return res.redirect(`${FRONTEND_REDIRECT_URI}?already_connected=monday`);
+  }
 
   const state = crypto.randomBytes(32).toString("hex");
   oauthStates.set(state, { org_id });
@@ -96,7 +103,10 @@ const callbackHandler = async (req, res) => {
       data: { monday_connected: true },
     });
 
-    res.redirect(FRONTEND_REDIRECT_URI);
+    // Fire-and-forget: auto-detect default board for labor KPIs
+    autoConfigureMonday(org_id).catch(() => {});
+
+    res.redirect(`${FRONTEND_REDIRECT_URI}?connected=monday`);
   } catch (error) {
     console.error("[Monday] Token exchange error:", error.message);
     res.status(500).send("Error connecting Monday. Please try again.");
@@ -109,7 +119,7 @@ const connectionSuccessHandler = async (req, res) => {
   try {
     const token = await prisma.mondayToken.findUnique({ where: { org_id } });
     if (!token) return res.status(404).send("Token not found.");
-    res.redirect(FRONTEND_REDIRECT_URI);
+    res.redirect(`${FRONTEND_REDIRECT_URI}?connected=monday`);
   } catch (_error) {
     res.status(500).send("Error connecting Monday!");
   }
@@ -120,7 +130,15 @@ const connectionStatus = async (req, res) => {
     const org_id = await getOrgId(req);
     if (!org_id) return res.status(200).json({ connected: false });
     const token = await prisma.mondayToken.findUnique({ where: { org_id } });
-    return res.status(200).json({ connected: Boolean(token) });
+    const org = await prisma.organisation.findUnique({
+      where: { org_id },
+      select: { laborSource: true, mondayBoardId: true },
+    });
+    return res.status(200).json({
+      connected: Boolean(token),
+      laborConfigured:
+        org?.laborSource === "monday" && Boolean(org?.mondayBoardId),
+    });
   } catch (_error) {
     return res.status(500).json({
       connected: false,

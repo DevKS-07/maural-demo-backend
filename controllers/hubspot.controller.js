@@ -47,7 +47,7 @@ const installHubSpot = async (req, res) => {
   // Skip OAuth if the org already has a valid (non-expired) access token
   const existing = await prisma.hubspotToken.findUnique({ where: { org_id } });
   if (existing && existing.expires_at > new Date()) {
-    return res.redirect(FRONTEND_REDIRECT_URI);
+    return res.redirect(`${FRONTEND_REDIRECT_URI}?already_connected=hubspot`);
   }
 
   const state = crypto.randomBytes(32).toString("hex");
@@ -113,7 +113,7 @@ const connectionSuccessHandler = async (req, res) => {
   try {
     const token = await prisma.hubspotToken.findUnique({ where: { org_id } });
     if (!token) return res.status(404).send("Token not found.");
-    res.redirect(FRONTEND_REDIRECT_URI);
+    res.redirect(`${FRONTEND_REDIRECT_URI}?connected=hubspot`);
   } catch (_error) {
     res.status(500).send("Error connecting HubSpot!");
   }

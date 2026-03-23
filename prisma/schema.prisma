@@ -146,6 +146,7 @@ model ClickUpToken {
     access_token  String
     refresh_token String?
     token_type    String?
+    team_id       String?
     expires_at    DateTime?
     created_at    DateTime?    @default(now())
     updated_at    DateTime?

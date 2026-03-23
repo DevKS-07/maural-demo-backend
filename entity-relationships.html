@@ -170,7 +170,7 @@
             Critically, each Organisation is assigned its own <strong>storage bucket</strong> (a UUID-identified container in Supabase Storage). This is the tenant isolation boundary for documents: all files belonging to an organisation are stored in that organisation's bucket, and the system enforces that users from one organisation can never access another organisation's bucket. The Organisation entity is the <strong>anchor point</strong> of the entire data model — Users belong to an Organisation, Files belong to an Organisation, and KPI data (financial, leads, labor) is scoped to an Organisation.
         </p>
         <p>
-            The <code>gpt_types</code> field indicates which AI/chatbot capabilities have been enabled for that organisation, allowing Maural to customize the AI experience per organisation. Additionally, boolean flags (<code>hubspot_connected</code>, <code>quickbooks_connected</code>, <code>monday_connected</code>, <code>clickup_connected</code>) track which external integrations have been connected for this organisation.
+            The <code>gpt_types</code> field indicates which AI/chatbot capabilities have been enabled for that organisation, allowing Maural to customize the AI experience per organisation. Additionally, boolean flags (<code>hubspot_connected</code>, <code>quickbooks_connected</code>, <code>monday_connected</code>, <code>clickup_connected</code>) track which external integrations have been connected for this organisation. The <code>laborSource</code> field (<code>"monday"</code> or <code>"clickup"</code>) determines which integration is used for labor KPI data, along with <code>mondayBoardId</code> or <code>clickupWorkspaceId</code> to identify the specific board/workspace to query. These fields are auto-detected during OAuth connection and can be overridden via the labor config API.
         </p>
         <div class="relationship-list">
             <p><strong>Has many:</strong> Users, Files, FinanceKpis, LeadsKpis, LaborKpis, document_embeddings</p>
@@ -376,7 +376,7 @@
             The four <strong>Token models</strong> store OAuth2 credentials for each external integration. When an organisation connects their HubSpot, QuickBooks, Monday.com, or ClickUp account to the KMS, the OAuth2 handshake produces tokens which are stored in these tables. The access token is used for API calls to the external service; the refresh token (where available) is used to obtain a new access token when the current one expires. Note that ClickUp tokens are long-lived and do not include a refresh token or expiry.
         </p>
         <p>
-            Each token record is keyed by <code>org_id</code>, meaning the integration is tied to the <strong>organisation that authorized it</strong>. The tokens belong to the organisation as a whole, not to any individual user — this ensures that the integration persists regardless of which user initiated the OAuth flow. The system uses these stored tokens to periodically fetch KPI data and populate the FinanceKpi, LeadsKpi, and LaborKpi tables.
+            Each token record is keyed by <code>org_id</code>, meaning the integration is tied to the <strong>organisation that authorized it</strong>. The tokens belong to the organisation as a whole, not to any individual user — this ensures that the integration persists regardless of which user initiated the OAuth flow. The system uses these stored tokens to fetch KPI data on-demand and populate the FinanceKpi, LeadsKpi, and LaborKpi tables. The ClickUpToken additionally caches <code>team_id</code> (workspace ID) after the first API call to avoid repeated lookups.
         </p>
         <div class="relationship-list">
             <p><strong>Belongs to:</strong> Organisation (via org_id)</p>
@@ -490,7 +490,7 @@
             The integration tokens enable a second data pipeline:
         </p>
         <p>
-            <strong>Organisation authorizes OAuth → Token stored → System fetches data from external API → Data transformed into KPI snapshots → Stored in FinanceKpi/LeadsKpi/LaborKpi → Rendered on organisation dashboard</strong>
+            <strong>Organisation authorizes OAuth → Token stored → Labor source auto-configured (board/workspace detected) → System fetches data from external API on demand → Data transformed into KPI snapshots → Stored in FinanceKpi/LeadsKpi/LaborKpi → Rendered on organisation dashboard</strong>
         </p>
         <p>
             This pipeline transforms raw data from multiple external tools (QuickBooks for finances, HubSpot for sales/leads, Monday.com or ClickUp for labor) into a <strong>unified dashboard experience</strong>. The organisation doesn't need to log into four different tools and mentally synthesize the data — the KMS pulls it all together into a coherent business intelligence view with computed metrics like EBITDA margin, cash runway, utilization rates, and conversion rates.

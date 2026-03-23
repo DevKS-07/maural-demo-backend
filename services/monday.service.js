@@ -391,9 +391,51 @@ const getLaborKPIsService = async (orgId, boardId, { startDate, endDate, founder
   };
 };
 
+// ─────────────────────────────────────────────────────────────────
+//  BOARD LISTING & AUTO-DETECTION
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * List all boards the authenticated Monday user can see.
+ * Returns boards with their column metadata so callers can
+ * check for time tracking columns.
+ */
+const listBoards = async (orgId) => {
+  const data = await mondayQuery(orgId, `
+    {
+      boards(limit: 50) {
+        id
+        name
+        columns {
+          id
+          type
+        }
+      }
+    }
+  `);
+  return data.boards || [];
+};
+
+/**
+ * Find the first board that has a time tracking column.
+ * Returns { boardId, boardName } or null if none found.
+ */
+const detectDefaultBoard = async (orgId) => {
+  const boards = await listBoards(orgId);
+  for (const board of boards) {
+    const hasTimeCol = board.columns.some((c) =>
+      TIME_TRACKING_TYPES.includes(c.type)
+    );
+    if (hasTimeCol) return { boardId: board.id, boardName: board.name };
+  }
+  return null;
+};
+
 module.exports = {
   getLaborKPIsService,       // primary export for summaryEngine
   getValidAccessToken,
   refreshAndPersistToken,
   detectBoardColumns,        // export for testing and admin tooling
+  listBoards,
+  detectDefaultBoard,
 };

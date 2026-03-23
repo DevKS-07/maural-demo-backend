@@ -28,6 +28,7 @@
   - [Integrations — QuickBooks](#integrations--quickbooks)
   - [Integrations — Monday.com](#integrations--mondaycom)
   - [Integrations — ClickUp](#integrations--clickup)
+  - [Integrations — Labor Config](#integrations---labor-config)
 - [Data Models](#data-models)
 
 ---
@@ -1985,7 +1986,7 @@ Initiates Monday.com OAuth 2.0 flow.
 
 **Auth:** Required
 
-**OAuth Scopes:** `boards:read`, `account:read`, `teams:read`, `workspaces:read`, `me:read`
+**OAuth Scopes:** Configured in Monday.com app settings (not passed in the authorize URL)
 
 **Response:** `302 Redirect` → Monday.com OAuth authorize URL
 
@@ -1993,7 +1994,7 @@ Initiates Monday.com OAuth 2.0 flow.
 
 #### `GET /api/integrations/monday/oauth-callback`
 
-OAuth callback handler. Validates the `state` parameter against an in-memory store (which also carries the `org_id`), exchanges the code for tokens, and stores them keyed by `org_id`.
+OAuth callback handler. Validates the `state` parameter against an in-memory store (which also carries the `org_id`), exchanges the code for tokens, and stores them keyed by `org_id`. After storing the token, triggers a **fire-and-forget auto-detection** of the default Monday board for labor KPIs (sets `laborSource` and `mondayBoardId` on the organisation).
 
 **Auth:** None (OAuth callback — `org_id` is retrieved from the OAuth state map)
 
@@ -2004,7 +2005,7 @@ OAuth callback handler. Validates the `state` parameter against an in-memory sto
 | `code` | `string` | Authorization code from Monday.com |
 | `state` | `string` | State parameter for CSRF protection (also encodes `org_id`) |
 
-**Response:** `302 Redirect` → `/api/integrations/monday/success`
+**Response:** `302 Redirect` → `FRONTEND_REDIRECT_URI?connected=monday`
 
 ---
 
@@ -2012,7 +2013,7 @@ OAuth callback handler. Validates the `state` parameter against an in-memory sto
 
 **Auth:** Required
 
-**Response:** `302 Redirect` → `/api/integrations/monday/status`
+**Response:** `302 Redirect` → `FRONTEND_REDIRECT_URI?connected=monday`
 
 ---
 
@@ -2024,7 +2025,8 @@ OAuth callback handler. Validates the `state` parameter against an in-memory sto
 
 ```json
 {
-  "connected": true
+  "connected": true,
+  "laborConfigured": true
 }
 ```
 
@@ -2060,7 +2062,7 @@ Initiates ClickUp OAuth 2.0 flow.
 
 #### `GET /api/integrations/clickup/oauth-callback`
 
-OAuth callback handler. Validates the `state` parameter against an in-memory store (which also carries the `org_id`), exchanges the code for an access token, and stores it keyed by `org_id`. ClickUp tokens are long-lived and do not include a refresh token or expiry.
+OAuth callback handler. Validates the `state` parameter against an in-memory store (which also carries the `org_id`), exchanges the code for an access token, and stores it keyed by `org_id`. ClickUp tokens are long-lived and do not include a refresh token or expiry. After storing the token, triggers a **fire-and-forget auto-detection** of the default ClickUp workspace for labor KPIs (sets `laborSource` and `clickupWorkspaceId` on the organisation).
 
 **Auth:** None (OAuth callback — `org_id` is retrieved from the OAuth state map)
 
@@ -2071,7 +2073,7 @@ OAuth callback handler. Validates the `state` parameter against an in-memory sto
 | `code` | `string` | Authorization code from ClickUp |
 | `state` | `string` | State parameter for CSRF protection (also encodes `org_id`) |
 
-**Response:** `302 Redirect` → `FRONTEND_REDIRECT_URI`
+**Response:** `302 Redirect` → `FRONTEND_REDIRECT_URI?connected=clickup`
 
 ---
 
@@ -2079,7 +2081,7 @@ OAuth callback handler. Validates the `state` parameter against an in-memory sto
 
 **Auth:** Required
 
-**Response:** `302 Redirect` → `FRONTEND_REDIRECT_URI`
+**Response:** `302 Redirect` → `FRONTEND_REDIRECT_URI?connected=clickup`
 
 ---
 
@@ -2091,9 +2093,108 @@ OAuth callback handler. Validates the `state` parameter against an in-memory sto
 
 ```json
 {
-  "connected": true
+  "connected": true,
+  "laborConfigured": true
 }
 ```
+
+---
+
+### Integrations — Labor Config
+
+Endpoints for viewing and managing the labor KPI source configuration. After connecting Monday.com or ClickUp via OAuth, the system auto-detects a default board/workspace for labor KPIs. These endpoints allow viewing the current config, listing available options, and manually overriding the auto-detected defaults.
+
+All endpoints require authentication (`requireAuth`). The authenticated user's `org_id` is resolved from the Clerk JWT via a database lookup.
+
+---
+
+#### `GET /api/integrations/labor-config/status`
+
+Returns the current labor KPI configuration for the authenticated user's organisation.
+
+**Auth:** Required
+
+**Response `200 OK`**
+
+```json
+{
+  "laborSource": "monday",
+  "mondayBoardId": "123456789",
+  "clickupWorkspaceId": null,
+  "monday_connected": true,
+  "clickup_connected": false
+}
+```
+
+---
+
+#### `GET /api/integrations/labor-config/monday/boards`
+
+Lists all Monday.com boards accessible to the connected account, with a flag indicating whether each board has a time tracking column.
+
+**Auth:** Required
+
+**Response `200 OK`**
+
+```json
+{
+  "boards": [
+    { "id": "123456789", "name": "Sprint Board", "hasTimeTracking": true },
+    { "id": "987654321", "name": "Roadmap", "hasTimeTracking": false }
+  ]
+}
+```
+
+**Error `400 Bad Request`** — Monday.com is not connected for this organisation
+
+---
+
+#### `GET /api/integrations/labor-config/clickup/workspaces`
+
+Lists all ClickUp workspaces accessible to the connected account.
+
+**Auth:** Required
+
+**Response `200 OK`**
+
+```json
+{
+  "workspaces": [
+    { "id": "abc123", "name": "My Workspace" }
+  ]
+}
+```
+
+**Error `400 Bad Request`** — ClickUp is not connected for this organisation
+
+---
+
+#### `PUT /api/integrations/labor-config`
+
+Manually update the labor KPI source configuration. Overrides the auto-detected defaults.
+
+**Auth:** Required
+
+**Request Body:**
+
+| Field | Type | Description |
+|---|---|---|
+| `laborSource` | `string` | `"monday"` or `"clickup"` (required) |
+| `mondayBoardId` | `string` | Board ID (required when `laborSource` is `"monday"`) |
+| `clickupWorkspaceId` | `string` | Workspace ID (required when `laborSource` is `"clickup"`) |
+
+**Response `200 OK`**
+
+```json
+{
+  "message": "Labor configuration updated",
+  "laborSource": "monday",
+  "mondayBoardId": "123456789",
+  "clickupWorkspaceId": null
+}
+```
+
+**Error `400 Bad Request`** — Invalid `laborSource` or missing required ID field
 
 ---
 
@@ -2137,6 +2238,9 @@ OAuth callback handler. Validates the `state` parameter against an in-memory sto
 | `quickbooks_connected` | `Boolean` | QuickBooks integration connected |
 | `monday_connected` | `Boolean` | Monday.com integration connected |
 | `clickup_connected` | `Boolean` | ClickUp integration connected |
+| `laborSource` | `String?` | Active labor KPI source: `"monday"` or `"clickup"` (auto-detected on OAuth, overridable via labor-config endpoint) |
+| `mondayBoardId` | `String?` | Monday.com board ID used for labor KPI fetching |
+| `clickupWorkspaceId` | `String?` | ClickUp workspace ID used for labor KPI fetching |
 | `is_platform` | `Boolean` | Marks the platform org (Maural Solutions) — used for admin auto-assignment |
 
 **Relations:** `User[]`, `File[]`, `FinanceKpi[]`, `LeadsKpi[]`, `LaborKpi[]`, `VTO?`, `HubspotToken`, `QuickbooksToken`, `MondayToken`, `ClickUpToken`, `document_embeddings[]`
@@ -2322,11 +2426,12 @@ OAuth callback handler. Validates the `state` parameter against an in-memory sto
 | `access_token` | `String` |
 | `refresh_token` | `String?` |
 | `token_type` | `String?` |
+| `team_id` | `String?` |
 | `expires_at` | `DateTime?` |
 | `created_at` | `DateTime?` |
 | `updated_at` | `DateTime?` |
 
-> **Note:** ClickUp tokens are long-lived. `refresh_token`, `token_type`, and `expires_at` are nullable because ClickUp's OAuth response does not include these fields.
+> **Note:** ClickUp tokens are long-lived. `team_id` is cached after first API call to `/team`. `refresh_token`, `token_type`, and `expires_at` are nullable because ClickUp's OAuth response does not include these fields.
 
 ---
 

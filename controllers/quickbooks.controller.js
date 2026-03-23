@@ -52,7 +52,7 @@ const installQuickbooks = async (req, res) => {
   // Skip OAuth if the org already has a connected token
   const existing = await prisma.quickbooksToken.findUnique({ where: { org_id } });
   if (existing) {
-    return res.redirect(FRONTEND_REDIRECT_URI);
+    return res.redirect(`${FRONTEND_REDIRECT_URI}?already_connected=quickbooks`);
   }
 
   try {
@@ -156,7 +156,7 @@ const connectionSuccessHandler = async (req, res) => {
       return res
         .status(404)
         .send("Token not found after successful connection.");
-    res.redirect(FRONTEND_REDIRECT_URI);
+    res.redirect(`${FRONTEND_REDIRECT_URI}?connected=quickbooks`);
   } catch (_error) {
     res.status(500).send("Error connecting QuickBooks!");
   }

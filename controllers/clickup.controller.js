@@ -10,6 +10,7 @@ const {
   CLICKUP_REDIRECT_URI,
   FRONTEND_REDIRECT_URI,
 } = require("../config/env");
+const { autoConfigureClickUp } = require("../services/laborConfig.service");
 
 const CLIENT_ID = CLICKUP_CLIENT_ID;
 const CLIENT_SECRET = CLICKUP_CLIENT_SECRET;
@@ -34,6 +35,12 @@ const getOrgId = async (req) => {
 const installClickUp = async (req, res) => {
   const org_id = await getOrgId(req);
   if (!org_id) return res.status(401).json({ error: "Not authenticated" });
+
+  // Skip OAuth if the org already has a connected token
+  const existing = await prisma.clickUpToken.findUnique({ where: { org_id } });
+  if (existing) {
+    return res.redirect(`${FRONTEND_REDIRECT_URI}?already_connected=clickup`);
+  }
 
   const state = crypto.randomBytes(32).toString("hex");
   oauthStates.set(state, { org_id });
@@ -89,7 +96,10 @@ const callbackHandler = async (req, res) => {
       data: { clickup_connected: true },
     });
 
-    res.redirect(FRONTEND_REDIRECT_URI);
+    // Fire-and-forget: auto-detect default workspace for labor KPIs
+    autoConfigureClickUp(org_id).catch(() => {});
+
+    res.redirect(`${FRONTEND_REDIRECT_URI}?connected=clickup`);
   } catch (error) {
     console.error("[ClickUp] Token exchange error:", error.message);
     res.status(500).send("Error connecting ClickUp. Please try again.");
@@ -102,7 +112,7 @@ const connectionSuccessHandler = async (req, res) => {
   try {
     const token = await prisma.clickUpToken.findUnique({ where: { org_id } });
     if (!token) return res.status(404).send("Token not found.");
-    res.redirect(FRONTEND_REDIRECT_URI);
+    res.redirect(`${FRONTEND_REDIRECT_URI}?connected=clickup`);
   } catch (_error) {
     res.status(500).send("Error connecting ClickUp!");
   }
@@ -113,7 +123,15 @@ const connectionStatus = async (req, res) => {
     const org_id = await getOrgId(req);
     if (!org_id) return res.status(200).json({ connected: false });
     const token = await prisma.clickUpToken.findUnique({ where: { org_id } });
-    return res.status(200).json({ connected: Boolean(token) });
+    const org = await prisma.organisation.findUnique({
+      where: { org_id },
+      select: { laborSource: true, clickupWorkspaceId: true },
+    });
+    return res.status(200).json({
+      connected: Boolean(token),
+      laborConfigured:
+        org?.laborSource === "clickup" && Boolean(org?.clickupWorkspaceId),
+    });
   } catch (_error) {
     return res.status(500).json({
       connected: false,
