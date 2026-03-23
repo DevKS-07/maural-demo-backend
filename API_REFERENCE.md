@@ -46,8 +46,8 @@ The Maural KMS (Knowledge Management System) API is a Node.js/Express backend th
 
 | Middleware | Description |
 |---|---|
-| **Helmet** | Sets security-related HTTP headers |
-| **CORS** | Restricts origins to `ALLOWED_ORIGINS` env var |
+| **Helmet** | Sets security-related HTTP headers (`crossOriginResourcePolicy: "cross-origin"`) |
+| **CORS** | Restricts origins to `ALLOWED_ORIGINS` env var; explicitly allows `Content-Type` and `Authorization` headers; supports credentials |
 | **Compression** | gzip response compression |
 | **Morgan** | Request logging (JSON in production, `dev` format locally) |
 | **cookie-parser** | Parses cookies from incoming requests |
