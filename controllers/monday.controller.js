@@ -147,9 +147,36 @@ const connectionStatus = async (req, res) => {
   }
 };
 
+const disconnectMonday = async (req, res) => {
+  const org_id = await getOrgId(req);
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
+
+  try {
+    await prisma.mondayToken.deleteMany({ where: { org_id } });
+
+    // Clear connected flag and labor config if Monday was the active source
+    const org = await prisma.organisation.findUnique({
+      where: { org_id },
+      select: { laborSource: true },
+    });
+    const updateData = { monday_connected: false };
+    if (org?.laborSource === "monday") {
+      updateData.laborSource = null;
+      updateData.mondayBoardId = null;
+    }
+    await prisma.organisation.update({ where: { org_id }, data: updateData });
+
+    return res.status(200).json({ disconnected: true });
+  } catch (error) {
+    console.error("[Monday] disconnect error:", error.message);
+    return res.status(500).json({ error: "Failed to disconnect Monday" });
+  }
+};
+
 module.exports = {
   installMonday,
   callbackHandler,
   connectionSuccessHandler,
   connectionStatus,
+  disconnectMonday,
 };

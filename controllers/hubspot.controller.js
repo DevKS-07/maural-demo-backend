@@ -133,6 +133,23 @@ const connectionStatus = async (req, res) => {
   }
 };
 
+const disconnectHubSpot = async (req, res) => {
+  const org_id = await getOrgId(req);
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
+
+  try {
+    await prisma.hubspotToken.deleteMany({ where: { org_id } });
+    await prisma.organisation.update({
+      where: { org_id },
+      data: { hubspot_connected: false },
+    });
+    return res.status(200).json({ disconnected: true });
+  } catch (error) {
+    console.error("[HubSpot] disconnect error:", error.message);
+    return res.status(500).json({ error: "Failed to disconnect HubSpot" });
+  }
+};
+
 // ─────────────────────────────────────────────────────────────────
 //  HTTP HANDLERS — thin wrappers over service functions
 // ─────────────────────────────────────────────────────────────────
@@ -160,6 +177,7 @@ module.exports = {
   callbackHandler,
   connectionSuccessHandler,
   connectionStatus,
+  disconnectHubSpot,
 
   // HTTP handlers
   getLeadsKPIs,

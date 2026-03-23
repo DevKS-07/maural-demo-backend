@@ -16,4 +16,6 @@ router.get("/success", requireAuth, clickupController.connectionSuccessHandler);
 
 router.get("/status", requireAuth, clickupController.connectionStatus);
 
+router.delete("/disconnect", requireAuth, clickupController.disconnectClickUp);
+
 module.exports = router;

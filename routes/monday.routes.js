@@ -15,6 +15,8 @@ router.get("/oauth-callback", mondayController.callbackHandler);
 router.get("/success", requireAuth, mondayController.connectionSuccessHandler);
 
 router.get("/status", requireAuth, mondayController.connectionStatus);
+
+router.delete("/disconnect", requireAuth, mondayController.disconnectMonday);
  
 
 module.exports = router;

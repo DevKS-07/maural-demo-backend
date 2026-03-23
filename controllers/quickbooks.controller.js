@@ -215,11 +215,29 @@ const getFinancialKPIs = async (req, res) => {
   }
 };
 
+const disconnectQuickBooks = async (req, res) => {
+  const org_id = await getOrgId(req);
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
+
+  try {
+    await prisma.quickbooksToken.deleteMany({ where: { org_id } });
+    await prisma.organisation.update({
+      where: { org_id },
+      data: { quickbooks_connected: false },
+    });
+    return res.status(200).json({ disconnected: true });
+  } catch (error) {
+    console.error("[QuickBooks] disconnect error:", error.message);
+    return res.status(500).json({ error: "Failed to disconnect QuickBooks" });
+  }
+};
+
 module.exports = {
   installQuickbooks,
   callbackHandler,
   connectionSuccessHandler,
   connectionStatus,
+  disconnectQuickBooks,
   refreshAccessToken,
   getFinancialKPIs,
 };

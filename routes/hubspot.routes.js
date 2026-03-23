@@ -17,6 +17,8 @@ router.get("/success", requireAuth, hubspotController.connectionSuccessHandler);
 
 router.get("/status", requireAuth, hubspotController.connectionStatus);
 
+router.delete("/disconnect", requireAuth, hubspotController.disconnectHubSpot);
+
 /**
 router.get("/contacts", hubspotController.getContacts);
 

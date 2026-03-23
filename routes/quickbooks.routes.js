@@ -17,6 +17,8 @@ router.get("/success", requireAuth, quickbooksController.connectionSuccessHandle
 
 router.get("/status", requireAuth, quickbooksController.connectionStatus);
 
+router.delete("/disconnect", requireAuth, quickbooksController.disconnectQuickBooks);
+
 /** 
 router.get("/accounts", quickbooksController.getAccounts); // Get All accounts in a company
 

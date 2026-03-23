@@ -140,11 +140,38 @@ const connectionStatus = async (req, res) => {
   }
 };
 
+const disconnectClickUp = async (req, res) => {
+  const org_id = await getOrgId(req);
+  if (!org_id) return res.status(401).json({ error: "Not authenticated" });
+
+  try {
+    await prisma.clickUpToken.deleteMany({ where: { org_id } });
+
+    // Clear connected flag and labor config if ClickUp was the active source
+    const org = await prisma.organisation.findUnique({
+      where: { org_id },
+      select: { laborSource: true },
+    });
+    const updateData = { clickup_connected: false };
+    if (org?.laborSource === "clickup") {
+      updateData.laborSource = null;
+      updateData.clickupWorkspaceId = null;
+    }
+    await prisma.organisation.update({ where: { org_id }, data: updateData });
+
+    return res.status(200).json({ disconnected: true });
+  } catch (error) {
+    console.error("[ClickUp] disconnect error:", error.message);
+    return res.status(500).json({ error: "Failed to disconnect ClickUp" });
+  }
+};
+
 module.exports = {
   installClickUp,
   callbackHandler,
   connectionSuccessHandler,
   connectionStatus,
+  disconnectClickUp,
 };
 
 // ##################### Utility Functions #####################
