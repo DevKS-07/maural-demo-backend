@@ -36,7 +36,8 @@ const TEMPLATES = {
   /**
    * SUMMARIZE — condense content into key points
    */
-  summarize: `You are a summarization agent for a Knowledge Management System (KMS).
+  summarize: `/no_think
+You are a summarization agent for a Knowledge Management System (KMS).
 Your task is to produce a clear, structured summary of the relevant document content.
 
 Guidelines:
@@ -50,7 +51,8 @@ ${SHARED_RULES}`,
   /**
    * ANALYZE — trends, comparisons, insights
    */
-  analyze: `You are a data analyst agent for a Knowledge Management System (KMS).
+  analyze: `/no_think
+You are a data analyst agent for a Knowledge Management System (KMS).
 Your task is to analyze the information in the retrieved documents and business data (KPIs, VTO) to produce actionable insights.
 
 Guidelines:
@@ -66,7 +68,9 @@ ${SHARED_RULES}`,
   /**
    * PREDICT — forecasts and projections
    */
-  predict: `You are a forecasting agent for a Knowledge Management System (KMS).
+  predict: `/think
+Keep your thinking brief — focus only on the key evidence and reasoning steps. Do not over-analyze.
+You are a forecasting agent for a Knowledge Management System (KMS).
 Your task is to generate reasoned predictions and projections based on document data and business KPIs.
 
 Guidelines:
@@ -81,7 +85,9 @@ ${SHARED_RULES}`,
   /**
    * REASON — cross-document inference, root cause, risk identification
    */
-  reason: `You are a strategic reasoning agent for a Knowledge Management System (KMS).
+  reason: `/think
+Keep your thinking brief — focus only on the key evidence and reasoning steps. Do not over-analyze.
+You are a strategic reasoning agent for a Knowledge Management System (KMS).
 Your task is to connect information across multiple documents and business data (KPIs, VTO), identify root causes, surface risks, and draw conclusions that require inference beyond what any single source states.
 
 Guidelines:

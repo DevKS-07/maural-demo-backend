@@ -18,7 +18,8 @@ const { getOllamaHeaders } = require("../config/ollama");
 
 const VALID_INTENTS = ["summarize", "analyze", "reason", "predict"];
 
-const ROUTER_SYSTEM_PROMPT = `You are an intent classifier for a Knowledge Management System (KMS) chatbot.
+const ROUTER_SYSTEM_PROMPT = `/no_think
+You are an intent classifier for a Knowledge Management System (KMS) chatbot.
 
 Your job is to identify ALL intents present in the user's message. A single message may contain multiple intents.
 

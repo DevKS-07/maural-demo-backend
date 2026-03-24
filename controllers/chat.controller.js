@@ -71,7 +71,8 @@ async function runAgent(intent, message, docs, history, businessContext) {
 // ---------------------------------------------------------------------------
 // Combine multiple sub-answers into one coherent response
 // ---------------------------------------------------------------------------
-const COMBINER_PROMPT = `You are combining multiple analysis results into one well-structured response.
+const COMBINER_PROMPT = `/no_think
+You are combining multiple analysis results into one well-structured response.
 Each section was produced by a different specialized agent. Your job is to:
 1. Merge the sections with clear headers matching each intent (e.g. ## Summary, ## Forecast).
 2. Remove any redundancy between sections.
@@ -140,6 +141,7 @@ function estimatePreConfidence(docs, intents) {
 // ---------------------------------------------------------------------------
 async function orchestrate(message, orgIds, history) {
   console.log("[chat] orgIds received:", JSON.stringify(orgIds));
+  const t0 = Date.now();
 
   // Step 1 — intent detection, document retrieval, and business data all in parallel
   const [intents, docs, businessData] = await Promise.all([
@@ -147,6 +149,7 @@ async function orchestrate(message, orgIds, history) {
     retrieveDocuments(message, orgIds, 5),
     getBusinessContext(orgIds),
   ]);
+  console.log(`[chat][timing] Step 1 (intent + retrieval + biz): ${Date.now() - t0}ms`);
 
   console.log("[chat] businessData.text length:", businessData.text?.length ?? 0);
   console.log("[chat] businessData sources:", businessData.sources?.length ?? 0);
@@ -157,21 +160,26 @@ async function orchestrate(message, orgIds, history) {
   }
 
   // Step 2 — one specialized agent per intent, all run in parallel
+  const t1 = Date.now();
   const agentAnswers = await Promise.all(
     intents.map((intent) => runAgent(intent, message, docs, history, businessData.text)),
   );
+  console.log(`[chat][timing] Step 2 (agents): ${Date.now() - t1}ms`);
 
   // Step 3 — combine if multiple intents detected
+  const t2 = Date.now();
   let combinedAnswer;
   if (intents.length === 1) {
     combinedAnswer = agentAnswers[0];
   } else {
     combinedAnswer = await combineAnswers(intents, agentAnswers, message);
   }
+  console.log(`[chat][timing] Step 3 (combine): ${Date.now() - t2}ms`);
 
   // Step 4 — guardrail: skip if pre-confidence is already high enough,
   // or if business data is present (KPI data comes from the verified DB —
   // no document grounding check needed, guardrail would only lower confidence)
+  const t3 = Date.now();
   const preConfidence = estimatePreConfidence(docs, intents);
   let validatedAnswer, confidence, issues;
 
@@ -193,6 +201,8 @@ async function orchestrate(message, orgIds, history) {
       businessData.text,
     ));
   }
+  console.log(`[chat][timing] Step 4 (guardrail): ${Date.now() - t3}ms`);
+  console.log(`[chat][timing] Total: ${Date.now() - t0}ms`);
 
   // Step 5 — map sources for frontend citation chips (docs + business data)
   const sources = [...mapSources(docs), ...businessData.sources];

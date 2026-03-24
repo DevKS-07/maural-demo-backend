@@ -16,7 +16,8 @@ const { ChatOllama } = require("@langchain/ollama");
 const { OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL } = require("../config/env");
 const { getOllamaHeaders } = require("../config/ollama");
 
-const GUARDRAIL_SYSTEM_PROMPT = `You are an accuracy verifier for a Knowledge Management System (KMS) chatbot.
+const GUARDRAIL_SYSTEM_PROMPT = `/no_think
+You are an accuracy verifier for a Knowledge Management System (KMS) chatbot.
 
 You will be given:
 1. The user's question
