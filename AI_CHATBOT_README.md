@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Maural KMS AI Chatbot is a multi-agent RAG (Retrieval-Augmented Generation) pipeline built on top of **Ollama (local LLM)** and Supabase pgvector. It answers questions about uploaded documents, business KPIs, and strategic VTO data with high accuracy, streaming responses to the frontend in real time.
+The Maural KMS AI Chatbot is a multi-agent **hybrid RAG** (Retrieval-Augmented Generation) pipeline built on top of **Ollama (local LLM)** and PostgreSQL pgvector. It combines **vector similarity search**, **keyword (full-text) search**, and **LLM-based query rewriting** to retrieve the most relevant document chunks. It answers questions about uploaded documents, business KPIs, and strategic VTO data with high accuracy, streaming responses to the frontend in real time.
 
 All AI inference runs **100% locally** — no data is sent to any third-party AI service. Models are served by Ollama running on `http://localhost:11434`.
 
@@ -15,7 +15,8 @@ All AI inference runs **100% locally** — no data is sent to any third-party AI
 | Runtime | Node.js (Express 5) | API server |
 | LLM | Ollama `qwen3.5:9b` | Specialized agent responses, intent routing, combining, guardrails |
 | Embeddings | Ollama `nomic-embed-text` | Converts text to 768-dimensional vectors |
-| Vector Database | Supabase pgvector (PostgreSQL) | Stores and searches document embeddings |
+| Vector Database | PostgreSQL pgvector (Supabase) | Stores and searches document embeddings |
+| Direct DB Driver | `pg` (node-postgres) Pool | Dedicated connection bypassing pgbouncer for vector queries (IVFFlat probe persistence) |
 | ORM | Prisma | File metadata queries (File table) |
 | LLM SDK | LangChain (`@langchain/ollama`) | ChatOllama and OllamaEmbeddings wrappers |
 | File Storage | Supabase Storage (per-org buckets) | Stores the original uploaded files in organisation-specific buckets |
@@ -46,7 +47,7 @@ curl http://localhost:11434/api/tags
 ### 2. Install Node dependencies
 
 ```bash
-npm install @langchain/ollama @langchain/core langchain @supabase/supabase-js pdf-parse@1 xlsx mammoth
+npm install @langchain/ollama @langchain/core langchain @supabase/supabase-js pg pdf-parse@1 xlsx mammoth
 ```
 
 ### Full dependency list (relevant to AI chatbot)
@@ -57,6 +58,7 @@ npm install @langchain/ollama @langchain/core langchain @supabase/supabase-js pd
 "langchain": "^0.3.x",
 "@supabase/supabase-js": "^2.76.0",
 "@prisma/client": "^6.x",
+"pg": "^8.x",
 "pdf-parse": "^1.1.4",
 "xlsx": "^0.18.5",
 "mammoth": "^1.11.0"
@@ -135,11 +137,18 @@ BEGIN
 END;
 $$;
 
+-- IVFFlat index for fast approximate nearest-neighbour search
+-- lists = 100 → the retrieval code sets `SET ivfflat.probes = 100` to probe all lists
+CREATE INDEX IF NOT EXISTS idx_document_embeddings_embedding
+  ON document_embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+
 -- Grant access to service role
 GRANT ALL ON TABLE document_embeddings TO service_role;
 GRANT ALL ON SEQUENCE document_embeddings_id_seq TO service_role;
 ALTER TABLE document_embeddings DISABLE ROW LEVEL SECURITY;
 ```
+
+> **Note:** The `match_documents` RPC function above is retained for backwards compatibility, but the current retrieval code (`ragService.js`) uses **direct SQL** via a dedicated `pg` Pool connection (bypassing pgbouncer) to ensure `SET ivfflat.probes` persists on the same connection as the vector query.
 
 ---
 
@@ -231,31 +240,54 @@ The same model is used at query time to embed the user's question, producing a c
 
 ---
 
-## Top-K Retrieval
+## Hybrid Retrieval
 
-**Default:** `topK = 15`
+**Default:** `topK = 12` per search method
 
-When a user sends a message, the query is embedded and compared against all stored chunk vectors using cosine similarity via Supabase's `match_documents` RPC function. The **15 most similar chunks** are returned.
+The retrieval pipeline uses three techniques combined:
+
+### 1. Query Rewriting (LLM)
+
+Short or vague queries (**8 words or fewer**) — such as "tell me more" or "explain that" — are rewritten by the LLM into a dense, self-contained search query before embedding. The rewriter receives the **last 2 conversation turns** for context so it can expand follow-up questions accurately.
+
+- Longer, specific questions skip rewriting entirely to save latency.
+- The rewrite runs **in parallel** with the file-list database lookup, so it adds no extra wall-clock time to the critical path.
+
+### 2. Vector Similarity Search
+
+The (potentially rewritten) query is embedded with `nomic-embed-text` and compared against all stored chunk vectors using **cosine similarity** via direct SQL on a dedicated `pg` Pool connection. The **12 most similar chunks** are returned.
+
+The dedicated Pool uses `DIRECT_URL` (bypassing pgbouncer) because:
+
+- `SET ivfflat.probes = 100` must persist on the same connection as the `SELECT`. Pgbouncer routes each statement to a different backend, silently resetting session-level settings.
+- 768-dimensional vector literals produce ~19 KB SQL strings that can exceed pgbouncer's default packet limits.
+
+### 3. Keyword (Full-Text) Search
+
+PostgreSQL `tsvector` full-text search matches **exact terms** in chunk content. This catches proper nouns, brand names, and specific figures that may not cluster well in vector space (e.g. "Pemmerations", "JGA", "$5M–$20M").
+
+Keyword results are assigned a fixed similarity score of `0.5` (lower than vector matches) so vector results rank higher when both methods return the same chunk.
+
+### Merge and Deduplication
+
+Results from both searches are merged and deduplicated by content — if the same chunk appears in both result sets, the higher similarity score is kept. The final list is sorted by descending similarity.
+
+### Document Index
+
+A synthetic **document index** entry (list of all file names belonging to the organisation) is prepended to the context on every request. This ensures the model always knows what documents exist, even if no chunks from a particular file scored high enough to appear in the results.
 
 ### Organisation-scoped retrieval (tenant isolation)
 
 Tenant isolation is enforced at **two layers**:
 
 **Layer 1 — Middleware (`requireOrgAccess`):** Before any chat logic runs, the `requireOrgAccess("body")` middleware checks the authenticated user's role:
+
 - **`admin` / `super_admin`**: Cross-org access allowed — `orgIds` from the request body is passed through as-is.
 - **`org_executive` / `org_staff`**: The middleware looks up the user's `org_id` from the database (via their Clerk `clerk_id`) and **force-overrides** `req.body.orgIds` with that value. Any client-supplied `orgIds` is ignored.
 
 This prevents non-admin users from querying documents or business data belonging to other organisations.
 
-**Layer 2 — Database (`filter_org_ids`):** Every document chunk is associated with an organisation via the `org_id` column on `document_embeddings`. The `match_documents` RPC accepts a `filter_org_ids` parameter (UUID array) that enforces tenant isolation at the database level — only chunks belonging to the specified organisation(s) are searched. Passing `NULL` searches all organisations (admin use).
-
-The chat controller passes the (middleware-validated) `orgIds` through to the RAG service, which normalises the value and forwards it to the RPC. This ensures users only see answers grounded in their own organisation's documents.
-
-### Document coverage guarantee
-
-After the top-K search, the system checks which files (scoped to the same organisation) have **no chunks** in the results. For any missing file, it fetches at least 1 chunk directly from `document_embeddings` regardless of similarity score. This ensures the model always has content from every document in the organisation's knowledge base, even for queries that are semantically unrelated to a particular file.
-
-Additionally, a **document index** (list of all file names belonging to the organisation) is prepended to the context on every request, so the model always knows what documents exist.
+**Layer 2 — Database (`org_id` filter):** Every document chunk is associated with an organisation via the `org_id` column on `document_embeddings`. Both vector and keyword queries include a `WHERE org_id = ANY(...)` clause when `orgIds` are specified, enforcing tenant isolation at the database level. Passing `NULL` searches all organisations (admin use).
 
 ---
 
@@ -277,9 +309,12 @@ Supabase pgvector uses the `<=>` operator for cosine distance. The `match_docume
 ## Memory (Conversation History)
 
 **Type:** Short-term, client-side
-**Window:** Last **10 conversation turns**
+**Window:** Last **5 conversation turns** (agent context) / last **2 turns** (query rewriting)
 
-The frontend sends the full conversation history with each request in the `history` array. The backend trims this to the most recent 10 turns and injects them into the LLM messages array between the system prompt and the current user message.
+The frontend sends the full conversation history with each request in the `history` array. The backend uses this in two places:
+
+- **Agent context:** Trimmed to the most recent **5 turns** and injected into the LLM messages array between the system prompt and the current user message.
+- **Query rewriting:** The last **2 turns** are passed to the query rewriter so it can expand vague follow-up questions (e.g. "tell me more") into self-contained search queries.
 
 ```
 [System Prompt + Business Data (KPIs & VTO) + Retrieved Docs]
@@ -352,9 +387,12 @@ User Message
      │
      ├────────────────────────────┬────────────────────────────┐
      ▓                            ▓                            ▓
-[Intent Router]          [Document Retrieval]       [Business Data Service]
-qwen3.5:9b, temp=0       pgvector top-15 chunks     DB queries (no LLM call)
-→ ["summarize","predict"] → relevant document text   → KPI snapshots + VTO data
+[Intent Router]          [Hybrid Document Retrieval]  [Business Data Service]
+qwen3.5:9b, temp=0       ┌─ Query Rewrite (LLM,      DB queries (no LLM call)
+→ ["summarize","predict"]  │  ≤8 words only)           → KPI snapshots + VTO data
+                           ├─ Vector Search (top-12)
+                           ├─ Keyword Search (tsvector)
+                           └─ Merge + Deduplicate
      │                            │                            │
      └──────────┬─────────────────┴────────────────────────────┘
                 ▓
@@ -382,11 +420,12 @@ qwen3.5:9b, temp=0       pgvector top-15 chunks     DB queries (no LLM call)
 
 | Scenario | Total LLM calls | Model used |
 |---|---|---|
-| Single intent (e.g. `qa`) | 3 | 3× qwen3.5:9b |
-| Two intents (e.g. `summarize + predict`) | 4 | 4× qwen3.5:9b |
-| Three intents | 5 | 5× qwen3.5:9b |
+| Single intent, long query (no rewrite) | 3 | 3× qwen3.5:9b |
+| Single intent, short query (with rewrite) | 4 | 4× qwen3.5:9b |
+| Two intents, long query | 4 | 4× qwen3.5:9b |
+| Two intents, short query (with rewrite) | 5 | 5× qwen3.5:9b |
 
-All calls go to the local Ollama server — zero external API calls.
+Query rewriting adds 1 LLM call only for short/vague queries (≤ 8 words). All calls go to the local Ollama server — zero external API calls.
 
 ---
 
@@ -435,7 +474,7 @@ maural-kms-api/
 │   ├── chat.controller.js       # Orchestration — streaming + JSON endpoints
 │   └── ingest.controller.js     # Document ingestion pipeline (Supabase Storage)
 ├── services/
-│   ├── ragService.js            # Document retrieval + prompt construction
+│   ├── ragService.js            # Hybrid retrieval (vector + keyword + query rewrite) + prompt construction
 │   ├── businessDataService.js   # KPI + VTO data fetching and formatting for chat context
 │   ├── intentRouter.js          # Multi-intent detection (qwen3.5:9b, local)
 │   ├── promptTemplates.js       # Per-intent system prompts
@@ -445,6 +484,9 @@ maural-kms-api/
 ├── scripts/
 │   └── ingest-local.js          # Local ingestion script (reads from uploads/ folder)
 ├── lib/
-│   └── prisma.js                # Prisma singleton
+│   ├── prisma.js                # Prisma singleton (uses DATABASE_URL via pgbouncer)
+│   └── prismaVector.js          # Dedicated Prisma client using DIRECT_URL (bypasses pgbouncer for vector queries)
+├── docs/
+│   └── ai-pipeline-architecture.md  # Pipeline architecture diagram and model assignment guide
 └── uploads/                     # Temporary Multer upload directory (gitignored)
 ```

@@ -472,7 +472,7 @@ describe("Invitation Controller - Unit Tests", () => {
 
     test("org_executive can revoke own org invitation", async () => {
       const invitation = { ...MOCK_INVITATION, publicMetadata: { role: "org_staff", org_id: "a1b2c3d4-uuid" } };
-      clerkClient.invitations.getInvitation.mockResolvedValue(invitation);
+      clerkClient.invitations.getInvitationList.mockResolvedValue({ data: [invitation] });
       clerkClient.invitations.revokeInvitation.mockResolvedValue({ ...invitation, status: "revoked" });
       prisma.user.findUnique.mockResolvedValue({ org_id: "a1b2c3d4-uuid" });
 
@@ -489,7 +489,7 @@ describe("Invitation Controller - Unit Tests", () => {
 
     test("org_executive cannot revoke another org invitation", async () => {
       const invitation = { ...MOCK_INVITATION, publicMetadata: { role: "org_staff", org_id: "other-org-uuid" } };
-      clerkClient.invitations.getInvitation.mockResolvedValue(invitation);
+      clerkClient.invitations.getInvitationList.mockResolvedValue({ data: [invitation] });
       prisma.user.findUnique.mockResolvedValue({ org_id: "a1b2c3d4-uuid" });
 
       const req = { params: { invitationId: "inv_abc123" }, auth: mockAuth("org_executive") };

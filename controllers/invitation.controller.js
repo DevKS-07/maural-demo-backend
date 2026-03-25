@@ -184,13 +184,18 @@ exports.revokeInvitation = async (req, res) => {
   try {
     // Org Executives can only revoke invitations for their own organisation
     if (userRole === "org_executive") {
-      const [user, invitation] = await Promise.all([
+      const [user, invitationList] = await Promise.all([
         prisma.user.findUnique({
           where: { clerk_id: clerkId },
           select: { org_id: true },
         }),
-        clerkClient.invitations.getInvitation(invitationId),
+        clerkClient.invitations.getInvitationList(),
       ]);
+
+      const invitation = invitationList.data.find((inv) => inv.id === invitationId);
+      if (!invitation) {
+        return res.status(404).json({ message: `Invitation with ID ${invitationId} not found` });
+      }
 
       if (!user?.org_id) {
         return res.status(403).json({ message: "You are not assigned to any organisation" });

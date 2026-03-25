@@ -22,7 +22,13 @@ exports.orgTesting = (req, res) => {
  * */
 exports.getAllOrgs = async (req, res) => {
   try {
-    const orgs = await prisma.organisation.findMany();
+    const orgs = await prisma.organisation.findMany({
+      include: {
+        KeyContact: {
+          include: { User: { select: { user_id: true, first_name: true, last_name: true, email: true, job_title: true } } },
+        },
+      },
+    });
     res.status(200).json(orgs);
   } catch (error) {
     console.error("Failed to retrieve organisations:", error.message);
@@ -41,6 +47,11 @@ exports.getOrgById = async (req, res) => {
   try {
     const org = await prisma.organisation.findUnique({
       where: { org_id: orgId },
+      include: {
+        KeyContact: {
+          include: { User: { select: { user_id: true, first_name: true, last_name: true, email: true, job_title: true } } },
+        },
+      },
     });
     if (!org) {
       return res
@@ -65,11 +76,59 @@ exports.getOrgUsers = async (req, res) => {
   try {
     const users = await prisma.user.findMany({
       where: { org_id: orgId },
+      include: {
+        Role: { select: { role_name: true } },
+        Manager: { select: { user_id: true, first_name: true, last_name: true } },
+      },
     });
     res.status(200).json(users);
   } catch (error) {
     console.error("Failed to retrieve organisation users:", error.message);
     res.status(500).json({ message: "Failed to retrieve organisation users" });
+  }
+};
+
+/**
+ * Get the organisation chart as a nested tree of users
+ * @route GET /org/:orgId/chart
+ * @param {string} req.params.orgId - The UUID of the organisation
+ * @returns {array} - A nested tree of user objects (roots have no manager)
+ * */
+exports.getOrgChart = async (req, res) => {
+  const { orgId } = req.params;
+  try {
+    const users = await prisma.user.findMany({
+      where: { org_id: orgId },
+      select: {
+        user_id: true,
+        first_name: true,
+        last_name: true,
+        email: true,
+        job_title: true,
+        reports_to: true,
+        Role: { select: { role_name: true } },
+      },
+    });
+
+    // Build a lookup map and assemble the tree
+    const map = new Map();
+    for (const u of users) {
+      map.set(u.user_id, { ...u, direct_reports: [] });
+    }
+
+    const roots = [];
+    for (const node of map.values()) {
+      if (node.reports_to && map.has(node.reports_to)) {
+        map.get(node.reports_to).direct_reports.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+
+    res.status(200).json(roots);
+  } catch (error) {
+    console.error("Failed to retrieve organisation chart:", error.message);
+    res.status(500).json({ message: "Failed to retrieve organisation chart" });
   }
 };
 
@@ -101,9 +160,7 @@ exports.getOrgFiles = async (req, res) => {
  * @param {string} req.body.org_name - The name of the organisation (required)
  * @param {string} req.body.industry - The industry the organisation operates in
  * @param {string} req.body.founded - The founding date of the organisation (ISO date string)
- * @param {number} req.body.key_contacts - User ID of the key contact person
  * @param {string} req.body.company_location - Physical location of the organisation
- * @param {string} req.body.organization_chart - URL or description of the org chart
  * @param {string} req.body.gpt_types - GPT configuration types for the organisation
  * @returns {object} - The newly created organisation object
  * */
@@ -114,7 +171,6 @@ exports.createOrg = async (req, res) => {
     founded,
     key_contacts,
     company_location,
-    organization_chart,
     gpt_types,
   } = req.body;
 
@@ -128,10 +184,20 @@ exports.createOrg = async (req, res) => {
         org_name,
         industry,
         founded: founded ? new Date(founded) : undefined,
-        key_contacts: key_contacts ? BigInt(key_contacts) : undefined,
         company_location,
-        organization_chart,
         gpt_types,
+        ...(Array.isArray(key_contacts) && key_contacts.length > 0
+          ? {
+              KeyContact: {
+                create: key_contacts.map((uid) => ({ user_id: BigInt(uid) })),
+              },
+            }
+          : {}),
+      },
+      include: {
+        KeyContact: {
+          include: { User: { select: { user_id: true, first_name: true, last_name: true, email: true, job_title: true } } },
+        },
       },
     });
 
@@ -169,9 +235,8 @@ exports.createOrg = async (req, res) => {
  * @param {string} req.body.org_name - Updated organisation name
  * @param {string} req.body.industry - Updated industry
  * @param {string} req.body.founded - Updated founding date (ISO date string)
- * @param {number} req.body.key_contacts - Updated key contact user ID
+ * @param {array}  req.body.key_contacts - Array of user IDs to set as key contacts
  * @param {string} req.body.company_location - Updated company location
- * @param {string} req.body.organization_chart - Updated org chart
  * @param {string} req.body.gpt_types - Updated GPT types
  * @returns {object} - The updated organisation object
  * */
@@ -183,7 +248,6 @@ exports.updateOrg = async (req, res) => {
     founded,
     key_contacts,
     company_location,
-    organization_chart,
     gpt_types,
   } = req.body;
 
@@ -194,10 +258,21 @@ exports.updateOrg = async (req, res) => {
         org_name,
         industry,
         founded: founded ? new Date(founded) : undefined,
-        key_contacts: key_contacts ? BigInt(key_contacts) : undefined,
         company_location,
-        organization_chart,
         gpt_types,
+        ...(Array.isArray(key_contacts)
+          ? {
+              KeyContact: {
+                deleteMany: {},
+                create: key_contacts.map((uid) => ({ user_id: BigInt(uid) })),
+              },
+            }
+          : {}),
+      },
+      include: {
+        KeyContact: {
+          include: { User: { select: { user_id: true, first_name: true, last_name: true, email: true, job_title: true } } },
+        },
       },
     });
     res.status(200).json(updatedOrg);

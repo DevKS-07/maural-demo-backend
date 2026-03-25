@@ -303,13 +303,15 @@ Returns the organisation of the currently authenticated user.
   "org_name": "Acme Corp",
   "industry": "Technology",
   "founded": "2010-01-15T00:00:00.000Z",
-  "key_contacts": "5",
   "company_location": "New York, NY",
   "storage_bucket": "b2c3d4e5-...",
   "hubspot_connected": true,
   "quickbooks_connected": false,
   "monday_connected": true,
-  "clickup_connected": false
+  "clickup_connected": false,
+  "KeyContact": [
+    { "org_id": "a1b2c3d4-...", "user_id": "5", "User": { "user_id": "5", "first_name": "Jane", "last_name": "Doe", "email": "jane@acme.com", "job_title": "COO" } }
+  ]
 }
 ```
 
@@ -638,6 +640,7 @@ Updates an existing user. Users are created exclusively via Clerk webhook (`user
 | `gender` | `string` | No | Gender |
 | `status` | `string` | No | Account status |
 | `job_title` | `string` | No | Job title |
+| `reports_to` | `BigInt` | No | User ID of this user's manager (set to `null` to clear) |
 
 **Response `200 OK`** — The updated User object
 
@@ -698,15 +701,20 @@ Returns all organisations in the system.
     "org_name": "Acme Corp",
     "industry": "Technology",
     "founded": "2010-01-15T00:00:00.000Z",
-    "key_contacts": "5",
     "company_location": "New York, NY",
-    "organization_chart": "https://...",
     "gpt_types": "general",
     "storage_bucket": "b2c3d4e5-...",
     "hubspot_connected": true,
     "quickbooks_connected": false,
     "monday_connected": false,
-    "clickup_connected": false
+    "clickup_connected": false,
+    "KeyContact": [
+      {
+        "org_id": "a1b2c3d4-...",
+        "user_id": "5",
+        "User": { "user_id": "5", "first_name": "Jane", "last_name": "Doe", "email": "jane@acme.com", "job_title": "COO" }
+      }
+    ]
   }
 ]
 ```
@@ -743,7 +751,34 @@ Returns all users belonging to an organisation.
 |---|---|---|
 | `orgId` | `string` (UUID) | The organisation's ID |
 
-**Response `200 OK`** — Array of User objects
+**Response `200 OK`** — Array of User objects (includes `Role` and `Manager` info)
+
+```json
+[
+  {
+    "user_id": "1",
+    "first_name": "Jane",
+    "last_name": "Doe",
+    "email": "jane@example.com",
+    "org_id": "a1b2c3d4-...",
+    "job_title": "COO",
+    "reports_to": null,
+    "Role": { "role_name": "Org Executive" },
+    "Manager": null
+  },
+  {
+    "user_id": "2",
+    "first_name": "John",
+    "last_name": "Smith",
+    "email": "john@example.com",
+    "org_id": "a1b2c3d4-...",
+    "job_title": "Developer",
+    "reports_to": "1",
+    "Role": { "role_name": "Org Staff" },
+    "Manager": { "user_id": "1", "first_name": "Jane", "last_name": "Doe" }
+  }
+]
+```
 
 ---
 
@@ -763,6 +798,48 @@ Returns all files belonging to an organisation.
 
 ---
 
+#### `GET /api/org/:orgId/chart`
+
+Returns the organisation chart as a nested tree of users. Each root node represents a top-level employee (no manager), with `direct_reports` arrays containing their subordinates recursively.
+
+**Auth:** Required
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `orgId` | `string` (UUID) | The organisation's ID |
+
+**Response `200 OK`**
+
+```json
+[
+  {
+    "user_id": "1",
+    "first_name": "Jane",
+    "last_name": "Doe",
+    "email": "jane@example.com",
+    "job_title": "CEO",
+    "reports_to": null,
+    "Role": { "role_name": "Org Executive" },
+    "direct_reports": [
+      {
+        "user_id": "2",
+        "first_name": "John",
+        "last_name": "Smith",
+        "email": "john@example.com",
+        "job_title": "CTO",
+        "reports_to": "1",
+        "Role": { "role_name": "Org Staff" },
+        "direct_reports": []
+      }
+    ]
+  }
+]
+```
+
+---
+
 #### `POST /api/org/`
 
 Creates a new organisation.
@@ -776,9 +853,8 @@ Creates a new organisation.
 | `org_name` | `string` | Yes | Organisation/company name |
 | `industry` | `string` | No | Industry sector |
 | `founded` | `string` (ISO date) | No | Date founded |
-| `key_contacts` | `BigInt` | No | Primary contact user ID |
+| `key_contacts` | `BigInt[]` (array) | No | Array of user IDs to set as key contacts |
 | `company_location` | `string` | No | Headquarters location |
-| `organization_chart` | `string` | No | URL to org chart |
 | `gpt_types` | `string` | No | AI model preferences |
 
 **Response `201 Created`** — The created Organisation object. A dedicated Supabase storage bucket is automatically created using the organisation's `storage_bucket` UUID.
@@ -863,8 +939,11 @@ Returns metadata for all documents.
     "ctg_id": "1",
     "org_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "user_id": "1",
-    "created_at": "2026-03-01T12:00:00.000Z",
-    "updated_at": "2026-03-01T12:00:00.000Z"
+    "uploaded_at": "2026-03-01T12:00:00.000Z",
+    "User": {
+      "first_name": "Jane",
+      "last_name": "Doe"
+    }
   }
 ]
 ```
@@ -895,9 +974,14 @@ Returns all documents in a specific category.
     "ctg_id": "1",
     "org_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "user_id": "1",
+    "uploaded_at": "2026-03-01T12:00:00.000Z",
     "Category": {
       "ctg_id": "1",
       "ctg_name": "Financial Reports"
+    },
+    "User": {
+      "first_name": "Jane",
+      "last_name": "Doe"
     }
   }
 ]
@@ -2223,9 +2307,10 @@ Manually update the labor KPI source configuration. Overrides the auto-detected 
 | `role_id` | `BigInt?` (FK → Role) | Assigned role |
 | `org_id` | `String?` (FK → Organisation, UUID) | Associated organisation |
 | `job_title` | `String?` | Job title |
+| `reports_to` | `BigInt?` (FK → User) | Manager's user ID (self-referential) |
 | `last_login` | `DateTime?` | Last login timestamp |
 
-**Relations:** `Role`, `Organisation`, `File[]`
+**Relations:** `Role`, `Organisation`, `File[]`, `Manager` (User), `DirectReports` (User[]), `KeyContact[]`
 
 ---
 
@@ -2237,9 +2322,7 @@ Manually update the labor KPI source configuration. Overrides the auto-detected 
 | `org_name` | `String` | Company name |
 | `industry` | `String?` | Industry sector |
 | `founded` | `DateTime?` | Date founded |
-| `key_contacts` | `BigInt?` | Primary contact user ID |
 | `company_location` | `String?` | Headquarters |
-| `organization_chart` | `String?` | Org chart URL |
 | `gpt_types` | `String?` | AI model preferences |
 | `storage_bucket` | `String` (UUID) | Auto-generated Supabase storage bucket ID (a dedicated bucket is created per org) |
 | `hubspot_connected` | `Boolean` | HubSpot integration connected |
@@ -2251,7 +2334,7 @@ Manually update the labor KPI source configuration. Overrides the auto-detected 
 | `clickupWorkspaceId` | `String?` | ClickUp workspace ID used for labor KPI fetching |
 | `is_platform` | `Boolean` | Marks the platform org (Maural Solutions) — used for admin auto-assignment |
 
-**Relations:** `User[]`, `File[]`, `FinanceKpi[]`, `LeadsKpi[]`, `LaborKpi[]`, `VTO?`, `HubspotToken`, `QuickbooksToken`, `MondayToken`, `ClickUpToken`, `document_embeddings[]`
+**Relations:** `User[]`, `File[]`, `KeyContact[]`, `FinanceKpi[]`, `LeadsKpi[]`, `LaborKpi[]`, `VTO?`, `HubspotToken`, `QuickbooksToken`, `MondayToken`, `ClickUpToken`, `document_embeddings[]`
 
 ---
 
@@ -2266,8 +2349,7 @@ Manually update the labor KPI source configuration. Overrides the auto-detected 
 | `ctg_id` | `BigInt?` (FK → Category) | Category |
 | `org_id` | `String?` (FK → Organisation, UUID) | Owning organisation |
 | `user_id` | `BigInt?` (FK → User) | Uploader |
-| `created_at` | `DateTime` | Upload timestamp |
-| `updated_at` | `DateTime` | Last modified timestamp |
+| `uploaded_at` | `DateTime` | Upload timestamp (auto-set on creation) |
 
 **Relations:** `Category`, `Organisation`, `User`
 
@@ -2342,6 +2424,19 @@ Manually update the labor KPI source configuration. Overrides the auto-detected 
 | `permission_id` | `BigInt` (PK, FK → Permission) | Permission |
 
 **Composite Primary Key:** (`role_id`, `permission_id`)
+
+---
+
+### KeyContact
+
+| Field | Type | Description |
+|---|---|---|
+| `org_id` | `String` (PK, FK → Organisation, UUID) | Organisation |
+| `user_id` | `BigInt` (PK, FK → User) | Key contact user |
+
+**Composite Primary Key:** (`org_id`, `user_id`)
+
+**Relations:** `Organisation`, `User`
 
 ---
 

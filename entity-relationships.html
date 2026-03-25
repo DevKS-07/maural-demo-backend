@@ -164,7 +164,7 @@
     <div class="entity-card">
         <h3>Organisation (Tenant) <span class="entity-badge badge-core">Core Entity</span></h3>
         <p>
-            An <strong>Organisation</strong> represents a distinct organisation that Maural Solutions serves. In multi-tenant terminology, each Organisation is a <strong>tenant</strong>. Examples might be "Acme Corp," "Greenfield Industries," or "Lakewood Medical Group." Each Organisation record stores the organisation's profile information — its name (<code>org_name</code>), industry, founding date, key contacts, location, and organizational chart reference.
+            An <strong>Organisation</strong> represents a distinct organisation that Maural Solutions serves. In multi-tenant terminology, each Organisation is a <strong>tenant</strong>. Examples might be "Acme Corp," "Greenfield Industries," or "Lakewood Medical Group." Each Organisation record stores the organisation's profile information — its name (<code>org_name</code>), industry, founding date, location, and designated key contacts (staff or executives who serve as primary points of contact).
         </p>
         <p>
             Critically, each Organisation is assigned its own <strong>storage bucket</strong> (a UUID-identified container in Supabase Storage). This is the tenant isolation boundary for documents: all files belonging to an organisation are stored in that organisation's bucket, and the system enforces that users from one organisation can never access another organisation's bucket. The Organisation entity is the <strong>anchor point</strong> of the entire data model — Users belong to an Organisation, Files belong to an Organisation, and KPI data (financial, leads, labor) is scoped to an Organisation.
@@ -173,7 +173,7 @@
             The <code>gpt_types</code> field indicates which AI/chatbot capabilities have been enabled for that organisation, allowing Maural to customize the AI experience per organisation. Additionally, boolean flags (<code>hubspot_connected</code>, <code>quickbooks_connected</code>, <code>monday_connected</code>, <code>clickup_connected</code>) track which external integrations have been connected for this organisation. The <code>laborSource</code> field (<code>"monday"</code> or <code>"clickup"</code>) determines which integration is used for labor KPI data, along with <code>mondayBoardId</code> or <code>clickupWorkspaceId</code> to identify the specific board/workspace to query. These fields are auto-detected during OAuth connection and can be overridden via the labor config API.
         </p>
         <div class="relationship-list">
-            <p><strong>Has many:</strong> Users, Files, FinanceKpis, LeadsKpis, LaborKpis, document_embeddings</p>
+            <p><strong>Has many:</strong> Users, KeyContacts, Files, FinanceKpis, LeadsKpis, LaborKpis, document_embeddings</p>
             <p><strong>Has one:</strong> VTO (strategic plan — vision, values, goals)</p>
             <p><strong>Has one (per service):</strong> HubspotToken, QuickbooksToken, MondayToken, ClickUpToken</p>
             <p><strong>Business meaning:</strong> "This is one of the companies we serve."</p>
@@ -192,11 +192,31 @@
         <p>
             Each User is assigned exactly one <strong>Role</strong>, which determines what they can see and do within the platform. Users can also upload Files, and the system tracks who uploaded each document.
         </p>
+        <p>
+            Users can optionally have a <strong>reports_to</strong> relationship pointing to another User within the same organisation, forming a <strong>management hierarchy</strong>. This self-referential relationship powers the organisation chart — the API can return the full tree structure by following the chain of <code>reports_to</code> references. Users with no manager are the root nodes (typically executives), and their direct reports branch out below them.
+        </p>
         <div class="relationship-list">
             <p><strong>Belongs to:</strong> Organisation (optional — null for Maural staff), Role</p>
-            <p><strong>Has many:</strong> Files (uploaded by this user)</p>
+            <p><strong>Reports to:</strong> User (optional — self-referential manager relationship for org chart)</p>
+            <p><strong>Has many:</strong> Files (uploaded by this user), DirectReports (users who report to this user), KeyContact entries</p>
             <p><strong>Linked to:</strong> Clerk (external auth provider) via <code>clerk_id</code></p>
             <p><strong>Business meaning:</strong> "This is a person who uses the platform."</p>
+        </div>
+    </div>
+
+    <!-- KEY CONTACT -->
+    <div class="entity-card">
+        <h3>KeyContact <span class="entity-badge badge-core">Core Entity</span></h3>
+        <p>
+            A <strong>KeyContact</strong> is a junction entity that designates specific users as <strong>primary points of contact</strong> for an organisation. These are the people — whether staff or executives — whom Maural Solutions or external stakeholders should reach out to first when interacting with that organisation. An organisation can have multiple key contacts, and a user can be a key contact for their organisation.
+        </p>
+        <p>
+            This replaces the earlier single-integer <code>key_contacts</code> field with a proper many-to-many relationship, allowing organisations to designate as many contact people as needed, each linked to a full User profile with name, email, and job title.
+        </p>
+        <div class="relationship-list">
+            <p><strong>Bridges:</strong> Organisation ↔ User (many-to-many)</p>
+            <p><strong>Composite PK:</strong> (<code>org_id</code>, <code>user_id</code>)</p>
+            <p><strong>Business meaning:</strong> "These are the go-to people for this organisation."</p>
         </div>
     </div>
 
@@ -276,7 +296,7 @@
             Each File record stores metadata: the file name, file size, and <code>file_source</code> (where it came from — e.g., direct upload, a HubSpot integration, a QuickBooks export). The actual file content is stored in <strong>Supabase Storage</strong> within the owning Organisation's dedicated storage bucket — the database only holds the metadata and the reference, not the binary content itself.
         </p>
         <p>
-            Files are <strong>categorized</strong> (linked to a Category) for organizational purposes, and the system tracks <strong>who uploaded them</strong> (linked to a User). When a file is uploaded, the <strong>ingestion pipeline</strong> processes it: extracting text content, generating vector embeddings via Ollama, and storing those embeddings in the <code>document_embeddings</code> table so the AI chatbot can later retrieve relevant documents during a conversation.
+            Files are <strong>categorized</strong> (linked to a Category) for organizational purposes, and the system tracks <strong>who uploaded them</strong> (linked to a User) along with an <code>uploaded_at</code> timestamp that is automatically set on creation. When a file is uploaded, the <strong>ingestion pipeline</strong> processes it: extracting text content, generating vector embeddings via Ollama, and storing those embeddings in the <code>document_embeddings</code> table so the AI chatbot can later retrieve relevant documents during a conversation.
         </p>
         <div class="relationship-list">
             <p><strong>Belongs to:</strong> Organisation (tenant ownership), Category (organizational), User (uploader)</p>
@@ -518,9 +538,12 @@
             <tr><td>Organisation</td><td>LaborKpi</td><td>One-to-Many</td><td>An organisation has workforce metrics across multiple time periods</td></tr>
             <tr><td>Organisation</td><td>document_embeddings</td><td>One-to-Many</td><td>An organisation's ingested document chunks are scoped for tenant-isolated AI search (CASCADE delete)</td></tr>
             <tr><td>Organisation</td><td>OAuth Tokens</td><td>One-to-One (per service)</td><td>An organisation has one set of credentials per connected external service</td></tr>
+            <tr><td>Organisation</td><td>KeyContact</td><td>One-to-Many</td><td>An organisation designates specific users as primary points of contact</td></tr>
             <tr><td>User</td><td>Organisation</td><td>Many-to-One (optional)</td><td>A user belongs to one organisation (or none, if Maural staff)</td></tr>
             <tr><td>User</td><td>Role</td><td>Many-to-One</td><td>A user is assigned one role that determines their access level</td></tr>
             <tr><td>User</td><td>File</td><td>One-to-Many</td><td>A user can upload multiple documents</td></tr>
+            <tr><td>User</td><td>User (self)</td><td>Many-to-One (optional)</td><td>A user reports to one manager, forming the organisation chart hierarchy</td></tr>
+            <tr><td>User</td><td>KeyContact</td><td>One-to-Many</td><td>A user can be designated as a key contact for their organisation</td></tr>
             <tr><td>Role</td><td>Permission</td><td>Many-to-Many (via RolePermission)</td><td>A role bundles multiple permissions; a permission can belong to multiple roles</td></tr>
             <tr><td>File</td><td>Category</td><td>Many-to-One</td><td>A file is classified under one category (e.g., "Financial")</td></tr>
             <tr><td>Organisation</td><td>VTO</td><td>One-to-One</td><td>An organisation has one strategic plan (vision, values, goals) used by the AI chatbot</td></tr>

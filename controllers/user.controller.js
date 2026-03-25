@@ -160,7 +160,7 @@ exports.getUserPermissions = async (req, res) => {
  * */
 exports.updateUser = async (req, res) => {
   const { userId } = req.params;
-  const { first_name, last_name, email, org_id, role_id, phone, gender, status, job_title } = req.body;
+  const { first_name, last_name, email, org_id, role_id, phone, gender, status, job_title, reports_to } = req.body;
 
   try {
     const updatedUser = await prisma.user.update({
@@ -175,6 +175,7 @@ exports.updateUser = async (req, res) => {
         job_title,
         org_id: org_id || undefined,
         role_id: role_id ? BigInt(role_id) : undefined,
+        reports_to: reports_to !== undefined ? (reports_to ? BigInt(reports_to) : null) : undefined,
       },
     });
     res.status(200).json(updatedUser);

@@ -12,9 +12,7 @@ model Organisation {
     org_name           String
     industry           String?
     founded            DateTime? @db.Date
-    key_contacts       BigInt?
     company_location   String?
-    organization_chart String?
     gpt_types          String?
     storage_bucket     String    @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 
@@ -33,6 +31,7 @@ model Organisation {
     clickup_connected    Boolean @default(false)
 
     User               User[]
+    KeyContact         KeyContact[]
     File               File[]
     financeKpis        FinanceKpi[]
     leadsKpis          LeadsKpi[]
@@ -61,6 +60,7 @@ model File {
     ctg_id       BigInt? // Document category FK → Category (e.g. legal, financial, hr)
     org_id       String?       @db.Uuid // Which organisation owns this file (FK → Organisation)
     user_id      BigInt? // Which user uploaded it (FK → User)
+    uploaded_at  DateTime      @default(now()) @db.Timestamptz(6)
     Category     Category?     @relation(fields: [ctg_id], references: [ctg_id])
     Organisation Organisation? @relation(fields: [org_id], references: [org_id])
     User         User?         @relation(fields: [user_id], references: [user_id])
@@ -95,9 +95,23 @@ model User {
     job_title    String?
     last_login   DateTime?     @db.Timestamp(6)
     user_id      BigInt        @id @unique @default(autoincrement())
+    reports_to   BigInt?
     File         File[]
+    KeyContact   KeyContact[]
     Organisation Organisation? @relation(fields: [org_id], references: [org_id], onDelete: SetNull)
     Role         Role?         @relation(fields: [role_id], references: [role_id])
+    Manager      User?         @relation("OrgChart", fields: [reports_to], references: [user_id])
+    DirectReports User[]       @relation("OrgChart")
+}
+
+model KeyContact {
+    org_id       String       @db.Uuid
+    user_id      BigInt
+    Organisation Organisation @relation(fields: [org_id], references: [org_id], onDelete: Cascade)
+    User         User         @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+    @@id([org_id, user_id])
+    @@map("key_contacts")
 }
 
 model HubspotToken {

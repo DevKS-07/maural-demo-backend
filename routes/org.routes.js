@@ -16,6 +16,8 @@ router.get("/:orgId/users", orgController.getOrgUsers); // Get all users belongi
 
 router.get("/:orgId/files", orgController.getOrgFiles); // Get all files/documents of an organisation
 
+router.get("/:orgId/chart", orgController.getOrgChart); // Get the organisation chart as a nested tree
+
 // **************************  POST ROUTES **************************
 
 router.post("/", orgController.createOrg); // Register/create a new organisation

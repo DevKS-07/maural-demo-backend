@@ -22,7 +22,9 @@ exports.docs_Testing = (req, res) => {
  * */
 exports.getAllDocuments = async (req, res) => {
   try {
-    const documents = await prisma.file.findMany();
+    const documents = await prisma.file.findMany({
+      include: { User: { select: { first_name: true, last_name: true } } },
+    });
     res.status(200).json(documents);
   } catch (error) {
     console.error("Failed to retrieve documents:", error.message);
@@ -41,7 +43,10 @@ exports.getDocumentsByCategory = async (req, res) => {
   try {
     const documents = await prisma.file.findMany({
       where: { ctg_id: BigInt(ctgId) },
-      include: { Category: true },
+      include: {
+        Category: true,
+        User: { select: { first_name: true, last_name: true } },
+      },
     });
     res.status(200).json(documents);
   } catch (_error) {
