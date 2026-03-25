@@ -145,7 +145,7 @@ async function orchestrate(message, orgIds, history) {
   // Step 1 — intent detection, document retrieval, and business data all in parallel
   const [intents, docs, businessData] = await Promise.all([
     detectIntents(message),
-    retrieveDocuments(message, orgIds, 5),
+    retrieveDocuments(message, orgIds, 12, history),
     getBusinessContext(orgIds),
   ]);
   console.log(`[chat][timing] Step 1 (intent + retrieval + biz): ${Date.now() - t0}ms`);

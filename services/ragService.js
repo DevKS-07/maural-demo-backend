@@ -21,11 +21,47 @@
  *   ctg_id can be used to further narrow results to a specific document category.
  */
 
-const { OllamaEmbeddings } = require("@langchain/ollama");
+const { OllamaEmbeddings, ChatOllama } = require("@langchain/ollama");
+const { HumanMessage, SystemMessage } = require("@langchain/core/messages");
+const { Pool } = require("pg");
 const prisma = require("../lib/prisma");
-const { getSupabase } = require("../lib/supabase");
-const { OLLAMA_BASE_URL, OLLAMA_EMBED_MODEL } = require("../config/env");
+
+const { OLLAMA_BASE_URL, OLLAMA_EMBED_MODEL, OLLAMA_CHAT_MODEL, DIRECT_URL } = require("../config/env");
 const { getOllamaHeaders } = require("../config/ollama");
+
+// ---------------------------------------------------------------------------
+// Dedicated pg Pool for vector queries.
+// Uses DIRECT_URL (no pgbouncer) so that SET ivfflat.probes persists on the
+// same connection — pgbouncer routes each statement to a different backend,
+// making session-level SET ineffective.
+// ---------------------------------------------------------------------------
+let _vectorPool = null;
+function getVectorPool() {
+  if (!_vectorPool) {
+    _vectorPool = new Pool({
+      connectionString: DIRECT_URL || process.env.DATABASE_URL,
+    });
+  }
+  return _vectorPool;
+}
+
+/**
+ * Run a vector similarity query on a dedicated client so that
+ * `SET ivfflat.probes` applies to the same connection as the SELECT.
+ */
+async function vectorQuery(sql) {
+  const pool = getVectorPool();
+  const client = await pool.connect();
+  try {
+    // The IVFFlat index uses 100 lists; probe all of them to guarantee correct
+    // results. Without this, default probes=1 visits 1 list and misses all rows.
+    await client.query("SET ivfflat.probes = 100");
+    const result = await client.query(sql);
+    return result.rows;
+  } finally {
+    client.release();
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Embeddings model (lazy singleton)
@@ -40,6 +76,60 @@ function getEmbeddings() {
     });
   }
   return _embeddings;
+}
+
+// ---------------------------------------------------------------------------
+// LLM for query rewriting (lazy singleton, low temperature for consistency)
+// ---------------------------------------------------------------------------
+let _rewriteLLM = null;
+function getRewriteLLM() {
+  if (!_rewriteLLM) {
+    _rewriteLLM = new ChatOllama({
+      baseUrl: OLLAMA_BASE_URL,
+      model: OLLAMA_CHAT_MODEL,
+      temperature: 0,
+      numCtx: 1024,
+      headers: getOllamaHeaders(),
+    });
+  }
+  return _rewriteLLM;
+}
+
+/**
+ * Rewrite a user question into a dense, search-optimised query.
+ * Vague follow-ups like "tell me more" are expanded into specific queries.
+ * Returns the original query unchanged if the LLM call fails.
+ */
+async function rewriteQuery(query, history = []) {
+  // Build a short conversation snippet for context (last 2 turns only)
+  const historySnippet = (history || [])
+    .slice(-2)
+    .map((t) => `${t.role}: ${t.content}`)
+    .join("\n");
+
+  try {
+    const llm = getRewriteLLM();
+    const response = await llm.invoke([
+      new SystemMessage(
+        "You are a search query optimiser. " +
+        "Given a user question (and optional recent conversation), " +
+        "rewrite it as a single, specific, self-contained search query " +
+        "that will retrieve the most relevant document chunks from a knowledge base. " +
+        "Output ONLY the rewritten query — no explanation, no punctuation at the end.",
+      ),
+      new HumanMessage(
+        `${historySnippet ? `Recent conversation:\n${historySnippet}\n\n` : ""}User question: ${query}`,
+      ),
+    ]);
+    const rewritten = (response.content || "").toString().trim();
+    if (rewritten.length > 0) {
+      console.log(`[ragService] query rewrite: "${query}" → "${rewritten}"`);
+      return rewritten;
+    }
+  } catch (err) {
+    console.warn("[ragService] query rewrite failed, using original:", err.message);
+  }
+  return query;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,104 +154,137 @@ function normaliseOrgIds(raw) {
  * Retrieve the top-K most relevant document chunks from Supabase pgvector,
  * scoped to the specified organisation(s).
  *
- * Each ingested chunk stores { org_id, ctg_id, file_id, file_name }
- * in its metadata. This function uses org_id to enforce document isolation
- * between organisations.
+ * Uses three techniques combined:
+ *  1. Query rewriting  — LLM rewrites the question into a better search query
+ *  2. Vector search    — cosine similarity on 768-dim embeddings (top 12)
+ *  3. Keyword search   — PostgreSQL full-text search (tsvector) for exact terms
+ * Results from both searches are merged and deduplicated by content.
  *
  * @param {string}                    query      - User question to embed
  * @param {string|string[]|"all"}     orgIds     - Restrict to these organisation IDs, or "all"
- * @param {number}                    topK       - Number of chunks to return
+ * @param {number}                    topK       - Number of chunks to return from each search
+ * @param {Array}                     history    - Prior conversation turns (for query rewriting)
  * @returns {Promise<Array<{content:string, metadata:object, similarity:number}>>}
  */
-async function retrieveDocuments(query, orgIds, topK = 5) {
-  const supabase = getSupabase();
+async function retrieveDocuments(query, orgIds, topK = 12, history = []) {
   const embeddings = getEmbeddings();
 
   // Normalise → ["uuid-1", "uuid-2"] or null
   const orgIdList = normaliseOrgIds(orgIds);
 
   // -------------------------------------------------------------------------
-  // Build the list of files the model should know about (scoped to organisation).
-  // We use raw SQL because the Prisma schema may not yet be migrated to the
-  // live DB — explicit column names avoids SELECT * failures.
+  // Option C — Only rewrite vague/short queries (≤ 8 words).
+  // Specific questions already embed well; rewriting them adds latency with
+  // no accuracy gain.
+  // Option B — Run rewriting and the allFiles DB lookup in parallel so the
+  // extra LLM call doesn't block the DB query.
   // -------------------------------------------------------------------------
-  let allFiles;
-  try {
-    if (orgIdList) {
-      // Only files belonging to the requested organisation(s)
-      allFiles = await prisma.$queryRaw`
-        SELECT file_id::text AS file_id, file_name
-        FROM   "File"
-        WHERE  org_id = ANY(${orgIdList}::uuid[])
-      `;
-    } else {
-      // Admin / no filter — return all files
-      allFiles = await prisma.$queryRaw`
-        SELECT file_id::text AS file_id, file_name FROM "File"
-      `;
-    }
-  } catch {
-    // Fallback if org_id column doesn't exist yet (pre-migration)
-    allFiles = await prisma.$queryRaw`
-      SELECT file_id::text AS file_id, file_name FROM "File"
-    `;
-  }
+  const isVague = query.trim().split(/\s+/).length <= 8;
 
-  // -------------------------------------------------------------------------
-  // Build the filter for the match_documents RPC.
-  // Uses the real org_id column for fast, indexed tenant isolation.
-  // Pass org_ids as a UUID array; null means "all" (admin).
-  // -------------------------------------------------------------------------
+  const [searchQuery, allFiles] = await Promise.all([
+    // Only call the LLM rewriter for short/vague queries
+    isVague ? rewriteQuery(query, history) : Promise.resolve(query),
 
-  // Embed the incoming query
-  const queryEmbedding = await embeddings.embedQuery(query);
-
-  const { data, error } = await supabase.rpc("match_documents", {
-    query_embedding: queryEmbedding,
-    match_count: topK,
-    filter_org_ids: orgIdList, // null = all orgs (admin), array = scoped
-  });
-
-  if (error) {
-    console.warn(
-      "[ragService] match_documents RPC warning (table may be empty or not yet created):",
-      error.message,
-    );
-    return [];
-  }
-
-  let chunks = data || [];
-
-  // -------------------------------------------------------------------------
-  // Document coverage guarantee: every file the organisation owns should have at
-  // least one chunk visible to the model, even if it scored outside topK.
-  // -------------------------------------------------------------------------
-  const representedFileIds = new Set(
-    chunks.map((c) => c.metadata?.file_id).filter(Boolean),
-  );
-  const missingFiles = allFiles.filter(
-    (f) => !representedFileIds.has(f.file_id),
-  );
-
-  if (missingFiles.length > 0) {
-    const missingIds = missingFiles.map((f) => f.file_id);
-    const { data: fallbackChunks } = await supabase
-      .from("document_embeddings")
-      .select("content, metadata")
-      .in("metadata->>file_id", missingIds)
-      .limit(missingFiles.length); // 1 chunk per missing file is enough
-
-    if (fallbackChunks && fallbackChunks.length > 0) {
-      const seen = new Set();
-      for (const chunk of fallbackChunks) {
-        const fid = chunk.metadata?.file_id;
-        if (fid && !seen.has(fid)) {
-          seen.add(fid);
-          chunks.push({ ...chunk, similarity: 0 });
+    // allFiles DB lookup runs in parallel regardless
+    (async () => {
+      try {
+        if (orgIdList) {
+          return await prisma.$queryRaw`
+            SELECT file_id::text AS file_id, file_name
+            FROM   "File"
+            WHERE  org_id = ANY(${orgIdList}::uuid[])
+          `;
         }
+        return await prisma.$queryRaw`
+          SELECT file_id::text AS file_id, file_name FROM "File"
+        `;
+      } catch {
+        return await prisma.$queryRaw`
+          SELECT file_id::text AS file_id, file_name FROM "File"
+        `;
       }
+    })(),
+  ]);
+
+  // -------------------------------------------------------------------------
+  // Step 2 — Vector similarity search
+  // Uses a dedicated pg Pool client so that SET ivfflat.probes persists on the
+  // same connection as the SELECT (pgbouncer would route them to different
+  // backends, making the SET ineffective).
+  // -------------------------------------------------------------------------
+  const queryEmbedding = await embeddings.embedQuery(searchQuery);
+  const vecStr = "[" + queryEmbedding.join(",") + "]";
+  const orgFilter = orgIdList ? orgIdList.map((id) => `'${id}'`).join(",") : null;
+  const orgWhere = orgFilter ? `WHERE org_id = ANY(ARRAY[${orgFilter}]::uuid[])` : "";
+
+  let vectorChunks = [];
+  try {
+    const rows = await vectorQuery(
+      `SELECT content, metadata,
+              1 - (embedding <=> '${vecStr}'::vector) AS similarity
+       FROM document_embeddings
+       ${orgWhere}
+       ORDER BY embedding <=> '${vecStr}'::vector
+       LIMIT ${topK}`,
+    );
+    vectorChunks = rows.map((r) => ({
+      content: r.content,
+      metadata: r.metadata,
+      similarity: parseFloat(r.similarity),
+    }));
+  } catch (err) {
+    console.warn("[ragService] vector search failed:", err.message);
+  }
+
+  // -------------------------------------------------------------------------
+  // Step 3 — Keyword (full-text) search
+  // Converts the rewritten query to a tsquery and matches against content.
+  // Gives a score of 0.5 (lower than a true vector match) so vector results
+  // rank higher when both return the same chunk.
+  // -------------------------------------------------------------------------
+  let keywordChunks = [];
+  try {
+    // Build a simple tsquery: split into words, join with & (AND)
+    const tsWords = searchQuery
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter((w) => w.length > 2)
+      .join(" & ");
+
+    if (tsWords.length > 0) {
+      const orgWhereKeyword = orgFilter
+        ? `AND org_id = ANY(ARRAY[${orgFilter}]::uuid[])`
+        : "";
+      const rows = await vectorQuery(
+        `SELECT content, metadata, 0.5 AS similarity
+         FROM document_embeddings
+         WHERE to_tsvector('english', content) @@ to_tsquery('english', '${tsWords}')
+         ${orgWhereKeyword}
+         LIMIT ${topK}`,
+      );
+      keywordChunks = rows.map((r) => ({
+        content: r.content,
+        metadata: r.metadata,
+        similarity: parseFloat(r.similarity),
+      }));
+    }
+  } catch (err) {
+    console.warn("[ragService] keyword search failed:", err.message);
+  }
+
+  // -------------------------------------------------------------------------
+  // Merge vector + keyword results — deduplicate by content, keep highest score
+  // -------------------------------------------------------------------------
+  const seen = new Map(); // content → chunk
+  for (const chunk of [...vectorChunks, ...keywordChunks]) {
+    const key = chunk.content;
+    if (!seen.has(key) || chunk.similarity > seen.get(key).similarity) {
+      seen.set(key, chunk);
     }
   }
+  let chunks = Array.from(seen.values()).sort((a, b) => b.similarity - a.similarity);
 
   // -------------------------------------------------------------------------
   // Prepend a synthetic "document index" entry so the model always knows
