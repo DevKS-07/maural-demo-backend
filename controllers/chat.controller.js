@@ -71,8 +71,7 @@ async function runAgent(intent, message, docs, history, businessContext) {
 // ---------------------------------------------------------------------------
 // Combine multiple sub-answers into one coherent response
 // ---------------------------------------------------------------------------
-const COMBINER_PROMPT = `/no_think
-You are combining multiple analysis results into one well-structured response.
+const COMBINER_PROMPT = `You are combining multiple analysis results into one well-structured response.
 Each section was produced by a different specialized agent. Your job is to:
 1. Merge the sections with clear headers matching each intent (e.g. ## Summary, ## Forecast).
 2. Remove any redundancy between sections.
