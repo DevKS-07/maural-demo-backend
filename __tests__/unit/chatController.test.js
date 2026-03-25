@@ -149,11 +149,12 @@ describe("chat controller", () => {
 
       await chat(req, res);
 
-      // retrieveDocuments should be called with "all" as orgIds (the default) and top-k of 5
+      // retrieveDocuments should be called with "all" as orgIds (the default), top-k of 12, and empty history
       expect(retrieveDocuments).toHaveBeenCalledWith(
         "What is the net income?",
         "all",
-        5,
+        12,
+        [],
       );
     });
 
