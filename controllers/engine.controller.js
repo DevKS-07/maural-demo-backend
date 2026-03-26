@@ -106,7 +106,7 @@ const getFullDashboardSummary = async (req, res) => {
     // These are best-effort — if QB failed, labor still runs without them
     const financial =
       financialResult.status === "fulfilled" ? financialResult.value : null;
-    const qbLaborCost = financial?.laborCost ?? null;
+    const qbLaborCost = null; // laborCost not in FinanceKpi schema yet
     const qbTotalRevenue = financial?.totalIncome ?? null;
 
     const [laborResult] = await Promise.allSettled([
@@ -400,35 +400,37 @@ const fetchOrgScorecardData = async (
         startDate,
         endDate,
         qbTotalRevenue: financial?.totalIncome ?? null,
-        qbLaborCost: financial?.laborCost ?? null,
+        qbLaborCost: null,
       }),
     ]);
 
     if (laborResult.status === "fulfilled") {
       labor = laborResult.value;
-      await prisma.laborKpi
-        .upsert({
-          where: {
-            org_id_periodStart_periodEnd: {
-              org_id: orgId,
+      if (labor?.laborSource) {
+        await prisma.laborKpi
+          .upsert({
+            where: {
+              org_id_periodStart_periodEnd: {
+                org_id: orgId,
+                periodStart: start,
+                periodEnd: end,
+              },
+            },
+            create: {
+              organisation: { connect: { org_id: orgId } },
               periodStart: start,
               periodEnd: end,
+              ...mapLaborToSchema(labor),
             },
-          },
-          create: {
-            organisation: { connect: { org_id: orgId } },
-            periodStart: start,
-            periodEnd: end,
-            ...mapLaborToSchema(labor),
-          },
-          update: { ...mapLaborToSchema(labor), isStale: false },
-        })
-        .catch((e) =>
-          console.warn(
-            `[Scorecard] Failed to persist labor for ${org.org_name}:`,
-            e.message,
-          ),
-        );
+            update: { ...mapLaborToSchema(labor), isStale: false },
+          })
+          .catch((e) =>
+            console.warn(
+              `[Scorecard] Failed to persist labor for ${org.org_name}:`,
+              e.message,
+            ),
+          );
+      }
     }
   }
 
