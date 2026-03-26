@@ -65,7 +65,7 @@ const getLaborSummary = async (req, res) => {
             },
           },
           create: {
-            org_id,
+            organisation: { connect: { org_id } },
             periodStart: start,
             periodEnd: end,
             ...mapLaborToSchema(labor),
@@ -131,7 +131,7 @@ const getFullDashboardSummary = async (req, res) => {
             },
           },
           create: {
-            org_id,
+            organisation: { connect: { org_id } },
             periodStart: start,
             periodEnd: end,
             ...mapLaborToSchema(laborResult.value),
@@ -347,7 +347,7 @@ const fetchOrgScorecardData = async (
               },
             },
             create: {
-              org_id: orgId,
+              organisation: { connect: { org_id: orgId } },
               periodStart: start,
               periodEnd: end,
               ...mapFinanceToSchema(financial),
@@ -377,7 +377,7 @@ const fetchOrgScorecardData = async (
               },
             },
             create: {
-              org_id: orgId,
+              organisation: { connect: { org_id: orgId } },
               periodStart: start,
               periodEnd: end,
               ...mapLeadsToSchema(leads),
@@ -416,7 +416,7 @@ const fetchOrgScorecardData = async (
             },
           },
           create: {
-            org_id: orgId,
+            organisation: { connect: { org_id: orgId } },
             periodStart: start,
             periodEnd: end,
             ...mapLaborToSchema(labor),
@@ -445,7 +445,6 @@ const mapFinanceToSchema = (f) => ({
   totalIncome: f?.totalIncome ?? null,
   ebitda: f?.ebitda ?? null,
   workingCapital: f?.workingCapital ?? null,
-  laborCost: f?.laborCost ?? null,
   netIncome: f?.netIncome ?? null,
   grossMargin: f?.grossMargin ?? null,
 });
