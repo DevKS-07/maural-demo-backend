@@ -66,20 +66,11 @@ function getRouterLLM() {
  * @returns {Promise<string[]>} — array of 1–3 valid intent strings
  */
 async function detectIntents(message) {
-  const t0 = Date.now();
   try {
     const llm = getRouterLLM();
-
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("intent detection timed out (15s)")), 15_000),
-    );
-
-    const response = await Promise.race([
-      llm.invoke([
-        { role: "system", content: ROUTER_SYSTEM_PROMPT },
-        { role: "user", content: message },
-      ]),
-      timeout,
+    const response = await llm.invoke([
+      { role: "system", content: ROUTER_SYSTEM_PROMPT },
+      { role: "user", content: message },
     ]);
 
     const parsed = JSON.parse(response.content);
@@ -88,7 +79,6 @@ async function detectIntents(message) {
       .filter((i) => VALID_INTENTS.includes(i))
       .slice(0, 3);
 
-    console.log(`[intentRouter][timing] detectIntents: ${Date.now() - t0}ms`);
     return intents.length > 0 ? intents : ["reason"];
   } catch (err) {
     console.warn(

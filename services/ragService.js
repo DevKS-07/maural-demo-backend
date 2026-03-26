@@ -109,27 +109,17 @@ async function rewriteQuery(query, history = []) {
 
   try {
     const llm = getRewriteLLM();
-
-    // Race the LLM call against a timeout so a stalled Ollama request
-    // doesn't block the entire retrieval pipeline for minutes.
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("rewrite timed out (15s)")), 15_000),
-    );
-
-    const response = await Promise.race([
-      llm.invoke([
-        new SystemMessage(
-          "You are a search query optimiser. " +
-          "Given a user question (and optional recent conversation), " +
-          "rewrite it as a single, specific, self-contained search query " +
-          "that will retrieve the most relevant document chunks from a knowledge base. " +
-          "Output ONLY the rewritten query — no explanation, no punctuation at the end.",
-        ),
-        new HumanMessage(
-          `${historySnippet ? `Recent conversation:\n${historySnippet}\n\n` : ""}User question: ${query}`,
-        ),
-      ]),
-      timeout,
+    const response = await llm.invoke([
+      new SystemMessage(
+        "You are a search query optimiser. " +
+        "Given a user question (and optional recent conversation), " +
+        "rewrite it as a single, specific, self-contained search query " +
+        "that will retrieve the most relevant document chunks from a knowledge base. " +
+        "Output ONLY the rewritten query — no explanation, no punctuation at the end.",
+      ),
+      new HumanMessage(
+        `${historySnippet ? `Recent conversation:\n${historySnippet}\n\n` : ""}User question: ${query}`,
+      ),
     ]);
     const rewritten = (response.content || "").toString().trim();
     if (rewritten.length > 0) {
@@ -178,7 +168,6 @@ function normaliseOrgIds(raw) {
  */
 async function retrieveDocuments(query, orgIds, topK = 12, history = []) {
   const embeddings = getEmbeddings();
-  const t0 = Date.now();
 
   // Normalise → ["uuid-1", "uuid-2"] or null
   const orgIdList = normaliseOrgIds(orgIds);
@@ -216,7 +205,6 @@ async function retrieveDocuments(query, orgIds, topK = 12, history = []) {
       }
     })(),
   ]);
-  console.log(`[ragService][timing] rewrite + fileList: ${Date.now() - t0}ms`);
 
   // -------------------------------------------------------------------------
   // Step 2 — Vector similarity search
@@ -224,16 +212,13 @@ async function retrieveDocuments(query, orgIds, topK = 12, history = []) {
   // same connection as the SELECT (pgbouncer would route them to different
   // backends, making the SET ineffective).
   // -------------------------------------------------------------------------
-  const tEmbed = Date.now();
   const queryEmbedding = await embeddings.embedQuery(searchQuery);
-  console.log(`[ragService][timing] embedding: ${Date.now() - tEmbed}ms`);
   const vecStr = "[" + queryEmbedding.join(",") + "]";
   const orgFilter = orgIdList ? orgIdList.map((id) => `'${id}'`).join(",") : null;
   const orgWhere = orgFilter ? `WHERE org_id = ANY(ARRAY[${orgFilter}]::uuid[])` : "";
 
   let vectorChunks = [];
   try {
-    const tVec = Date.now();
     const rows = await vectorQuery(
       `SELECT content, metadata,
               1 - (embedding <=> '${vecStr}'::vector) AS similarity
@@ -242,7 +227,6 @@ async function retrieveDocuments(query, orgIds, topK = 12, history = []) {
        ORDER BY embedding <=> '${vecStr}'::vector
        LIMIT ${topK}`,
     );
-    console.log(`[ragService][timing] vector search: ${Date.now() - tVec}ms`);
     vectorChunks = rows.map((r) => ({
       content: r.content,
       metadata: r.metadata,
@@ -273,7 +257,6 @@ async function retrieveDocuments(query, orgIds, topK = 12, history = []) {
       const orgWhereKeyword = orgFilter
         ? `AND org_id = ANY(ARRAY[${orgFilter}]::uuid[])`
         : "";
-      const tKw = Date.now();
       const rows = await vectorQuery(
         `SELECT content, metadata, 0.5 AS similarity
          FROM document_embeddings
@@ -281,7 +264,6 @@ async function retrieveDocuments(query, orgIds, topK = 12, history = []) {
          ${orgWhereKeyword}
          LIMIT ${topK}`,
       );
-      console.log(`[ragService][timing] keyword search: ${Date.now() - tKw}ms`);
       keywordChunks = rows.map((r) => ({
         content: r.content,
         metadata: r.metadata,
