@@ -56,7 +56,16 @@ app.use("/api/webhooks", express.raw({ type: "application/json" }));
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 app.use(express.json({ limit: "1mb" }));
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
-app.use(compression());
+app.use(
+  compression({
+    // Skip compression for SSE streams — compressed chunked responses break
+    // HTTP/2 framing on Railway/Vercel proxies, causing ERR_HTTP2_PROTOCOL_ERROR
+    filter: (req, res) => {
+      if (req.path === "/api/chat/stream") return false;
+      return compression.filter(req, res);
+    },
+  }),
+);
 app.use(cookieParser());
 
 // Rate limiting — protects against brute-force and denial-of-service
