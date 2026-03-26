@@ -83,4 +83,5 @@ module.exports = {
 
   // Frontend
   FRONTEND_REDIRECT_URI: process.env.FRONTEND_REDIRECT_URI || "http://localhost:5173/integrations",
+  FRONTEND_URL: process.env.FRONTEND_URL || "http://localhost:5173",
 };

@@ -20,6 +20,7 @@
 const { clerkClient } = require("@clerk/express");
 const prisma = require("../lib/prisma");
 const { VALID_CLERK_ROLES } = require("../config/roles");
+const { FRONTEND_URL } = require("../config/env");
 
 // Roles each inviter is allowed to assign
 const ALLOWED_INVITE_ROLES = {
@@ -44,7 +45,9 @@ exports.createInvitation = async (req, res) => {
 
   const allowedRoles = ALLOWED_INVITE_ROLES[inviterRole];
   if (!allowedRoles) {
-    return res.status(403).json({ message: "You do not have permission to invite users" });
+    return res
+      .status(403)
+      .json({ message: "You do not have permission to invite users" });
   }
 
   const targetRole = role || "org_staff";
@@ -65,7 +68,10 @@ exports.createInvitation = async (req, res) => {
   let resolvedOrgId = org_id || null;
 
   // Auto-resolve platform org for admin/super_admin invitations
-  if (!resolvedOrgId && (targetRole === "admin" || targetRole === "super_admin")) {
+  if (
+    !resolvedOrgId &&
+    (targetRole === "admin" || targetRole === "super_admin")
+  ) {
     const platformOrg = await prisma.organisation.findFirst({
       where: { is_platform: true },
     });
@@ -81,14 +87,16 @@ exports.createInvitation = async (req, res) => {
 
     if (!inviter?.org_id) {
       return res.status(400).json({
-        message: "You must be assigned to an organisation before you can invite users",
+        message:
+          "You must be assigned to an organisation before you can invite users",
       });
     }
 
     // Org executives can only invite into their own org
     if (org_id && org_id !== inviter.org_id) {
       return res.status(403).json({
-        message: "Org Executives can only invite users into their own organisation",
+        message:
+          "Org Executives can only invite users into their own organisation",
       });
     }
 
@@ -102,30 +110,44 @@ exports.createInvitation = async (req, res) => {
         where: { org_id: resolvedOrgId },
       });
       if (!org) {
-        return res.status(404).json({ message: `Organisation with ID ${resolvedOrgId} not found` });
+        return res
+          .status(404)
+          .json({ message: `Organisation with ID ${resolvedOrgId} not found` });
       }
     } catch (error) {
-      console.error("[invitation] Failed to validate organisation:", error.message);
-      return res.status(500).json({ message: "Failed to validate organisation" });
+      console.error(
+        "[invitation] Failed to validate organisation:",
+        error.message,
+      );
+      return res
+        .status(500)
+        .json({ message: "Failed to validate organisation" });
     }
   }
 
   try {
     const invitation = await clerkClient.invitations.createInvitation({
       emailAddress: email_address,
+      redirectUrl: `${FRONTEND_URL}/login`,
       publicMetadata: {
         role: targetRole,
         org_id: resolvedOrgId,
       },
     });
 
-    console.log(`[invitation] ${inviterRole} invited ${email_address} (role: ${targetRole}, org: ${resolvedOrgId || "none"})`);
+    console.log(
+      `[invitation] ${inviterRole} invited ${email_address} (role: ${targetRole}, org: ${resolvedOrgId || "none"})`,
+    );
     return res.status(201).json(invitation);
   } catch (error) {
     // Clerk throws specific errors for duplicate invitations / existing users
-    if (error.status === 422 || error.errors?.[0]?.code === "duplicate_record") {
+    if (
+      error.status === 422 ||
+      error.errors?.[0]?.code === "duplicate_record"
+    ) {
       return res.status(409).json({
-        message: "An invitation has already been sent to this email address, or the user already exists.",
+        message:
+          "An invitation has already been sent to this email address, or the user already exists.",
       });
     }
 
@@ -159,7 +181,9 @@ exports.listInvitations = async (req, res) => {
         select: { org_id: true },
       });
       if (!user?.org_id) {
-        return res.status(403).json({ message: "You are not assigned to any organisation" });
+        return res
+          .status(403)
+          .json({ message: "You are not assigned to any organisation" });
       }
       filtered = filtered.filter(
         (inv) => inv.publicMetadata?.org_id === user.org_id,
@@ -192,26 +216,42 @@ exports.revokeInvitation = async (req, res) => {
         clerkClient.invitations.getInvitationList(),
       ]);
 
-      const invitation = invitationList.data.find((inv) => inv.id === invitationId);
+      const invitation = invitationList.data.find(
+        (inv) => inv.id === invitationId,
+      );
       if (!invitation) {
-        return res.status(404).json({ message: `Invitation with ID ${invitationId} not found` });
+        return res
+          .status(404)
+          .json({ message: `Invitation with ID ${invitationId} not found` });
       }
 
       if (!user?.org_id) {
-        return res.status(403).json({ message: "You are not assigned to any organisation" });
+        return res
+          .status(403)
+          .json({ message: "You are not assigned to any organisation" });
       }
       if (invitation.publicMetadata?.org_id !== user.org_id) {
-        return res.status(403).json({ message: "You can only revoke invitations for your own organisation" });
+        return res
+          .status(403)
+          .json({
+            message:
+              "You can only revoke invitations for your own organisation",
+          });
       }
     }
 
-    const revoked = await clerkClient.invitations.revokeInvitation(invitationId);
+    const revoked =
+      await clerkClient.invitations.revokeInvitation(invitationId);
 
     console.log(`[invitation] Revoked invitation: ${invitationId}`);
-    return res.status(200).json({ message: "Invitation revoked", invitation: revoked });
+    return res
+      .status(200)
+      .json({ message: "Invitation revoked", invitation: revoked });
   } catch (error) {
     if (error.status === 404) {
-      return res.status(404).json({ message: `Invitation with ID ${invitationId} not found` });
+      return res
+        .status(404)
+        .json({ message: `Invitation with ID ${invitationId} not found` });
     }
 
     console.error("[invitation] Failed to revoke invitation:", error.message);

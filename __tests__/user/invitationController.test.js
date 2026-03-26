@@ -8,6 +8,11 @@ jest.mock("../../lib/prisma", () => ({
   },
 }));
 
+// Mock config/env
+jest.mock("../../config/env", () => ({
+  FRONTEND_URL: "https://maural-kms-frontend.vercel.app",
+}));
+
 // Mock @clerk/express
 jest.mock("@clerk/express", () => ({
   clerkClient: {
@@ -84,6 +89,7 @@ describe("Invitation Controller - Unit Tests", () => {
 
       expect(clerkClient.invitations.createInvitation).toHaveBeenCalledWith({
         emailAddress: "newuser@example.com",
+        redirectUrl: expect.any(String),
         publicMetadata: { role: "admin", org_id: "a1b2c3d4-uuid" },
       });
       expect(res.status).toHaveBeenCalledWith(201);
@@ -123,6 +129,7 @@ describe("Invitation Controller - Unit Tests", () => {
       expect(prisma.organisation.findUnique).not.toHaveBeenCalled();
       expect(clerkClient.invitations.createInvitation).toHaveBeenCalledWith({
         emailAddress: "staff@example.com",
+        redirectUrl: expect.any(String),
         publicMetadata: { role: "org_staff", org_id: null },
       });
       expect(res.status).toHaveBeenCalledWith(201);
@@ -141,6 +148,7 @@ describe("Invitation Controller - Unit Tests", () => {
 
       expect(clerkClient.invitations.createInvitation).toHaveBeenCalledWith({
         emailAddress: "newuser@example.com",
+        redirectUrl: expect.any(String),
         publicMetadata: { role: "org_staff", org_id: null },
       });
       expect(res.status).toHaveBeenCalledWith(201);
@@ -167,6 +175,7 @@ describe("Invitation Controller - Unit Tests", () => {
 
       expect(clerkClient.invitations.createInvitation).toHaveBeenCalledWith({
         emailAddress: "staff@example.com",
+        redirectUrl: expect.any(String),
         publicMetadata: { role: "org_staff", org_id: "a1b2c3d4-uuid" },
       });
       expect(res.status).toHaveBeenCalledWith(201);
@@ -187,6 +196,7 @@ describe("Invitation Controller - Unit Tests", () => {
 
       expect(clerkClient.invitations.createInvitation).toHaveBeenCalledWith({
         emailAddress: "staff@example.com",
+        redirectUrl: expect.any(String),
         publicMetadata: { role: "org_staff", org_id: "a1b2c3d4-uuid" },
       });
       expect(res.status).toHaveBeenCalledWith(201);
