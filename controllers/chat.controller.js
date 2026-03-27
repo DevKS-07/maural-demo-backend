@@ -16,7 +16,7 @@
  *   data: [DONE]
  */
 
-const { ChatOllama } = require("@langchain/ollama");
+const { ChatOpenAI } = require("@langchain/openai");
 const { detectIntents } = require("../services/intentRouter");
 const { getSystemPrompt } = require("../services/promptTemplates");
 const {
@@ -27,11 +27,10 @@ const {
 const { getBusinessContext } = require("../services/businessDataService");
 const { checkAndRefine } = require("../services/guardrail");
 const {
-  OLLAMA_BASE_URL,
-  OLLAMA_CHAT_MODEL,
+  OPENAI_CHAT_MODEL,
   GUARDRAIL_CONFIDENCE_THRESHOLD,
 } = require("../config/env");
-const { getOllamaHeaders } = require("../config/ollama");
+const { getOpenAIApiKey } = require("../config/openai");
 
 // ---------------------------------------------------------------------------
 // LLM singleton — keyed by temperature to avoid creating a new instance per call
@@ -41,12 +40,10 @@ function getLLM({ temperature = 0.3 } = {}) {
   if (!_llmCache.has(temperature)) {
     _llmCache.set(
       temperature,
-      new ChatOllama({
-        baseUrl: OLLAMA_BASE_URL,
-        model: OLLAMA_CHAT_MODEL,
+      new ChatOpenAI({
+        apiKey: getOpenAIApiKey(),
+        model: OPENAI_CHAT_MODEL,
         temperature,
-        numCtx: 8192,
-        headers: getOllamaHeaders(),
       }),
     );
   }

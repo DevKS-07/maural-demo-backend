@@ -10,15 +10,15 @@
  *   — It is idempotent: re-running re-embeds files already processed.
  */
 
-const { OllamaEmbeddings } = require("@langchain/ollama");
+const { OpenAIEmbeddings } = require("@langchain/openai");
 const prisma = require("../lib/prisma");
 const pdfParse = require("pdf-parse");
 const XLSX = require("xlsx");
 const mammoth = require("mammoth");
 const { createWorker } = require("tesseract.js");
 const { getSupabase } = require("../lib/supabase");
-const { OLLAMA_BASE_URL, OLLAMA_EMBED_MODEL } = require("../config/env");
-const { getOllamaHeaders } = require("../config/ollama");
+const { OPENAI_EMBED_MODEL } = require("../config/env");
+const { getOpenAIApiKey } = require("../config/openai");
 // Polyfill DOMMatrix and Path2D before loading pdfjs-dist so it can render pages correctly
 const { createCanvas, DOMMatrix, Path2D } = require("@napi-rs/canvas");
 globalThis.DOMMatrix = DOMMatrix;
@@ -188,10 +188,9 @@ function chunkText(text, _fileName) {
 // Embed a batch of strings with OpenAI (handles rate limits via batching)
 // ---------------------------------------------------------------------------
 async function embedBatch(texts) {
-  const embeddings = new OllamaEmbeddings({
-    baseUrl: OLLAMA_BASE_URL,
-    model: OLLAMA_EMBED_MODEL,
-    headers: getOllamaHeaders(),
+  const embeddings = new OpenAIEmbeddings({
+    apiKey: getOpenAIApiKey(),
+    model: OPENAI_EMBED_MODEL,
   });
   return embeddings.embedDocuments(texts);
 }

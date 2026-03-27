@@ -1,10 +1,18 @@
 // All mocks must be declared before any require() calls.
 // Paths are relative to this test file (__tests__/unit/).
 
-jest.mock("@langchain/ollama", () => ({
-  ChatOllama: jest.fn().mockImplementation(() => ({
+jest.mock("@langchain/openai", () => ({
+  ChatOpenAI: jest.fn().mockImplementation(() => ({
     invoke: jest.fn().mockResolvedValue({ content: "agent answer" }),
   })),
+}));
+
+jest.mock("../../config/openai", () => ({
+  getOpenAIApiKey: jest.fn().mockReturnValue("test-key"),
+}));
+
+jest.mock("../../services/businessDataService", () => ({
+  getBusinessContext: jest.fn().mockResolvedValue({ text: null, sources: [] }),
 }));
 
 jest.mock("../../services/intentRouter", () => ({

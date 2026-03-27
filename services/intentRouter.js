@@ -12,9 +12,9 @@
  *   predict   — forecasts, projections, future scenarios
  */
 
-const { ChatOllama } = require("@langchain/ollama");
-const { OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL } = require("../config/env");
-const { getOllamaHeaders } = require("../config/ollama");
+const { ChatOpenAI } = require("@langchain/openai");
+const { OPENAI_CHAT_MODEL } = require("../config/env");
+const { getOpenAIApiKey } = require("../config/openai");
 
 const VALID_INTENTS = ["summarize", "analyze", "reason", "predict"];
 
@@ -48,13 +48,11 @@ Examples:
 let _routerLLM = null;
 function getRouterLLM() {
   if (!_routerLLM) {
-    _routerLLM = new ChatOllama({
-      baseUrl: OLLAMA_BASE_URL,
-      model: OLLAMA_CHAT_MODEL,
+    _routerLLM = new ChatOpenAI({
+      apiKey: getOpenAIApiKey(),
+      model: OPENAI_CHAT_MODEL,
       temperature: 0,
-      format: "json",
-      numCtx: 4096,
-      headers: getOllamaHeaders(),
+      response_format: { type: "json_object" },
     });
   }
   return _routerLLM;

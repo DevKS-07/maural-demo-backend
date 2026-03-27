@@ -19,7 +19,7 @@ require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
 const { getSupabase } = require("../lib/supabase");
-const { OllamaEmbeddings } = require("@langchain/ollama");
+const { OpenAIEmbeddings } = require("@langchain/openai");
 const prisma = require("../lib/prisma");
 const pdfParse = require("pdf-parse");
 const XLSX = require("xlsx");
@@ -222,11 +222,9 @@ async function upsertFileRecord(realName, fileSize) {
 
 async function main() {
   const supabase = getSupabase();
-  const ollamaApiKey = process.env.OLLAMA_API_KEY || "";
-  const embeddings = new OllamaEmbeddings({
-    baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
-    model: process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text",
-    ...(ollamaApiKey && { headers: { "X-Ollama-Api-Key": ollamaApiKey } }),
+  const embeddings = new OpenAIEmbeddings({
+    apiKey: process.env.OPENAI_API_KEY,
+    model: process.env.OPENAI_EMBED_MODEL || "text-embedding-3-small",
   });
 
   const diskFiles = fs

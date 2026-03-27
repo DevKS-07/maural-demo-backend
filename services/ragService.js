@@ -21,13 +21,13 @@
  *   ctg_id can be used to further narrow results to a specific document category.
  */
 
-const { OllamaEmbeddings, ChatOllama } = require("@langchain/ollama");
+const { OpenAIEmbeddings, ChatOpenAI } = require("@langchain/openai");
 const { HumanMessage, SystemMessage } = require("@langchain/core/messages");
 const { Pool } = require("pg");
 const prisma = require("../lib/prisma");
 
-const { OLLAMA_BASE_URL, OLLAMA_EMBED_MODEL, OLLAMA_CHAT_MODEL, DIRECT_URL } = require("../config/env");
-const { getOllamaHeaders } = require("../config/ollama");
+const { OPENAI_CHAT_MODEL, OPENAI_EMBED_MODEL, DIRECT_URL } = require("../config/env");
+const { getOpenAIApiKey } = require("../config/openai");
 
 // ---------------------------------------------------------------------------
 // Dedicated pg Pool for vector queries.
@@ -69,10 +69,9 @@ async function vectorQuery(sql) {
 let _embeddings = null;
 function getEmbeddings() {
   if (!_embeddings) {
-    _embeddings = new OllamaEmbeddings({
-      baseUrl: OLLAMA_BASE_URL,
-      model: OLLAMA_EMBED_MODEL,
-      headers: getOllamaHeaders(),
+    _embeddings = new OpenAIEmbeddings({
+      apiKey: getOpenAIApiKey(),
+      model: OPENAI_EMBED_MODEL,
     });
   }
   return _embeddings;
@@ -84,12 +83,10 @@ function getEmbeddings() {
 let _rewriteLLM = null;
 function getRewriteLLM() {
   if (!_rewriteLLM) {
-    _rewriteLLM = new ChatOllama({
-      baseUrl: OLLAMA_BASE_URL,
-      model: OLLAMA_CHAT_MODEL,
+    _rewriteLLM = new ChatOpenAI({
+      apiKey: getOpenAIApiKey(),
+      model: OPENAI_CHAT_MODEL,
       temperature: 0,
-      numCtx: 1024,
-      headers: getOllamaHeaders(),
     });
   }
   return _rewriteLLM;

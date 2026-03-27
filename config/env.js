@@ -51,11 +51,10 @@ module.exports = {
   SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
 
-  // Ollama / LLM
-  OLLAMA_BASE_URL: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
-  OLLAMA_API_KEY: process.env.OLLAMA_API_KEY || "",
-  OLLAMA_CHAT_MODEL: process.env.OLLAMA_CHAT_MODEL || "qwen3.5:9b",
-  OLLAMA_EMBED_MODEL: process.env.OLLAMA_EMBED_MODEL || "nomic-embed-text",
+  // OpenAI / LLM
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY || "",
+  OPENAI_CHAT_MODEL: process.env.OPENAI_CHAT_MODEL || "gpt-4o-mini",
+  OPENAI_EMBED_MODEL: process.env.OPENAI_EMBED_MODEL || "text-embedding-3-small",
   GUARDRAIL_CONFIDENCE_THRESHOLD:
     process.env.GUARDRAIL_CONFIDENCE_THRESHOLD || "90",
 

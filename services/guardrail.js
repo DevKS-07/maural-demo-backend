@@ -12,9 +12,9 @@
  * This NEVER blocks a response — it always returns something useful.
  */
 
-const { ChatOllama } = require("@langchain/ollama");
-const { OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL } = require("../config/env");
-const { getOllamaHeaders } = require("../config/ollama");
+const { ChatOpenAI } = require("@langchain/openai");
+const { OPENAI_CHAT_MODEL } = require("../config/env");
+const { getOpenAIApiKey } = require("../config/openai");
 
 const GUARDRAIL_SYSTEM_PROMPT = `You are an accuracy verifier for a Knowledge Management System (KMS) chatbot.
 
@@ -47,13 +47,11 @@ Rules for your revision:
 let _guardrailLLM = null;
 function getGuardrailLLM() {
   if (!_guardrailLLM) {
-    _guardrailLLM = new ChatOllama({
-      baseUrl: OLLAMA_BASE_URL,
-      model: OLLAMA_CHAT_MODEL,
+    _guardrailLLM = new ChatOpenAI({
+      apiKey: getOpenAIApiKey(),
+      model: OPENAI_CHAT_MODEL,
       temperature: 0,
-      format: "json",
-      numCtx: 8192,
-      headers: getOllamaHeaders(),
+      response_format: { type: "json_object" },
     });
   }
   return _guardrailLLM;
