@@ -1,6 +1,7 @@
 const prisma = require("../lib/prisma");
 const mime = require("mime-types");
 const { getSupabase } = require("../lib/supabase");
+const { ingestSingleFile } = require("./ingest.controller");
 
 ///////////////////////////////  HOME ROUTE (Test Route) ///////////////////////////////
 
@@ -251,6 +252,12 @@ exports.createDocument = async (req, res) => {
         user_id: user_id ? BigInt(user_id) : undefined,
       },
     });
+
+    // Kick off embedding in the background — don't await so the upload response
+    // is returned immediately. Errors are logged but don't fail the upload.
+    ingestSingleFile(newFile).catch((err) =>
+      console.error(`[docs] Background ingest failed for "${safeName}":`, err.message),
+    );
 
     res.status(201).json(newFile);
   } catch (error) {
