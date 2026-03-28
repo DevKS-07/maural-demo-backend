@@ -11,7 +11,9 @@ COPY package.json package-lock.json* ./
 COPY prisma ./prisma/
 
 # Install ALL dependencies (need devDeps for prisma generate)
-RUN npm ci
+# NODE_OPTIONS raises the heap limit — required because @napi-rs/canvas and
+# @langchain/openai (tiktoken WASM) together exhaust the default 512 MB limit.
+RUN NODE_OPTIONS="--max-old-space-size=2048" npm ci
 
 # Generate Prisma client
 RUN npx prisma generate
