@@ -1,6 +1,9 @@
 # dependencies
 /node_modules
 
+# test reports
+/test-reports
+
 # next.js
 /.next/
 /out/
@@ -33,18 +36,5 @@ next-env.d.ts
 .vscode/
 .DS_Store
 
-/generated/prisma
-
-# HubSpot config file
-hubspot.config.yml
-
-
-generate-routes-docs.js
-POSTMAN_TESTING_GUIDE.html
-presentation-integrations.html
-presentation-assets/
-commands.md
+docs-assets/
 deploy/
-docs/
-maural-kms-frontend.html
-docs/ai-pipeline-architecture.md

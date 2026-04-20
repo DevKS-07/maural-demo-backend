@@ -32,9 +32,9 @@ Maural Solutions LLC operates the platform as a consulting firm serving multiple
 | Database | PostgreSQL via Supabase | Primary data store |
 | ORM | Prisma | Schema management, queries, migrations |
 | Auth | Clerk (JWT) | Authentication, user lifecycle webhooks |
-| LLM | Ollama — `qwen3.5:9b` (local) | Intent routing, agent responses, guardrails |
-| Embeddings | Ollama — `nomic-embed-text` (local) | 768-dimensional document vectors |
-| LLM SDK | LangChain (`@langchain/ollama`) | ChatOllama and OllamaEmbeddings wrappers |
+| LLM | OpenAI — `gpt-4o-mini` | Intent routing, agent responses, guardrails |
+| Embeddings | OpenAI — `text-embedding-3-small` | 1536-dimensional document vectors |
+| LLM SDK | LangChain (`@langchain/openai`) | ChatOpenAI and OpenAIEmbeddings wrappers |
 | Vector Search | Supabase pgvector | Cosine similarity search on document embeddings |
 | File Storage | Supabase Storage | Per-organisation storage buckets |
 | Streaming | SSE (Server-Sent Events) | Real-time token delivery for chat |
@@ -54,7 +54,7 @@ Maural Solutions LLC operates the platform as a consulting firm serving multiple
 
 ## Quick Start
 
-> **Prerequisites:** Node.js, PostgreSQL via Supabase, [Ollama](https://ollama.com) installed and running
+> **Prerequisites:** Node.js, PostgreSQL via Supabase, OpenAI API key
 
 ```bash
 # 1. Clone the repository
@@ -67,15 +67,13 @@ npm install
 # 3. Set up environment variables
 cp .env.example .env
 # Fill in all required values — see Environment Variables section
+# At minimum: DATABASE_URL, SUPABASE_URL, SUPABASE_ANON_KEY,
+#             CLERK_SECRET_KEY, OPENAI_API_KEY
 
 # 4. Run database migrations
 npx prisma migrate dev
 
-# 5. Pull Ollama models
-ollama pull qwen3.5:9b
-ollama pull nomic-embed-text
-
-# 6. Start the development server
+# 5. Start the development server
 npm run dev
 ```
 
@@ -122,7 +120,7 @@ maural-kms-api/
 ├── services/
 │   ├── ragService.js                — Document retrieval + prompt construction
 │   ├── businessDataService.js       — KPI + VTO data fetching for chat context
-│   ├── intentRouter.js              — Multi-intent detection (qwen3.5:9b)
+│   ├── intentRouter.js              — Multi-intent detection (OpenAI)
 │   ├── promptTemplates.js           — Per-intent system prompts
 │   ├── guardrail.js                 — Answer accuracy verification
 │   ├── finance.service.js           — QuickBooks financial KPI computation
@@ -184,13 +182,13 @@ Copy `.env.example` to `.env`. Never commit your `.env` file.
 | `CLERK_SECRET_KEY` | Clerk secret key | Yes |
 | `CLERK_WEBHOOK_SECRET` | Webhook secret — required for user lifecycle sync | Yes |
 
-### Ollama (AI — local)
+### OpenAI (AI)
 
 | Variable | Description | Required |
 |---|---|---|
-| `OLLAMA_BASE_URL` | Ollama server URL — default `http://localhost:11434` | Yes |
-| `OLLAMA_CHAT_MODEL` | Chat model — default `qwen3.5:9b` | Yes |
-| `OLLAMA_EMBED_MODEL` | Embeddings model — default `nomic-embed-text` | Yes |
+| `OPENAI_API_KEY` | OpenAI API key — obtain at `platform.openai.com` | Yes |
+| `OPENAI_CHAT_MODEL` | Chat model — default `gpt-4o-mini` | No |
+| `OPENAI_EMBED_MODEL` | Embeddings model — default `text-embedding-3-small` | No |
 
 ### HubSpot Integration
 
@@ -251,12 +249,13 @@ The pgvector extension and `document_embeddings` table must be created manually 
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- Create embeddings table with org_id for tenant isolation
+-- 1536 dimensions = OpenAI text-embedding-3-small output size
 CREATE TABLE IF NOT EXISTS document_embeddings (
   id        bigserial PRIMARY KEY,
   content   text,
   metadata  jsonb,
   org_id    uuid REFERENCES "Organisation"(org_id) ON DELETE CASCADE,
-  embedding vector(768)
+  embedding vector(1536)
 );
 
 -- Index on org_id for fast tenant-scoped queries
@@ -265,7 +264,7 @@ CREATE INDEX IF NOT EXISTS idx_document_embeddings_org_id
 
 -- Tenant-scoped similarity search function
 CREATE OR REPLACE FUNCTION match_documents(
-  query_embedding vector(768),
+  query_embedding vector(1536),
   match_count     int DEFAULT 15,
   filter_org_ids  uuid[] DEFAULT NULL
 )
@@ -378,7 +377,7 @@ When an invitee signs up through Clerk, the webhook auto-assigns their `org_id` 
 
 ## AI Chatbot
 
-All AI inference runs **100% locally** via Ollama — no data is sent to any third-party AI service.
+AI inference is powered by the **OpenAI API** (`gpt-4o-mini` for chat, `text-embedding-3-small` for embeddings).
 
 ### Multi-Agent RAG Pipeline
 
@@ -390,22 +389,22 @@ User Message
      |----------------------------+----------------------------+
      v                           v                            v
 [Intent Router]          [Document Retrieval]       [Business Data Service]
-qwen3.5:9b, temp=0       pgvector top-15 chunks     DB queries (no LLM call)
+gpt-4o-mini, temp=0       pgvector top-15 chunks     DB queries (no LLM call)
 -> ["summarize","predict"] -> relevant document text  -> KPI snapshots + VTO data
      |                            |                            |
      +----------+-----------------+----------------------------+
                 v
      [Parallel Specialized Agents]
-      One qwen3.5:9b agent per detected intent
+      One gpt-4o-mini agent per detected intent
       +----------+----------+----------+----------+----------+
       summarize  analyze    predict    explain    qa
       +----------+----------+----------+----------+----------+
                 v
      [Response Combiner]  <- only if more than 1 intent
-      qwen3.5:9b: merges sections into one coherent answer
+      gpt-4o-mini: merges sections into one coherent answer
                 v
      [Guardrail Agent]
-      qwen3.5:9b, temp=0, JSON output
+      gpt-4o-mini, temp=0, JSON output
       - Checks every claim against source documents and business data
       - Labels unlabeled general knowledge
       - Revises hallucinated claims
@@ -436,7 +435,7 @@ POST /api/chat/ingest
 node scripts/ingest-local.js
 ```
 
-**Pipeline:** Upload -> Text extraction -> Sanitize -> Chunk (1000 chars, 150-char overlap) -> Embed with `nomic-embed-text` -> Store in `document_embeddings` with `org_id`
+**Pipeline:** Upload -> Text extraction -> Sanitize -> Chunk (1000 chars, 150-char overlap) -> Embed with `text-embedding-3-small` (OpenAI, 1536 dims) -> Store in `document_embeddings` with `org_id`
 
 **Supported file types:**
 
@@ -747,7 +746,8 @@ The `org_id` foreign key is the most important relationship in the data model. I
 
 - `DISABLE_AUTH=true` is for local development only — never enable in production
 - QuickBooks defaults to `sandbox` environment — update `QUICKBOOKS_ENVIRONMENT` and `QUICKBOOKS_BASE_URL` when deploying
-- All AI inference runs locally via Ollama — no document content or user queries are sent to any external AI service
+- AI inference uses OpenAI API (`gpt-4o-mini` for chat, `text-embedding-3-small` for embeddings) — `OPENAI_API_KEY` is required in production
+- The `document_embeddings` table must use `vector(1536)` to match `text-embedding-3-small` output — do not use 768 dimensions
 - `pdf-parse@1` is required specifically — version 2.x has a breaking API change
 - BigInt fields (IDs) are serialized as strings in all API responses
 - Users are created exclusively through Clerk invitations — no public sign-up endpoint
@@ -761,5 +761,5 @@ The `org_id` foreign key is the most important relationship in the data model. I
 For more detail, see:
 - [AI_CHATBOT_README.md](AI_CHATBOT_README.md) — Full AI chatbot technical documentation
 - [API_REFERENCE.md](API_REFERENCE.md) — Complete API reference with request/response examples
-- [SYSTEM_SETUP_GUIDE.md](SYSTEM_SETUP_GUIDE.md) — Step-by-step setup and user onboarding guide
-- [entity-relationships.html](entity-relationships.html) — Entity relationship diagrams and business context
+- [OPERATIONS_GUIDE.md](OPERATIONS_GUIDE.md) — Role architecture, bootstrap, management API reference, and technical troubleshooting
+- [USER_GUIDE.md](USER_GUIDE.md) — Step-by-step application UI navigation guide
