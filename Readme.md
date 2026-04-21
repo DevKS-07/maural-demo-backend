@@ -161,6 +161,7 @@ Copy `.env.example` to `.env`. Never commit your `.env` file.
 | `PORT` | Server port — default `5000` | Yes |
 | `apiVersion` | API version prefix — default `v1` | Yes |
 | `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | Yes |
+| `FRONTEND_URL` | Base URL of the frontend app | Yes |
 | `FRONTEND_REDIRECT_URI` | Frontend URL for OAuth redirect after connection | Yes |
 | `DISABLE_AUTH` | Set `true` to bypass auth locally — never use in production | No |
 
