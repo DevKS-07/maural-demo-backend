@@ -1,15 +1,36 @@
 node_modules
 npm-debug.log*
+
+# Version control
 .git
 .gitignore
 .github
+
+# Editor / OS
 .vscode
+.DS_Store
+
+# Environment files (never bake secrets into the image)
 .env*
+
+# Tests & coverage
 coverage
 __tests__
+test-reports
+jest.setup.js
+
+# Documentation & presentation (not needed at runtime)
+*.md
+docs-assets
+
+# Dev-only tooling
+eslint.config.js
+scripts
+
+# Deployment config (irrelevant inside the container)
+railway.toml
+*.traineddata
+
+# Keep the uploads directory but not its contents
 uploads/*
 !uploads/.gitkeep
-*.md
-*.traineddata
-hubspot.config.yml
-generate-routes-docs.js
