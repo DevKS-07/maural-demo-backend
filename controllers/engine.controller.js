@@ -109,6 +109,45 @@ const getFullDashboardSummary = async (req, res) => {
     const qbLaborCost = null; // laborCost not in FinanceKpi schema yet
     const qbTotalRevenue = financial?.totalIncome ?? null;
 
+    // Persist financial and leads to DB so the scorecard and chat have cached data
+    const { start, end } = resolvePeriod(startDate, endDate);
+    if (financialResult.status === "fulfilled" && financial) {
+      prisma.financeKpi
+        .upsert({
+          where: {
+            org_id_periodStart_periodEnd: { org_id, periodStart: start, periodEnd: end },
+          },
+          create: {
+            organisation: { connect: { org_id } },
+            periodStart: start,
+            periodEnd: end,
+            ...mapFinanceToSchema(financial),
+          },
+          update: { ...mapFinanceToSchema(financial), isStale: false },
+        })
+        .catch((e) =>
+          console.warn("[SummaryEngine] Failed to persist finance:", e.message),
+        );
+    }
+    if (leadsResult.status === "fulfilled" && leadsResult.value) {
+      prisma.leadsKpi
+        .upsert({
+          where: {
+            org_id_periodStart_periodEnd: { org_id, periodStart: start, periodEnd: end },
+          },
+          create: {
+            organisation: { connect: { org_id } },
+            periodStart: start,
+            periodEnd: end,
+            ...mapLeadsToSchema(leadsResult.value),
+          },
+          update: { ...mapLeadsToSchema(leadsResult.value), isStale: false },
+        })
+        .catch((e) =>
+          console.warn("[SummaryEngine] Failed to persist leads:", e.message),
+        );
+    }
+
     const [laborResult] = await Promise.allSettled([
       getLaborKPIsService(org_id, {
         startDate,
