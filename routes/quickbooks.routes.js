@@ -13,7 +13,7 @@ router.get("/install", requireAuth, quickbooksController.installQuickbooks);
 
 router.get("/oauth-callback", quickbooksController.callbackHandler);
 
-router.get("/success", requireAuth, quickbooksController.connectionSuccessHandler);
+router.get("/success", quickbooksController.connectionSuccessHandler);
 
 router.get("/status", requireAuth, quickbooksController.connectionStatus);
 

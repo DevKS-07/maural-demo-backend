@@ -12,7 +12,7 @@ router.get("/install", requireAuth, mondayController.installMonday);
 
 router.get("/oauth-callback", mondayController.callbackHandler);
 
-router.get("/success", requireAuth, mondayController.connectionSuccessHandler);
+router.get("/success", mondayController.connectionSuccessHandler);
 
 router.get("/status", requireAuth, mondayController.connectionStatus);
 

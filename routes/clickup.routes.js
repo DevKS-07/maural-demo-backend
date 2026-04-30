@@ -12,7 +12,7 @@ router.get("/install", requireAuth, clickupController.installClickUp);
 
 router.get("/oauth-callback", clickupController.callbackHandler);
 
-router.get("/success", requireAuth, clickupController.connectionSuccessHandler);
+router.get("/success", clickupController.connectionSuccessHandler);
 
 router.get("/status", requireAuth, clickupController.connectionStatus);
 

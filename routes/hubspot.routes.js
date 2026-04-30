@@ -13,7 +13,7 @@ router.get("/install", requireAuth, hubspotController.installHubSpot);
 
 router.get("/oauth-callback", hubspotController.callbackHandler);
 
-router.get("/success", requireAuth, hubspotController.connectionSuccessHandler);
+router.get("/success", hubspotController.connectionSuccessHandler);
 
 router.get("/status", requireAuth, hubspotController.connectionStatus);
 
