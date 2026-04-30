@@ -135,7 +135,7 @@ const callbackHandler = async (req, res) => {
       data: { quickbooks_connected: true },
     });
 
-    res.redirect("/api/integrations/quickbooks/success");
+    res.redirect(`${FRONTEND_REDIRECT_URI}?connected=quickbooks`);
   } catch (error) {
     console.error("Error fetching access tokens:", error);
     res.status(500).send("Error connecting QuickBooks. Please try again.");

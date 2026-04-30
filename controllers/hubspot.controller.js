@@ -100,7 +100,7 @@ const callbackHandler = async (req, res) => {
       data: { hubspot_connected: true },
     });
 
-    res.redirect("/api/integrations/hubspot/success");
+    res.redirect(`${FRONTEND_REDIRECT_URI}?connected=hubspot`);
   } catch (error) {
     console.error("[HubSpot] Token exchange error:", error.message);
     res.status(500).send("Error connecting HubSpot. Please try again.");
