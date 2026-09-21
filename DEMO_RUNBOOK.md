@@ -197,6 +197,19 @@ These were expensive to establish. Don't re-derive them.
   for it — adding any new `VITE_` variable means editing three files in lockstep
   (`src/env.ts`, `public/config.js`, and the envsubst list in `entrypoint.sh`), and missing one
   yields an unsubstituted `${...}` string at runtime.
+- **`prisma db push` reads `.env`, not `.env.demo.local`.** `prisma.config.js` starts with
+  `import "dotenv/config"`, which loads plain `.env` from the repo root, and then resolves
+  `env("DIRECT_URL")`. The repo still has `.env`, `.env.development.local`,
+  `.env.production.local`, `.env.staging.local` and `.env.test.local` on disk, all holding
+  **old** credentials. So the file that decides where the schema lands is `.env` — print the
+  host out of `DIRECT_URL` and eyeball it before running `db push`, rather than trusting that
+  the right file was edited. (dotenv does not override an already-set shell variable, so a
+  stale exported `DIRECT_URL` wins over the file.)
+- **Supabase free-tier projects pause after about a week of inactivity** — that is almost
+  certainly what happened to the original project, which is now inactive. A portfolio demo is
+  idle by nature: nobody clicks it for ten days, the database pauses, and the next visitor gets
+  a broken app. Decide at project-creation time how to handle it: a paid plan, or a scheduled
+  keep-alive query. The keep-alive is cheap since Railway is already running (see Phase 6).
 
 ### Added during frontend Phase 0–1 (2026-09-21)
 
@@ -476,8 +489,16 @@ is optional insurance rather than a requirement.
 
 - [ ] **Create the project**, collect `DATABASE_URL`, `DIRECT_URL`, `SUPABASE_URL`,
       `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
+- [ ] **Decide how to survive free-tier pausing.** Free projects pause after roughly a week
+      idle — which is the normal state of a portfolio demo, and almost certainly what killed
+      the original project. Either budget for a paid plan or commit to a keep-alive (Phase 6).
+      Deciding now avoids discovering it when someone reports the demo is down.
+      → *Decision:* `________`
 - [ ] **[BLOCKER] Point both database URLs at the new project.** `prisma.config.js` resolves
-      from `DIRECT_URL`. Miss that and you push the schema into the old database.
+      from `DIRECT_URL`, loaded out of plain **`.env`** via `dotenv/config` — not
+      `.env.demo.local`, and not the other four stale `.env.*.local` files still on disk. Print
+      the host from `DIRECT_URL` and confirm it's the new project *before* pushing; a stale
+      exported shell variable also beats the file.
 - [ ] **Push the schema:** `npx prisma db push` (not `migrate dev` — no migrations exist).
 - [ ] **Run the pgvector SQL with two edits:** skip `match_documents` (ragService dropped the
       RPC for raw SQL on its own pool) and create **no IVFFlat index** — on a demo-sized corpus
@@ -666,6 +687,10 @@ Six small, localized edits. No structural changes.
       guardrail badge.
 - [ ] **Set up a reseed path.** Even with writes blocked the demo drifts. A one-command reseed
       is enough; a scheduled job is nicer.
+- [ ] **Set up the Supabase keep-alive** (unless a paid plan was chosen in Phase 2). A trivial
+      scheduled query every few days stops the free tier pausing on an idle demo. A Railway cron
+      or a GitHub Action hitting a cheap endpoint both work — the point is that something
+      touches the database on a schedule.
 
 ---
 
