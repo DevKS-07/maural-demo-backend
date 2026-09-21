@@ -48,6 +48,44 @@ user. Not a production hardening exercise — the project is not being actively 
 
 ---
 
+## Shared contract — backend ↔ frontend
+
+Fixed strings both repos must agree on. **Do not invent alternatives.** A mismatch here fails
+as a CORS or auth error, not as a naming error, so it is expensive to debug.
+
+| Thing | Value |
+| --- | --- |
+| Auth scheme | `Authorization: Bearer <demo password the visitor types>` |
+| Backend env var holding the password | `DEMO_ACCESS_KEY` |
+| Frontend storage of the typed password | `localStorage["demo_key"]` |
+| Persona header | `X-Demo-Role` |
+| Persona values | `super_admin` · `admin` · `org_executive` · `org_staff` |
+| Default persona when header absent | `org_executive` |
+| Seeded clerk ids | `demo_super_admin` · `demo_admin` · `demo_org_executive` · `demo_org_staff` |
+| Paths exempt from the password gate | `/api/health` |
+
+Three rules that follow from it:
+
+- **Both headers go in two places on the frontend** — the axios interceptor in
+  `AuthContext.tsx` and the raw `fetch` in `floating-chatbot.tsx`.
+- **`X-Demo-Role` must be listed in CORS `allowedHeaders`** (`app.js:43`) or every
+  cross-origin request fails preflight.
+- **The frontend needs no env var for the password.** The visitor types it; `getToken()`
+  returns it. Only the backend knows the expected value.
+
+### Working in parallel
+
+Phases split cleanly by repo: **0** is frontend-only, **1** touches both but the two migrations
+are independent, **2–4** are backend-only, **5** is frontend-only, **6** is backend-then-frontend,
+**7** is both. Backend 2–4 and frontend 5 are the natural parallel pair — frontend code can be
+written against this contract and verified once Phase 4 lands.
+
+Two cautions: do the **Phase 1 git migrations one at a time** (irreversible operations deserve
+undivided attention), and if two sessions are running, **only the backend session edits this
+file** — concurrent writes lose each other's ticks.
+
+---
+
 ## Findings that drive the plan
 
 These were expensive to establish. Don't re-derive them.
@@ -303,9 +341,10 @@ Six small, localized edits. No structural changes.
 - [ ] **Create `.env.demo.local` for local runs.** `server.js` loads `.env.<NODE_ENV>.local`, so
       `NODE_ENV=demo` needs that exact filename or the app exits on missing required vars. Copy
       `.env.example` as the starting point and set `PORT=5000` to match the frontend's base URL.
-- [ ] **[BLOCKER] Add the demo-password middleware.** Check `Authorization: Bearer <demo key>`
-      before the routes; exempt `/api/health` so Railway's probe works. The frontend already
-      sends this once the shim's `getToken` returns the key.
+- [ ] **[BLOCKER] Add the demo-password middleware.** Check `Authorization: Bearer <key>`
+      against `DEMO_ACCESS_KEY` before the routes; exempt `/api/health` so Railway's probe
+      works. The frontend already sends this once the shim's `getToken` returns the key. See
+      "Shared contract" for exact strings.
 - [ ] **[BLOCKER] Parameterize the vector query** at `services/ragService.js:214-215` —
       bind as `$1::uuid[]`.
 - [ ] **Block the destructive routes:** `DELETE /api/org/:orgId`, `PUT|DELETE /api/user/:userId`,
@@ -373,9 +412,10 @@ Six small, localized edits. No structural changes.
 - [ ] **[BLOCKER] Dedicated OpenAI key with a hard spend cap.** Not your main key. A public
       unauthenticated chat endpoint running a multi-agent pipeline is the one thing here that
       can actually cost money.
-- [ ] **Deploy the API from `demo`.** Env: `NODE_ENV=demo`, `DISABLE_AUTH=true`, five Supabase
-      values, capped OpenAI key, demo password, dummy `CLERK_SECRET_KEY`, and `FRONTEND_URL` /
-      `FRONTEND_REDIRECT_URI` / `ALLOWED_ORIGINS`. No `QUICKBOOKS_*` vars needed.
+- [ ] **Deploy the API from `demo`.** Env: `NODE_ENV=demo`, `DISABLE_AUTH=true`,
+      `DEMO_ACCESS_KEY`, five Supabase values, capped OpenAI key, dummy `CLERK_SECRET_KEY`, and
+      `FRONTEND_URL` / `FRONTEND_REDIRECT_URI` / `ALLOWED_ORIGINS`. No `QUICKBOOKS_*` vars
+      needed.
 - [ ] **Confirm no `.env` reaches the image** — `.dockerignore` already excludes `.env*`; verify
       it still does after the history rewrite.
 - [ ] **Check `/api/health` and CORS.** A CORS miss surfaces as AuthContext's "Unable to reach
