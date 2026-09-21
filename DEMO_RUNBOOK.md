@@ -39,7 +39,9 @@ user. Not a production hardening exercise — the project is not being actively 
 6. **WebViewer:** keep it if the license key still works. If it doesn't, drop it from the
    frontend and fall back to a plain browser PDF view — with a visible note that this is a demo
    and some features differ from production. A simple viewer that works reads better in a
-   portfolio than a broken premium one.
+   portfolio than a broken premium one. **The test itself lives in Phase 5**, not earlier: it
+   needs a running backend, a live database and a seeded document, and the old Supabase project
+   and hosted backend are both down.
 7. **`main` = the real project, `demo` = demo modifications.** Deploy from `demo`.
 8. **The team repos are left completely untouched** — frozen as the snapshot of where the team
    finished, with all collaborators keeping access. Local clones are disconnected from them and
@@ -94,8 +96,9 @@ backend-then-frontend, **7** is both. Backend 2–4 and frontend 5 are the natur
 frontend code can be written against this contract and verified once Phase 4 lands.
 
 **Suggested order.** Phase 0 → frontend Phase 1 → API Phase 1 → Phases 2–4 → (split) Phase 5.
-Phase 0 gates the frontend's Phase 1 scope (see the callout in Phase 0), and grouping both into
-one frontend block avoids bouncing between repos.
+Grouping Phase 0 and the frontend migration into one block avoids bouncing between repos.
+Nothing in Phases 0–1 depends on the WebViewer decision any more — that test needs a running
+stack and lives in Phase 5.
 
 Two cautions: do the **Phase 1 git migrations one at a time** (irreversible operations deserve
 undivided attention), and **once two sessions are running in parallel, only the backend session
@@ -171,9 +174,12 @@ These were expensive to establish. Don't re-derive them.
 
 ---
 
-## Phase 0 — Clear the blockers
+## Phase 0 — Prep
 
-Two things will stop a clean deploy dead.
+One item. The WebViewer license test used to live here but **moved to Phase 5** — testing it
+requires opening a document, which needs a running backend, a live database and a seeded file.
+None of those exist until Phases 2–4 are done. The old Supabase project is inactive and the
+old hosted backend is down, so the test is simply not runnable yet.
 
 - [ ] **Commit the frontend lockfile.** `../maural-kms/.gitignore` ignores
       `package-lock.json`. Not a build blocker on the chosen Vercel-from-GitHub path — Vercel
@@ -187,19 +193,6 @@ Two things will stop a clean deploy dead.
       git add -f package-lock.json
       git commit -m "chore: track lockfile for reproducible builds"
       ```
-- [ ] **[BLOCKER] Test the WebViewer license.** The key in `../maural-kms/.env` is
-      `demo:1760471071849:...` — stamped October 2025. Run the app, open a document, watch the
-      console. Apryse demo keys are short-lived.
-- [x] **Viewer policy decided.** If the key works → keep WebViewer unchanged. If it doesn't →
-      remove the WebViewer dependency, render documents in a plain PDF view, and add a demo
-      note that some features differ from production. Record which branch you're on here after
-      the test above. → *Test outcome:* `________`
-
-> **This decision gates the frontend's Phase 1 migration.** If WebViewer is dropped, then
-> `public/lib/webviewer` (172 MB, 677 committed files) should be stripped from history during
-> the frontend's `filter-repo` pass — the same run, one extra `--path`. Noticing it after the
-> push means a second history rewrite on a repo that's already live. **So finish Phase 0 before
-> migrating the frontend repo**, and do the frontend migration while you're still in that repo.
 
 ---
 
@@ -258,15 +251,15 @@ is optional insurance rather than a requirement.
       ```bash
       git filter-repo --path uploads --invert-paths --force
       ```
-- [ ] **Frontend only — strip `public/lib/webviewer` if the viewer was dropped** in Phase 0.
-      172 MB across 677 files. Doing it in the same `filter-repo` run costs one extra `--path`;
-      doing it later means a second rewrite of a live repo. Skip if the viewer survived.
-      ```bash
-      # in ../maural-kms, ONLY if WebViewer is being removed:
-      git filter-repo --path public/lib/webviewer --invert-paths --force
-      ```
 - [ ] **Verify the strip.** The confirm command above should now print nothing. If it prints
       filenames, stop — do not push.
+
+> **On `public/lib/webviewer` (172 MB, 677 files):** whether it gets stripped depends on the
+> WebViewer license test, which can't run until Phase 5. Migrate with it intact for now. If the
+> viewer is later dropped, do a second `filter-repo` pass then — cheap, because the new repo is
+> private, has only you as a collaborator, and nobody else has cloned it, so a force-push is
+> safe. Don't block the migration on a decision you can't make yet.
+
 - [ ] **Create the new blank private repos.** Start private; flip to public in Phase 7.
       ```bash
       gh repo create maural-kms-api --private
@@ -427,10 +420,22 @@ Six small, localized edits. No structural changes.
       visually.
 - [ ] **Replace `ProfilePage`** with a static card from the seeded user, and **`nav-user`'s sign
       out** with one that clears the demo key.
-- [ ] **Apply the Phase 0 viewer decision.** If the key works, leave `web-viewer.tsx` alone. If
-      not: drop `@pdftron/webviewer` and `public/lib/webviewer/` (172 MB of vendored assets —
-      removing it also shrinks the deploy substantially), and render documents in a plain PDF
+- [ ] **[BLOCKER] Test the WebViewer license.** *Do this after Phases 2–4 and after the demo
+      shim above works* — it needs a running backend, the new Supabase project, a seeded
+      document and a way into the app. The key in `../maural-kms/.env` is
+      `demo:1760471071849:...`, stamped October 2025; Apryse demo keys are short-lived, so
+      expect it to be dead. Open a document and watch the console.
+      → *Test outcome:* `________`
+- [ ] **Apply the viewer decision.** If the key works, leave `web-viewer.tsx` alone. If not:
+      drop `@pdftron/webviewer` and `public/lib/webviewer/` and render documents in a plain PDF
       view instead.
+- [ ] **If the viewer was dropped, strip it from history too.** 172 MB across 677 files. The
+      repo is private with only you on it, so a rewrite plus force-push is safe.
+      ```bash
+      # in ../maural-kms
+      git filter-repo --path public/lib/webviewer --invert-paths --force
+      git push --force origin main demo
+      ```
 - [ ] **Whichever viewer survives, check it can authenticate.** `GET /api/docs/:id` is behind
       the demo-password middleware, and an `<iframe src="...">` cannot send an `Authorization`
       header. Fetch the file through the existing axios instance (which already attaches the
