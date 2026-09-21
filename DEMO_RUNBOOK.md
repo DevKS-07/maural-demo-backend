@@ -89,13 +89,18 @@ Three rules that follow from it:
 ### Working in parallel
 
 Phases split cleanly by repo: **0** is frontend-only, **1** touches both but the two migrations
-are independent, **2–4** are backend-only, **5** is frontend-only, **6** is backend-then-frontend,
-**7** is both. Backend 2–4 and frontend 5 are the natural parallel pair — frontend code can be
-written against this contract and verified once Phase 4 lands.
+are independent of each other, **2–4** are backend-only, **5** is frontend-only, **6** is
+backend-then-frontend, **7** is both. Backend 2–4 and frontend 5 are the natural parallel pair —
+frontend code can be written against this contract and verified once Phase 4 lands.
+
+**Suggested order.** Phase 0 → frontend Phase 1 → API Phase 1 → Phases 2–4 → (split) Phase 5.
+Phase 0 gates the frontend's Phase 1 scope (see the callout in Phase 0), and grouping both into
+one frontend block avoids bouncing between repos.
 
 Two cautions: do the **Phase 1 git migrations one at a time** (irreversible operations deserve
-undivided attention), and if two sessions are running, **only the backend session edits this
-file** — concurrent writes lose each other's ticks.
+undivided attention), and **once two sessions are running in parallel, only the backend session
+edits this file** — concurrent writes lose each other's ticks. Before the split there's only one
+session, so it owns the file.
 
 ---
 
@@ -190,6 +195,12 @@ Two things will stop a clean deploy dead.
       note that some features differ from production. Record which branch you're on here after
       the test above. → *Test outcome:* `________`
 
+> **This decision gates the frontend's Phase 1 migration.** If WebViewer is dropped, then
+> `public/lib/webviewer` (172 MB, 677 committed files) should be stripped from history during
+> the frontend's `filter-repo` pass — the same run, one extra `--path`. Noticing it after the
+> push means a second history rewrite on a repo that's already live. **So finish Phase 0 before
+> migrating the frontend repo**, and do the frontend migration while you're still in that repo.
+
 ---
 
 ## Phase 1 — New repos, clean history
@@ -246,6 +257,13 @@ is optional insurance rather than a requirement.
       directory from the team repo and do it there instead.
       ```bash
       git filter-repo --path uploads --invert-paths --force
+      ```
+- [ ] **Frontend only — strip `public/lib/webviewer` if the viewer was dropped** in Phase 0.
+      172 MB across 677 files. Doing it in the same `filter-repo` run costs one extra `--path`;
+      doing it later means a second rewrite of a live repo. Skip if the viewer survived.
+      ```bash
+      # in ../maural-kms, ONLY if WebViewer is being removed:
+      git filter-repo --path public/lib/webviewer --invert-paths --force
       ```
 - [ ] **Verify the strip.** The confirm command above should now print nothing. If it prints
       filenames, stop — do not push.
