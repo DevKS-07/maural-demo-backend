@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 440" font-family="'Segoe UI', 'Inter', -apple-system, sans-serif">
+  <defs>
+    <filter id="shadow" x="-4%" y="-4%" width="108%" height="112%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.08"/>
+    </filter>
+    <marker id="arrow-up" markerWidth="8" markerHeight="8" refX="4" refY="8" orient="auto">
+      <path d="M0,8 L4,0 L8,8" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="860" height="440" rx="16" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="430" y="36" font-size="11" font-weight="700" fill="#2563eb" text-anchor="middle" letter-spacing="1.5">ROLE-BASED ACCESS CONTROL (RBAC)</text>
+  <text x="430" y="56" font-size="13" fill="#64748b" text-anchor="middle">4-level hierarchy enforced at middleware level on every request</text>
+
+  <!-- ═══ Left: Pyramid ═══ -->
+
+  <!-- Level 4: Super Admin -->
+  <g filter="url(#shadow)">
+    <rect x="160" y="80" width="280" height="58" rx="10" fill="#1e40af"/>
+    <text x="300" y="108" font-size="16" font-weight="700" fill="white" text-anchor="middle">Super Admin</text>
+    <text x="300" y="126" font-size="11" fill="rgba(255,255,255,0.75)" text-anchor="middle">Level 4 — Full platform access</text>
+  </g>
+
+  <!-- Connector -->
+  <line x1="300" y1="138" x2="300" y2="154" stroke="#94a3b8" stroke-width="1.5"/>
+
+  <!-- Level 3: Admin -->
+  <g filter="url(#shadow)">
+    <rect x="130" y="154" width="340" height="58" rx="10" fill="#2563eb"/>
+    <text x="300" y="182" font-size="16" font-weight="700" fill="white" text-anchor="middle">Admin</text>
+    <text x="300" y="200" font-size="11" fill="rgba(255,255,255,0.75)" text-anchor="middle">Level 3 — Cross-org management</text>
+  </g>
+
+  <!-- Connector -->
+  <line x1="300" y1="212" x2="300" y2="228" stroke="#94a3b8" stroke-width="1.5"/>
+
+  <!-- Level 2: Org Executive -->
+  <g filter="url(#shadow)">
+    <rect x="100" y="228" width="400" height="58" rx="10" fill="#3b82f6"/>
+    <text x="300" y="256" font-size="16" font-weight="700" fill="white" text-anchor="middle">Org Executive</text>
+    <text x="300" y="274" font-size="11" fill="rgba(255,255,255,0.75)" text-anchor="middle">Level 2 — Own org reporting &amp; management</text>
+  </g>
+
+  <!-- Connector -->
+  <line x1="300" y1="286" x2="300" y2="302" stroke="#94a3b8" stroke-width="1.5"/>
+
+  <!-- Level 1: Org Staff -->
+  <g filter="url(#shadow)">
+    <rect x="70" y="302" width="460" height="58" rx="10" fill="#60a5fa"/>
+    <text x="300" y="330" font-size="16" font-weight="700" fill="white" text-anchor="middle">Org Staff</text>
+    <text x="300" y="348" font-size="11" fill="rgba(255,255,255,0.85)" text-anchor="middle">Level 1 — Basic access within own org</text>
+  </g>
+
+  <!-- ═══ Right: Permissions table ═══ -->
+  <g filter="url(#shadow)">
+    <rect x="560" y="80" width="274" height="280" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+
+    <text x="580" y="108" font-size="14" font-weight="700" fill="#1e293b">Permissions</text>
+
+    <!-- Headers -->
+    <text x="580" y="138" font-size="11" font-weight="600" fill="#64748b">Action</text>
+    <text x="730" y="138" font-size="11" font-weight="600" fill="#64748b">Min. Role</text>
+
+    <line x1="575" y1="146" x2="820" y2="146" stroke="#e2e8f0" stroke-width="1"/>
+
+    <!-- Row 1 -->
+    <text x="580" y="168" font-size="12.5" fill="#1e293b">View own org data</text>
+    <rect x="720" y="155" width="90" height="22" rx="4" fill="rgba(96,165,250,0.15)"/>
+    <text x="765" y="170" font-size="11" font-weight="600" fill="#3b82f6" text-anchor="middle">Org Staff</text>
+
+    <!-- Row 2 -->
+    <text x="580" y="200" font-size="12.5" fill="#1e293b">Invite members</text>
+    <rect x="720" y="187" width="90" height="22" rx="4" fill="rgba(59,130,246,0.15)"/>
+    <text x="765" y="202" font-size="11" font-weight="600" fill="#2563eb" text-anchor="middle">Org Exec</text>
+
+    <!-- Row 3 -->
+    <text x="580" y="232" font-size="12.5" fill="#1e293b">Connect integrations</text>
+    <rect x="720" y="219" width="90" height="22" rx="4" fill="rgba(59,130,246,0.15)"/>
+    <text x="765" y="234" font-size="11" font-weight="600" fill="#2563eb" text-anchor="middle">Org Exec</text>
+
+    <!-- Row 4 -->
+    <text x="580" y="264" font-size="12.5" fill="#1e293b">Cross-org access</text>
+    <rect x="720" y="251" width="90" height="22" rx="4" fill="rgba(37,99,235,0.15)"/>
+    <text x="765" y="266" font-size="11" font-weight="600" fill="#1e40af" text-anchor="middle">Admin</text>
+
+    <!-- Row 5 -->
+    <text x="580" y="296" font-size="12.5" fill="#1e293b">Manage all orgs</text>
+    <rect x="720" y="283" width="90" height="22" rx="4" fill="rgba(30,64,175,0.15)"/>
+    <text x="765" y="298" font-size="11" font-weight="600" fill="#1e40af" text-anchor="middle">Super Admin</text>
+
+    <!-- Row 6 -->
+    <text x="580" y="328" font-size="12.5" fill="#1e293b">Delete users / orgs</text>
+    <rect x="720" y="315" width="90" height="22" rx="4" fill="rgba(30,64,175,0.15)"/>
+    <text x="765" y="330" font-size="11" font-weight="600" fill="#1e40af" text-anchor="middle">Super Admin</text>
+  </g>
+
+  <!-- Bottom note -->
+  <rect x="40" y="388" width="780" height="38" rx="8" fill="rgba(37,99,235,0.06)"/>
+  <text x="430" y="412" font-size="12" fill="#2563eb" text-anchor="middle" font-weight="500">Higher roles inherit all permissions of lower roles  |  Org isolation enforced at middleware level  |  Roles synced via Clerk webhooks</text>
+</svg>

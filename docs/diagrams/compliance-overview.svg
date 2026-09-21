@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 500" font-family="'Segoe UI', 'Inter', -apple-system, sans-serif">
+  <defs>
+    <filter id="shadow" x="-4%" y="-4%" width="108%" height="112%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1000" height="500" rx="16" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="500" y="38" font-size="11" font-weight="700" fill="#2563eb" text-anchor="middle" letter-spacing="1.5">REGULATORY COMPLIANCE</text>
+  <text x="500" y="60" font-size="13" fill="#64748b" text-anchor="middle">Why both? Our clients operate across North America — compliance must cover both jurisdictions.</text>
+
+  <!-- Canadian Flag indicator -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="84" width="440" height="390" rx="14" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+
+    <!-- Header bar -->
+    <rect x="40" y="84" width="440" height="56" rx="14" fill="#dc2626"/>
+    <rect x="40" y="112" width="440" height="28" fill="#dc2626"/>
+    <text x="80" y="120" font-size="22" font-weight="800" fill="white">PIPEDA</text>
+    <text x="260" y="120" font-size="13" font-weight="500" fill="rgba(255,255,255,0.85)">Canada</text>
+
+    <!-- Subtitle -->
+    <text x="60" y="164" font-size="12" fill="#64748b">Personal Information Protection and</text>
+    <text x="60" y="180" font-size="12" fill="#64748b">Electronic Documents Act</text>
+
+    <!-- Items -->
+    <circle cx="72" cy="216" r="12" fill="rgba(22,163,74,0.1)"/>
+    <text x="72" y="220" font-size="12" fill="#16a34a" text-anchor="middle" font-weight="700">&#x2713;</text>
+    <text x="92" y="220" font-size="14" font-weight="600" fill="#1e293b">Consent-based data collection</text>
+    <text x="92" y="238" font-size="12" fill="#64748b">Users explicitly grant access via OAuth consent screens</text>
+
+    <circle cx="72" cy="270" r="12" fill="rgba(22,163,74,0.1)"/>
+    <text x="72" y="274" font-size="12" fill="#16a34a" text-anchor="middle" font-weight="700">&#x2713;</text>
+    <text x="92" y="274" font-size="14" font-weight="600" fill="#1e293b">Authorized access only</text>
+    <text x="92" y="292" font-size="12" fill="#64748b">JWT authentication + RBAC with 4-level role hierarchy</text>
+
+    <circle cx="72" cy="324" r="12" fill="rgba(22,163,74,0.1)"/>
+    <text x="72" y="328" font-size="12" fill="#16a34a" text-anchor="middle" font-weight="700">&#x2713;</text>
+    <text x="92" y="328" font-size="14" font-weight="600" fill="#1e293b">Audit logging</text>
+    <text x="92" y="346" font-size="12" fill="#64748b">Request logging with timestamps, structured JSON in prod</text>
+
+    <circle cx="72" cy="378" r="12" fill="rgba(22,163,74,0.1)"/>
+    <text x="72" y="382" font-size="12" fill="#16a34a" text-anchor="middle" font-weight="700">&#x2713;</text>
+    <text x="92" y="382" font-size="14" font-weight="600" fill="#1e293b">Secure data transmission</text>
+    <text x="92" y="400" font-size="12" fill="#64748b">HTTPS enforcement, Helmet security headers, strict CORS</text>
+
+    <circle cx="72" cy="432" r="12" fill="rgba(22,163,74,0.1)"/>
+    <text x="72" y="436" font-size="12" fill="#16a34a" text-anchor="middle" font-weight="700">&#x2713;</text>
+    <text x="92" y="436" font-size="14" font-weight="600" fill="#1e293b">Tenant isolation</text>
+    <text x="92" y="454" font-size="12" fill="#64748b">Per-org data scoping — zero cross-org data leakage</text>
+  </g>
+
+  <!-- US section -->
+  <g filter="url(#shadow)">
+    <rect x="520" y="84" width="440" height="390" rx="14" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+
+    <!-- Header bar -->
+    <rect x="520" y="84" width="440" height="56" rx="14" fill="#1e40af"/>
+    <rect x="520" y="112" width="440" height="28" fill="#1e40af"/>
+    <text x="560" y="120" font-size="22" font-weight="800" fill="white">CCPA / CPRA</text>
+    <text x="740" y="120" font-size="13" font-weight="500" fill="rgba(255,255,255,0.85)">United States</text>
+
+    <!-- Subtitle -->
+    <text x="540" y="164" font-size="12" fill="#64748b">California Consumer Privacy Act &amp;</text>
+    <text x="540" y="180" font-size="12" fill="#64748b">California Privacy Rights Act</text>
+
+    <!-- Items -->
+    <circle cx="552" cy="216" r="12" fill="rgba(22,163,74,0.1)"/>
+    <text x="552" y="220" font-size="12" fill="#16a34a" text-anchor="middle" font-weight="700">&#x2713;</text>
+    <text x="572" y="220" font-size="14" font-weight="600" fill="#1e293b">Data access &amp; deletion rights</text>
+    <text x="572" y="238" font-size="12" fill="#64748b">DELETE endpoints for users, orgs, documents &amp; embeddings</text>
+
+    <circle cx="552" cy="270" r="12" fill="rgba(22,163,74,0.1)"/>
+    <text x="552" y="274" font-size="12" fill="#16a34a" text-anchor="middle" font-weight="700">&#x2713;</text>
+    <text x="572" y="274" font-size="14" font-weight="600" fill="#1e293b">Tenant isolation</text>
+    <text x="572" y="292" font-size="12" fill="#64748b">Org-level middleware prevents cross-tenant data access</text>
+
+    <circle cx="552" cy="324" r="12" fill="rgba(22,163,74,0.1)"/>
+    <text x="552" y="328" font-size="12" fill="#16a34a" text-anchor="middle" font-weight="700">&#x2713;</text>
+    <text x="572" y="328" font-size="14" font-weight="600" fill="#1e293b">MFA for secure logins</text>
+    <text x="572" y="346" font-size="12" fill="#64748b">Enforced via Clerk — verified before JWT is issued</text>
+
+    <circle cx="552" cy="378" r="12" fill="rgba(22,163,74,0.1)"/>
+    <text x="552" y="382" font-size="12" fill="#16a34a" text-anchor="middle" font-weight="700">&#x2713;</text>
+    <text x="572" y="382" font-size="14" font-weight="600" fill="#1e293b">Encrypted storage</text>
+    <text x="572" y="400" font-size="12" fill="#64748b">Supabase encryption at rest, private storage buckets</text>
+
+    <circle cx="552" cy="432" r="12" fill="rgba(22,163,74,0.1)"/>
+    <text x="552" y="436" font-size="12" fill="#16a34a" text-anchor="middle" font-weight="700">&#x2713;</text>
+    <text x="572" y="436" font-size="14" font-weight="600" fill="#1e293b">Rate limiting</text>
+    <text x="572" y="454" font-size="12" fill="#64748b">Global + per-endpoint limits to prevent abuse</text>
+  </g>
+</svg>
