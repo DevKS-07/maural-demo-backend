@@ -8,14 +8,24 @@ findings that took a full codebase review to establish and are not obvious from 
 check: `main` and `demo` are both at `0553ea3` on `maural-demo-frontend`, and the local clone
 is checked out on `demo`.
 
-**API Phase 1: history work is done and verified; the push is the only step left.** The
-rewrite has happened — `uploads/` is stripped from all history **and a real credential leak
-found in `Readme.md` history has been redacted** (see "Added during API Phase 1"; the runbook
-previously predicted this scan would come back clean, and it did not). Local state: `main` and
-`dev` both at `8398a65`, working tree clean, 181 commits, `origin` added and verified as
-`maural-demo-backend`. **Nothing has been pushed yet** — `git branch -r` is empty. Remaining:
-push `main`, cut and push `demo`, plus the two manual github.com steps (archive the old team
-repos, confirm private + collaborators). Phase 2 has not been started.
+**API Phase 1 is done** apart from the same manual GitHub-settings checks the frontend is
+waiting on. The rewrite happened — `uploads/` is stripped from all history **and a real
+credential leak found in `Readme.md` history has been redacted** (see "Added during API
+Phase 1"; this file previously predicted the scan would come back clean, and it did not).
+`main` and `demo` are both pushed to `maural-demo-backend` at `5cd2a07`, the local clone is
+checked out on `demo`, and `dev` is kept local at the same commit and never pushed.
+
+**Remaining Phase 1 work is all on github.com by hand** (no `gh` on this machine): archive the
+two old team repos, and confirm private + collaborators on both new repos. **Phase 2 has not
+been started.** Next session: Phases 2–4 are backend-only, so this repo continues straight
+into Phase 2.
+
+**Two recovery artifacts exist outside the repo** and can now be deleted — the push is
+verified, and both contain the client documents and the unredacted password:
+`../maural-kms-api-prerewrite-mirror.git` (full pre-rewrite mirror, all 12 original refs) and
+`../maural-api-uploads-backup-20260921` (the 5 tracked client documents). **Keep the uploads
+backup only if those source documents are wanted for reference** — Phase 3 authors its own
+fictional demo documents and does not need them.
 
 **Two recovery artifacts exist outside the repo** and should be deleted once the push is
 verified — both contain the client documents and the unredacted password:
@@ -406,14 +416,13 @@ is optional insurance rather than a requirement.
       *Done by hand on github.com: `maural-demo-backend` and `maural-demo-frontend`. `gh` is
       not installed and isn't needed. The originally planned names were unusable: `maural-kms-api`
       is the frozen team repo on the same account.*
-- [ ] **Point at the new remotes and push.**
+- [x] **Point at the new remotes and push.**
       - Frontend: **done.** `main` pushed to `maural-demo-frontend` (~119 MB packed; largest
         blob is 8.9 MB, under GitHub's 100 MB per-file limit).
-      - API: **remote added and verified, push not yet done.** `origin` is
-        `https://github.com/DevKS-07/maural-demo-backend.git`, added only after the strip and
-        the secret scan were both verified clean. `git branch -r` is empty — nothing has left
-        the machine. A read-only `git ls-remote` confirmed the target repo exists, credentials
-        are cached, and it has no refs yet.
+      - API: **done.** `origin` is `https://github.com/DevKS-07/maural-demo-backend.git`, added
+        only after the strip and the secret scan were both verified clean, and asserted against
+        the three forbidden repo names before the push ran. `main` pushed, then `demo` cut from
+        it and pushed. Repo is ~3.9 MB after the strip, down from 20 MB.
       ```bash
       # API — read the URL back before pushing. It must be maural-demo-backend, NOT
       # maural-kms-api (frozen team repo) and NOT either frontend repo.
@@ -422,19 +431,20 @@ is optional insurance rather than a requirement.
       GIT_TERMINAL_PROMPT=0 git ls-remote origin     # expect no output on a blank repo
       git push -u origin main
       ```
-- [ ] **Cut a `demo` branch in each repo.** `main` stays the real project; every demo change
+- [x] **Cut a `demo` branch in each repo.** `main` stays the real project; every demo change
       lands on `demo`. Deployment tracks `demo`. *Frontend: done, `demo` pushed and tracking
-      `origin/demo`. API: still to do — blocked on the `main` push above.*
+      `origin/demo`. **API: done** — `demo` cut from `main`, pushed, tracking `origin/demo`, and
+      the working copy is checked out on it ready for Phase 4.*
       ```bash
       git checkout -b demo && git push -u origin demo
       ```
 - [ ] **Confirm the wiring.** `git remote -v` shows only the new repo in both working copies,
       and Settings → Collaborators on both new repos lists only you. *Frontend: `git remote -v`
       verified. `git ls-remote` shows only `main` + `demo` at `0553ea3`, and no local-only
-      commits. API: `git remote -v` verified as `maural-demo-backend` and asserted against the
-      two forbidden repo names; the `ls-remote` equivalent can only be re-checked after the
-      push. The Collaborators/private check on github.com still needs doing by hand for **both**
-      repos (no `gh`).*
+      commits. **API: git side verified** — `git remote -v` asserted as `maural-demo-backend`,
+      and `git ls-remote` shows only `main` + `demo` at `5cd2a07` with zero unpushed commits on
+      either. (Local `dev` sits at the same commit but is deliberately never pushed.)*
+      **Still open on both repos: the private + Collaborators check on github.com, by hand.**
 - [x] **Salvage the architecture diagrams.** *(API repo.)* **Done in commit `8398a65`.** All ten
       standalone SVGs copied from the gitignored `docs-assets/presentation/` into a tracked
       `docs/diagrams/`, with a `README.md` index splitting them into seven technical diagrams
