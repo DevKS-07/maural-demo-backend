@@ -6,9 +6,21 @@ findings that took a full codebase review to establish and are not obvious from 
 
 **Status:** Phase 0 done. **Frontend Phase 1 done** apart from one manual GitHub-settings
 check: `main` and `demo` are both at `0553ea3` on `maural-demo-frontend`, and the local clone
-is checked out on `demo`. **API Phase 1 is next** (separate session): `origin` has been
-removed, and nothing else has been done. The new backend remote is deliberately **not added**
-yet (see Phase 1).
+is checked out on `demo`.
+
+**API Phase 1: history work is done and verified; the push is the only step left.** The
+rewrite has happened — `uploads/` is stripped from all history **and a real credential leak
+found in `Readme.md` history has been redacted** (see "Added during API Phase 1"; the runbook
+previously predicted this scan would come back clean, and it did not). Local state: `main` and
+`dev` both at `8398a65`, working tree clean, 181 commits, `origin` added and verified as
+`maural-demo-backend`. **Nothing has been pushed yet** — `git branch -r` is empty. Remaining:
+push `main`, cut and push `demo`, plus the two manual github.com steps (archive the old team
+repos, confirm private + collaborators). Phase 2 has not been started.
+
+**Two recovery artifacts exist outside the repo** and should be deleted once the push is
+verified — both contain the client documents and the unredacted password:
+`../maural-kms-api-prerewrite-mirror.git` (full pre-rewrite mirror, all 12 original refs) and
+`../maural-api-uploads-backup-20260921` (the 5 tracked client documents).
 
 ---
 
@@ -202,6 +214,64 @@ These were expensive to establish. Don't re-derive them.
   loudly on a mismatch and never writes the lockfile. That is also exactly what Vercel runs.
 - **`gh` CLI is not installed** on this machine. The repos were created in the web UI instead.
 
+### Added during API Phase 1 (2026-09-21)
+
+- **[ACTION REQUIRED] The API history contained live credentials — the runbook was wrong that
+  it would be clean.** An old `Readme.md` (blob `133ab87`, in commits `543b5fe` and `cfae7f3`,
+  both ancestors of `dev`) had a fully populated env block, not a template:
+  the Supabase project ref `anwurvszektveevdiacu`, the real anon JWT, and
+  **the database password `Ecosphere8_...` in plaintext** inside `DATABASE_URL`. No branch tip
+  had it — it was removed later — so it was purely historical, exactly the class of thing the
+  `uploads/` strip exists to catch. All three are now redacted from local history via
+  `--replace-text`, in the same pass as the `uploads/` strip.
+  **Redacting local history does not un-leak the credential**: the frozen team repo still holds
+  it unredacted, and everyone with access to that repo can read it. **If that Supabase project
+  still exists, rotate the database password.** Phase 2's fresh project means the demo never
+  uses this credential either way, so this is cleanup of an old exposure, not a demo blocker.
+- **A second blob (`ebed8e96`) had the same credentials but was unreachable** from any commit —
+  a dangling object. `git push` only sends reachable objects, so it was never a publication
+  risk, and the rewrite dropped it. Worth knowing so it isn't mistaken for a second leak.
+- **The runbook's secret-scan command was insufficient.** `git log -p --all | grep` does not
+  show diffs for merge commits, so content introduced by a merge is invisible to it — it missed
+  the leak above. The per-blob scan now in Phase 1 walks every blob in the object database with
+  its path attached, and is what actually found it. Use that form.
+- **`git filter-repo` leaves `.git/filter-repo/fast-export.original` behind** — ~25 MB
+  containing the stripped client documents *and* the unredacted password, surviving the rewrite
+  and the gc. Not pushable (it isn't a git object), but it sits on disk looking clean.
+  Delete it and `fast-export.filtered` after verifying. Doing so took `.git` from 53 MB to
+  3.9 MB — and note it was **20 MB before** the rewrite, so the mid-rewrite growth is these
+  streams, not a failed strip.
+- **`filter-repo --dry-run` is the safe rehearsal** and was worth the extra step. It writes
+  `fast-export.original` and `.filtered` without touching the repo, so the filtering can be
+  proven before committing: `uploads/` filechange refs went 9 → 0, the password 1 → 0, the
+  project ref 2 → 0, and commit count stayed 181 → 181. It also confirmed `--path
+  --invert-paths` and `--replace-text` combine in one pass.
+- **Stream size is a misleading check.** The filtered stream was only ~48 KB smaller than the
+  original even though `uploads/` is 10 MB unpacked, because filter-repo must pass every blob
+  through the stream for `--replace-text` to inspect it. The stripped blobs simply end up
+  referenced by no commit and are dropped at gc. Verify by path and commit counts, not bytes.
+- **All 12 API branches were ancestors of `dev`**, so deleting them was lossless — check with
+  `merge-base --is-ancestor` per branch, not just by comparing `rev-list` counts.
+  **`main` and `dev` were both kept** at the same commit; only the other 10 were deleted. Only
+  `main` and `demo` will be pushed — `dev` stays local rather than adding a redundant third
+  branch to a portfolio repo.
+- **No commit touched only `uploads/`,** so no commit became empty and none was pruned. That
+  makes **181 in / 181 out the single sharpest verification number** for this rewrite. The
+  stronger check is comparing `%an|%ae|%ad|%s` for all 181 commits against the pre-rewrite
+  mirror — they came back identical.
+- **The rewrite deletes the `uploads/` directory from the working tree**, since all five
+  remaining files were tracked. `.gitignore` already had a `!/uploads/.gitkeep` negation for a
+  placeholder that was never actually tracked, and **`scripts/ingest-local.js:33` reads
+  `../uploads` at runtime** — which Phase 3 local seeding depends on, since `scripts/` is
+  excluded by `.dockerignore` and must run locally. `uploads/.gitkeep` is now tracked
+  (commit `8398a65`) so the directory exists on a fresh clone.
+- **`pip install git-filter-repo` worked and put it on PATH** as a real `git filter-repo`
+  subcommand (v2.47.0, Python 3.14). The anticipated fallback of downloading the standalone
+  script was not needed; `python -m git_filter_repo` is the backup if PATH ever breaks.
+- **The runbook's recorded `dev` tip goes stale fast.** It said `65f5d7b`; the actual tip was
+  `3c7740c`, because the runbook's own doc commits had moved it. Re-read the tip rather than
+  trusting a recorded SHA.
+
 ---
 
 ## Phase 0 — Prep
@@ -245,26 +315,43 @@ is optional insurance rather than a requirement.
 - [ ] **Archive the old repos on GitHub** (Settings → Archive repository). Read-only for
       everyone including you; collaborators keep access; visibly labelled as frozen. Enforces
       "team snapshot" better than just not pushing. *Optional but recommended.*
-- [ ] **[BLOCKER] Confirm what's in the API history.** Eight files were committed under
+- [x] **[BLOCKER] Confirm what's in the API history.** Eight files were committed under
       `uploads/` — three more than are on disk: `Analysis.pdf`, `CR Decision map - Process.pptx.pdf`,
       `JGA-A-Strategic-Plan-for-Growth-and-Operational-Excellence.pdf`, `Project Status Report.docx`,
       `Project data.xlsx`, `Relational AI.docx`, `Who- A method for Hiring.pdf`, `sample3.docx`.
       Client and third-party material — must not reach a public repo.
+      *Confirmed: exactly those eight, 8.7 MB packed of a 13 MB repo. Now stripped.*
       ```bash
       git log --all --diff-filter=A --name-only --format="" -- "uploads/*" | sort -u
       ```
-- [ ] **Scan both histories for secrets.** Only `.env.example` was ever committed in either
-      repo, so this should come back clean — verify before going public.
-      *Frontend: done, clean. No OpenAI/Supabase-JWT/Clerk/Apryse key strings and no `.env`
-      file anywhere in history (outside `public/lib/webviewer`). API: still to do.*
+- [x] **Scan both histories for secrets.** *Frontend: done, clean. **API: done — NOT clean.***
+      The prediction that only `.env.example` was ever committed was wrong for the API: an old
+      `Readme.md` (blob `133ab87`, commits `543b5fe` and `cfae7f3`, both ancestors of `dev`)
+      carried the real Supabase project ref, the real anon JWT, **and the database password in
+      plaintext**. All three are now redacted from history. Full detail and the follow-up action
+      in "Added during API Phase 1". Everything else in API history is placeholders.
+      **The command below is not sufficient — it misses content introduced by merge commits.**
+      Use the per-blob scan instead:
       ```bash
-      git log -p --all | grep -nE "sk-[A-Za-z0-9_-]{20,}|service_role|eyJhbGciOiJIUzI1NiI" | head
+      # INSUFFICIENT (skips merge-commit diffs) — kept only to show what was originally planned:
+      #   git log -p --all | grep -nE "sk-[A-Za-z0-9_-]{20,}|service_role|eyJhbGciOiJIUzI1NiI"
+
+      # Exhaustive: scan every blob in the object database, path attached.
+      git rev-list --all | while read c; do git ls-tree -r "$c"; done \
+        | awk '{sha=$3; $1="";$2="";$3=""; sub(/^ +/,""); print sha"\t"$0}' | sort -u > pairs.txt
+      while IFS=$'\t' read -r sha path; do
+        git cat-file -p "$sha" 2>/dev/null | grep -noniE \
+          "sk-proj-[A-Za-z0-9_-]{20,}|sk_(live|test)_[A-Za-z0-9]{20,}|eyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----" \
+          | sed "s|^|$path\t|"
+      done < pairs.txt
       ```
 - [x] **History strategy decided: filter and keep.** Development history carries portfolio
       value, and the team repo retains the unfiltered original. The client documents are
       stripped locally before the first push and never reach a public repo.
-- [ ] **Install git-filter-repo:** `pip install git-filter-repo`. *API only. The frontend
-      needs no filter pass (see Findings). Not installed yet; Python 3.14 + pip are available.*
+- [x] **Install git-filter-repo:** `pip install git-filter-repo`. *Done — v2.47.0. The pip
+      install put it on PATH as a working `git filter-repo` subcommand, so the
+      download-the-standalone-script fallback was not needed. `python -m git_filter_repo` also
+      works if PATH ever breaks. API only; the frontend needs no filter pass (see Findings).*
 - [x] **Disconnect from the team remote.** Do this first, so no later command can push there.
       *Done in both repos (user ran it by hand). API `git remote -v` is empty. Frontend
       `origin` has since been re-pointed at `maural-demo-frontend`.*
@@ -272,25 +359,42 @@ is optional insurance rather than a requirement.
       git remote remove origin
       git remote -v          # expect empty
       ```
-- [ ] **Promote the working branch to `main`.** *Frontend: done with
+- [x] **Promote the working branch to `main`.** *Frontend: done with
       `git branch -M proper main`, a single rename that overwrites the old `main` (`acf821f`).
-      Only `main` remains. API: still to do.* API development is on `dev` (tip `65f5d7b`);
-      the frontend is on `proper`. Those are the real tips — make each the new `main` and drop
-      the rest so filter-repo doesn't carry a dozen stale branches.
+      Only `main` remains. **API: done.** The dev tip was `3c7740c`, not `65f5d7b` as this file
+      previously said — two runbook doc commits had landed since. All 12 API branches were
+      verified ancestors of `dev` (`rev-list --all` = `rev-list dev` = 181), so the deletions
+      were lossless. Kept **both `main` and `dev`** at the same commit and deleted the other 10;
+      only `main` and `demo` get pushed.*
       ```bash
-      # API, from dev:
-      git checkout dev
-      git branch -f main dev && git checkout main
-      git branch | grep -v "^\*" | xargs -r git branch -D
+      # API, from dev — verify ancestry FIRST, then promote:
+      for b in $(git for-each-ref --format='%(refname:short)' refs/heads/); do
+        git merge-base --is-ancestor "$b" dev && echo "safe: $b" || echo "AHEAD: $b"
+      done
+      git checkout dev && git branch -f main dev && git checkout main
+      git for-each-ref --format='%(refname:short)' refs/heads/ \
+        | grep -vxE 'main|dev' | xargs -r -n1 git branch -D
       ```
-- [ ] **Strip `uploads/` from history.** `--force` is required because this is an existing
-      working copy rather than a fresh clone. If that makes you nervous, clone to a scratch
-      directory from the team repo and do it there instead.
+- [x] **Strip `uploads/` from history.** *Done — combined with the credential redaction in a
+      single pass, because a second rewrite would mean a second force-push window.* `--force`
+      is required because this is an existing working copy rather than a fresh clone.
+      **Dry-run first** — it writes both streams without touching the repo, so the filtering can
+      be proven before committing to it.
       ```bash
-      git filter-repo --path uploads --invert-paths --force
+      # replacements.txt (outside the repo), one literal rule per line:
+      #   <full anon JWT>==>[REDACTED_SUPABASE_ANON_KEY]
+      #   Ecosphere8_...==>[REDACTED_DB_PASSWORD]
+      #   anwurvszektveevdiacu==>[REDACTED_PROJECT_REF]
+      git filter-repo --path uploads --invert-paths --replace-text ../replacements.txt --force --dry-run
+      # compare .git/filter-repo/fast-export.original vs .filtered, then rerun without --dry-run
       ```
-- [ ] **Verify the strip.** The confirm command above should now print nothing. If it prints
-      filenames, stop — do not push.
+- [x] **Verify the strip.** *Done, all green:* the confirm command prints nothing; no `uploads`
+      path anywhere in history; **181 commits in, 181 out** with author, email, date and subject
+      byte-identical to the pre-rewrite mirror; `DEMO_RUNBOOK.md` still tracked; the HEAD tree
+      differs from the original by exactly the 5 `uploads/` files and nothing else; and a
+      re-scan of all 673 remaining blobs finds none of the three credential strings.
+      **Then delete `.git/filter-repo/fast-export.original`** — it survives the rewrite and
+      still contains the stripped documents and the unredacted password (see Findings).
 
 > **On `public/lib/webviewer` (172 MB, 677 files):** whether it gets stripped depends on the
 > WebViewer license test, which can't run until Phase 5. Migrate with it intact for now. If the
@@ -305,29 +409,43 @@ is optional insurance rather than a requirement.
 - [ ] **Point at the new remotes and push.**
       - Frontend: **done.** `main` pushed to `maural-demo-frontend` (~119 MB packed; largest
         blob is 8.9 MB, under GitHub's 100 MB per-file limit).
-      - API: **add the remote only after the `uploads/` strip is verified.** Until then a single
-        `git push` would publish the client documents. Deliberately left with no remote.
+      - API: **remote added and verified, push not yet done.** `origin` is
+        `https://github.com/DevKS-07/maural-demo-backend.git`, added only after the strip and
+        the secret scan were both verified clean. `git branch -r` is empty — nothing has left
+        the machine. A read-only `git ls-remote` confirmed the target repo exists, credentials
+        are cached, and it has no refs yet.
       ```bash
-      # API, after "Verify the strip" prints nothing:
+      # API — read the URL back before pushing. It must be maural-demo-backend, NOT
+      # maural-kms-api (frozen team repo) and NOT either frontend repo.
       git remote add origin https://github.com/DevKS-07/maural-demo-backend.git
-      git push -u origin main
-      # Frontend:
+      git remote -v
+      GIT_TERMINAL_PROMPT=0 git ls-remote origin     # expect no output on a blank repo
       git push -u origin main
       ```
 - [ ] **Cut a `demo` branch in each repo.** `main` stays the real project; every demo change
       lands on `demo`. Deployment tracks `demo`. *Frontend: done, `demo` pushed and tracking
-      `origin/demo`. API: still to do.*
+      `origin/demo`. API: still to do — blocked on the `main` push above.*
       ```bash
       git checkout -b demo && git push -u origin demo
       ```
 - [ ] **Confirm the wiring.** `git remote -v` shows only the new repo in both working copies,
       and Settings → Collaborators on both new repos lists only you. *Frontend: `git remote -v`
       verified. `git ls-remote` shows only `main` + `demo` at `0553ea3`, and no local-only
-      commits. The Collaborators/private check on github.com still needs doing by hand (no `gh`).*
-- [ ] **Salvage the architecture diagrams.** *(API repo. The folder is in
-      `maural-kms-api/docs-assets/presentation/`, not in the frontend.)* `docs-assets/presentation/` has `architecture.svg`,
-      `oauth-flow.svg`, `rbac-hierarchy.svg`, `kpi-flow.svg` and more, but the whole folder is
-      gitignored. Copy the good ones into a tracked `docs/` for the Phase 7 README.
+      commits. API: `git remote -v` verified as `maural-demo-backend` and asserted against the
+      two forbidden repo names; the `ls-remote` equivalent can only be re-checked after the
+      push. The Collaborators/private check on github.com still needs doing by hand for **both**
+      repos (no `gh`).*
+- [x] **Salvage the architecture diagrams.** *(API repo.)* **Done in commit `8398a65`.** All ten
+      standalone SVGs copied from the gitignored `docs-assets/presentation/` into a tracked
+      `docs/diagrams/`, with a `README.md` index splitting them into seven technical diagrams
+      (architecture, oauth-flow, rbac-hierarchy, kpi-flow, integration-cards,
+      third-party-security, compliance-overview) and three presentation slides
+      (problem-statement, challenges, stats-panel). All are self-contained — no external fonts,
+      images or scripts — so they render in GitHub Markdown directly.
+      **Two cautions recorded in that index for Phase 7:** several diagrams document the
+      *production* auth and integration paths that the demo replaces with shims, so label them
+      as production architecture when embedding; and the sibling `docs-assets/docs/` folder
+      (*not* `presentation/`) contains real client identifiers — do not commit it wholesale.
 
 ---
 
