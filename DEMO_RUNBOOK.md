@@ -4,7 +4,11 @@
 agent picking this up in a new session, read "Context" and "Decisions" first — they contain
 findings that took a full codebase review to establish and are not obvious from the code.
 
-**Status:** Phase 0 not started. Nothing has been changed yet.
+**Status:** Phase 0 done. **Frontend Phase 1 done** apart from one manual GitHub-settings
+check: `main` and `demo` are both at `0553ea3` on `maural-demo-frontend`, and the local clone
+is checked out on `demo`. **API Phase 1 is next** (separate session): `origin` has been
+removed, and nothing else has been done. The new backend remote is deliberately **not added**
+yet (see Phase 1).
 
 ---
 
@@ -12,10 +16,14 @@ findings that took a full codebase review to establish and are not obvious from 
 
 Two repos, a team senior-project:
 
-| Repo | Path | Original remote (frozen — never pushed to again) |
-| --- | --- | --- |
-| API | `maural-kms-api` | `github.com/DevKS-07/maural-kms-api.git` (branch `dev`) |
-| Web | `../maural-kms` | `github.com/DevKS-07/maural-kms-frontend.git` (branch `proper`) |
+| Repo | Path | Original remote (frozen — never pushed to again) | New remote (demo, private until Phase 7) |
+| --- | --- | --- | --- |
+| API | `maural-kms-api` | `github.com/DevKS-07/maural-kms-api.git` (branch `dev`) | `github.com/DevKS-07/maural-demo-backend.git` |
+| Web | `../maural-kms` | `github.com/DevKS-07/maural-kms-frontend.git` (branch `proper`) | `github.com/DevKS-07/maural-demo-frontend.git` |
+
+The new repos already exist (created by hand, empty). The local folder names did **not**
+change. `maural-kms-api` is still the API folder and still the name of the *frozen team repo*,
+so never build a remote URL from the folder name.
 
 **The system.** Multi-tenant B2B knowledge management platform. Node 22 / Express 5, Prisma →
 Postgres on Supabase, Clerk auth, OpenAI RAG over pgvector, OAuth integrations with HubSpot,
@@ -172,6 +180,28 @@ These were expensive to establish. Don't re-derive them.
   (`src/env.ts`, `public/config.js`, and the envsubst list in `entrypoint.sh`), and missing one
   yields an unsubstituted `${...}` string at runtime.
 
+### Added during frontend Phase 0–1 (2026-09-21)
+
+- **The old runbook's API remote URL pointed back at the team repo.** It said
+  `gh repo create maural-kms-api` + `git remote add origin .../DevKS-07/maural-kms-api.git`.
+  That is the frozen team repo on the same account, so the "new" push would have landed there.
+  Fixed: the new repos are `maural-demo-backend` / `maural-demo-frontend` (see Context).
+- **The frontend history has nothing to strip.** Every commit was scanned outside
+  `public/lib/webviewer`: no `uploads/`, no pdf/docx/xlsx/pptx/csv, no `.env`, no key-shaped
+  strings. **No `filter-repo` pass is needed for the frontend in Phase 1.** The only possible
+  rewrite is the Phase 5 webviewer strip. `git-filter-repo` is an API-only dependency for now.
+- **Frontend `main` and `proper` have diverged. `proper` is correct.** Local `main`
+  (`acf821f`) has 8 commits `proper` lacks; `origin/main` (`bb01ec7`) has 9. Two of them are
+  non-merge teammate commits (s-tus: `abdfca8`, `abc57de`) that remove `AuthenticatedLayout`'s
+  Clerk checks and its "Unable to reach the server" screen. `proper` has the *later* version
+  with both restored, and Phases 5/6 rely on that screen and the redirect logic. Promoting
+  `proper` therefore drops those two commits from the new repo's history. Accepted: the team
+  repo keeps them. `proper` also has 3 commits `main` lacks (Docker packaging, README, lockfile).
+- **Validate a lockfile with `npm ci` before committing it, not `npm install`.** `npm install`
+  silently rewrites the lockfile to match `package.json` and hides drift. `npm ci` fails
+  loudly on a mismatch and never writes the lockfile. That is also exactly what Vercel runs.
+- **`gh` CLI is not installed** on this machine. The repos were created in the web UI instead.
+
 ---
 
 ## Phase 0 — Prep
@@ -181,7 +211,8 @@ requires opening a document, which needs a running backend, a live database and 
 None of those exist until Phases 2–4 are done. The old Supabase project is inactive and the
 old hosted backend is down, so the test is simply not runnable yet.
 
-- [ ] **Commit the frontend lockfile.** `../maural-kms/.gitignore` ignores
+- [x] **Commit the frontend lockfile.** *Done: `0553ea3` on `proper`, local only. Checked
+      first with `npm ci` (lockfile in sync, 1035 packages) and `npm run build` (passes).* `../maural-kms/.gitignore` ignores
       `package-lock.json`. Not a build blocker on the chosen Vercel-from-GitHub path — Vercel
       uses `npm ci` when a lockfile exists and `npm install` when it doesn't, so the build
       succeeds either way. Do it for **reproducibility**: every dependency sits on a `^` range,
@@ -224,19 +255,26 @@ is optional insurance rather than a requirement.
       ```
 - [ ] **Scan both histories for secrets.** Only `.env.example` was ever committed in either
       repo, so this should come back clean — verify before going public.
+      *Frontend: done, clean. No OpenAI/Supabase-JWT/Clerk/Apryse key strings and no `.env`
+      file anywhere in history (outside `public/lib/webviewer`). API: still to do.*
       ```bash
       git log -p --all | grep -nE "sk-[A-Za-z0-9_-]{20,}|service_role|eyJhbGciOiJIUzI1NiI" | head
       ```
 - [x] **History strategy decided: filter and keep.** Development history carries portfolio
       value, and the team repo retains the unfiltered original. The client documents are
       stripped locally before the first push and never reach a public repo.
-- [ ] **Install git-filter-repo:** `pip install git-filter-repo`
-- [ ] **Disconnect from the team remote.** Do this first, so no later command can push there.
+- [ ] **Install git-filter-repo:** `pip install git-filter-repo`. *API only. The frontend
+      needs no filter pass (see Findings). Not installed yet; Python 3.14 + pip are available.*
+- [x] **Disconnect from the team remote.** Do this first, so no later command can push there.
+      *Done in both repos (user ran it by hand). API `git remote -v` is empty. Frontend
+      `origin` has since been re-pointed at `maural-demo-frontend`.*
       ```bash
       git remote remove origin
       git remote -v          # expect empty
       ```
-- [ ] **Promote the working branch to `main`.** API development is on `dev` (tip `65f5d7b`);
+- [ ] **Promote the working branch to `main`.** *Frontend: done with
+      `git branch -M proper main`, a single rename that overwrites the old `main` (`acf821f`).
+      Only `main` remains. API: still to do.* API development is on `dev` (tip `65f5d7b`);
       the frontend is on `proper`. Those are the real tips — make each the new `main` and drop
       the rest so filter-repo doesn't carry a dozen stale branches.
       ```bash
@@ -260,24 +298,34 @@ is optional insurance rather than a requirement.
 > private, has only you as a collaborator, and nobody else has cloned it, so a force-push is
 > safe. Don't block the migration on a decision you can't make yet.
 
-- [ ] **Create the new blank private repos.** Start private; flip to public in Phase 7.
-      ```bash
-      gh repo create maural-kms-api --private
-      gh repo create maural-kms-web --private
-      ```
+- [x] **Create the new blank private repos.** Start private; flip to public in Phase 7.
+      *Done by hand on github.com: `maural-demo-backend` and `maural-demo-frontend`. `gh` is
+      not installed and isn't needed. The originally planned names were unusable: `maural-kms-api`
+      is the frozen team repo on the same account.*
 - [ ] **Point at the new remotes and push.**
+      - Frontend: **done.** `main` pushed to `maural-demo-frontend` (~119 MB packed; largest
+        blob is 8.9 MB, under GitHub's 100 MB per-file limit).
+      - API: **add the remote only after the `uploads/` strip is verified.** Until then a single
+        `git push` would publish the client documents. Deliberately left with no remote.
       ```bash
-      git remote add origin https://github.com/DevKS-07/maural-kms-api.git
+      # API, after "Verify the strip" prints nothing:
+      git remote add origin https://github.com/DevKS-07/maural-demo-backend.git
+      git push -u origin main
+      # Frontend:
       git push -u origin main
       ```
 - [ ] **Cut a `demo` branch in each repo.** `main` stays the real project; every demo change
-      lands on `demo`. Deployment tracks `demo`.
+      lands on `demo`. Deployment tracks `demo`. *Frontend: done, `demo` pushed and tracking
+      `origin/demo`. API: still to do.*
       ```bash
       git checkout -b demo && git push -u origin demo
       ```
 - [ ] **Confirm the wiring.** `git remote -v` shows only the new repo in both working copies,
-      and Settings → Collaborators on both new repos lists only you.
-- [ ] **Salvage the architecture diagrams.** `docs-assets/presentation/` has `architecture.svg`,
+      and Settings → Collaborators on both new repos lists only you. *Frontend: `git remote -v`
+      verified. `git ls-remote` shows only `main` + `demo` at `0553ea3`, and no local-only
+      commits. The Collaborators/private check on github.com still needs doing by hand (no `gh`).*
+- [ ] **Salvage the architecture diagrams.** *(API repo. The folder is in
+      `maural-kms-api/docs-assets/presentation/`, not in the frontend.)* `docs-assets/presentation/` has `architecture.svg`,
       `oauth-flow.svg`, `rbac-hierarchy.svg`, `kpi-flow.svg` and more, but the whole folder is
       gitignored. Copy the good ones into a tracked `docs/` for the Phase 7 README.
 
@@ -470,8 +518,8 @@ Six small, localized edits. No structural changes.
 - [ ] **Allowlist the right origin.** Vercel mints a unique preview URL per deployment, and
       those won't be in `ALLOWED_ORIGINS` — previews will fail CORS while production works.
       Either test only on the production domain or add a pattern for previews.
-- [ ] **Check the deployment size** if WebViewer survived Phase 0 — `public/lib/webviewer` is
-      172 MB and lands in the build output.
+- [ ] **Check the deployment size** if WebViewer survived the Phase 5 licence test —
+      `public/lib/webviewer` is 172 MB and lands in the build output.
 - [ ] **Walk the whole journey as a visitor:** passphrase → each of the four personas →
       dashboard → documents → open a file → connect flow → two chatbot questions → citations and
       guardrail badge.
@@ -511,4 +559,4 @@ Recorded so they aren't rediscovered as surprises. None block the demo.
 - `controllers/__hubspot.controller.js` and `__quickbooks.controller.js` are ~1,140 lines of
   dead code.
 - `../maural-kms/public/lib/webviewer` is 172 MB across 677 committed files — heavy clones and
-  a large image. Consider fetching at build time if the viewer survives Phase 0.
+  a large deploy. Consider fetching at build time if the viewer survives the Phase 5 test.
