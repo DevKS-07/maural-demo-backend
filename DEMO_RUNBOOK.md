@@ -45,6 +45,19 @@ user. Not a production hardening exercise — the project is not being actively 
    finished, with all collaborators keeping access. Local clones are disconnected from them and
    pushed to new blank repos instead. History is filtered *locally* before that first push so
    the client documents don't get republished; the old remotes never see a rewrite.
+9. **Hosting: Railway for the API, Vercel for the frontend.** Railway because the API needs a
+   long-running container — SSE on `/api/chat/stream`, multi-agent requests that outlast typical
+   serverless timeouts, native deps (cairo/pango/tesseract) and a persistent `pg` Pool. Avoid
+   free tiers that sleep: a portfolio link that takes ~50s to wake reads as broken. Vercel for
+   the frontend, deployed **from GitHub, not the Docker image** — so `nginx.conf`,
+   `entrypoint.sh` and the frontend `Dockerfile` are not in the deployment path.
+10. **The backend Dockerfile stays — do not switch to Nixpacks.** `railway.toml` selects
+    `builder = "dockerfile"` and that build is known-good. It already solves things a Nixpacks
+    build would have to re-solve: the `--max-old-space-size=2048` install heap (commit
+    `fed0e6c`, an OOM that was already paid for once), the cairo/pango/jpeg/giflib runtime libs
+    for `@napi-rs/canvas`, explicit `prisma generate` ordering, a non-root user and a
+    healthcheck. The frontend's nginx setup was genuinely unused on the Vercel path; this one is
+    live. Leave `railway.toml` and the `Dockerfile` alone.
 
 ---
 
@@ -157,13 +170,17 @@ These were expensive to establish. Don't re-derive them.
 
 Two things will stop a clean deploy dead.
 
-- [ ] **[BLOCKER] Commit the frontend lockfile.** `../maural-kms/.gitignore` ignores
-      `package-lock.json`, but its Dockerfile runs `npm ci`, which fails without one. It only
-      builds today because the file exists locally.
+- [ ] **Commit the frontend lockfile.** `../maural-kms/.gitignore` ignores
+      `package-lock.json`. Not a build blocker on the chosen Vercel-from-GitHub path — Vercel
+      uses `npm ci` when a lockfile exists and `npm install` when it doesn't, so the build
+      succeeds either way. Do it for **reproducibility**: every dependency sits on a `^` range,
+      so without a lockfile a rebuild months from now resolves fresh minors and can break an
+      unattended demo. (It *would* be a hard blocker if the frontend Dockerfile were ever used —
+      `npm ci` fails outright without one.)
       ```bash
       # in ../maural-kms — delete the 'package-lock.json' line from .gitignore, then:
       git add -f package-lock.json
-      git commit -m "chore: track lockfile so npm ci works in Docker"
+      git commit -m "chore: track lockfile for reproducible builds"
       ```
 - [ ] **[BLOCKER] Test the WebViewer license.** The key in `../maural-kms/.env` is
       `demo:1760471071849:...` — stamped October 2025. Run the app, open a document, watch the
@@ -420,10 +437,18 @@ Six small, localized edits. No structural changes.
       it still does after the history rewrite.
 - [ ] **Check `/api/health` and CORS.** A CORS miss surfaces as AuthContext's "Unable to reach
       the server" screen, which looks like a backend outage.
-- [ ] **Deploy the frontend.** Set `VITE_API_BASE_URL` to the deployed API **including the
-      `/api` suffix** (the local value is `http://localhost:5000/api`) — omitting it 404s every
-      call. If using the nginx image, `entrypoint.sh` rewrites `public/config.js` with envsubst
-      at container start, so runtime env vars must be present there, not just at build time.
+- [ ] **Deploy the frontend to Vercel from GitHub.** Set `VITE_*` values as Vercel **build-time**
+      env vars; Vite inlines them. `VITE_API_BASE_URL` must include the `/api` suffix (the local
+      value is `http://localhost:5000/api`) — omitting it 404s every call.
+      `public/config.js` ships with unsubstituted `${...}` placeholders on this path, which is
+      fine: `src/env.ts` ignores any value starting with `${` and falls back to
+      `import.meta.env`. Leave `config.js` in place — `index.html` loads it unconditionally, so
+      deleting it means editing `index.html` too, for no benefit.
+- [ ] **Allowlist the right origin.** Vercel mints a unique preview URL per deployment, and
+      those won't be in `ALLOWED_ORIGINS` — previews will fail CORS while production works.
+      Either test only on the production domain or add a pattern for previews.
+- [ ] **Check the deployment size** if WebViewer survived Phase 0 — `public/lib/webviewer` is
+      172 MB and lands in the build output.
 - [ ] **Walk the whole journey as a visitor:** passphrase → each of the four personas →
       dashboard → documents → open a file → connect flow → two chatbot questions → citations and
       guardrail badge.
