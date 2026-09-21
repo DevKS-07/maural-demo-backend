@@ -12,8 +12,9 @@ is checked out on `demo`.
 waiting on. The rewrite happened — `uploads/` is stripped from all history **and a real
 credential leak found in `Readme.md` history has been redacted** (see "Added during API
 Phase 1"; this file previously predicted the scan would come back clean, and it did not).
-`main` and `demo` are both pushed to `maural-demo-backend` at `5cd2a07`, the local clone is
-checked out on `demo`, and `dev` is kept local at the same commit and never pushed.
+`main` and `demo` are both pushed to `maural-demo-backend` and sit at the same commit, the
+local clone is checked out on `demo`, and `dev` is kept local at that commit and never pushed.
+(No SHA recorded on purpose — edits to this file move it. Read it with `git ls-remote origin`.)
 
 **Remaining Phase 1 work is all on github.com by hand** (no `gh` on this machine): archive the
 two old team repos, and confirm private + collaborators on both new repos. **Phase 2 has not
@@ -26,11 +27,6 @@ verified, and both contain the client documents and the unredacted password:
 `../maural-api-uploads-backup-20260921` (the 5 tracked client documents). **Keep the uploads
 backup only if those source documents are wanted for reference** — Phase 3 authors its own
 fictional demo documents and does not need them.
-
-**Two recovery artifacts exist outside the repo** and should be deleted once the push is
-verified — both contain the client documents and the unredacted password:
-`../maural-kms-api-prerewrite-mirror.git` (full pre-rewrite mirror, all 12 original refs) and
-`../maural-api-uploads-backup-20260921` (the 5 tracked client documents).
 
 ---
 
@@ -281,6 +277,23 @@ These were expensive to establish. Don't re-derive them.
 - **The runbook's recorded `dev` tip goes stale fast.** It said `65f5d7b`; the actual tip was
   `3c7740c`, because the runbook's own doc commits had moved it. Re-read the tip rather than
   trusting a recorded SHA.
+- **[DECIDE BEFORE PHASE 3] Which branch does the seeding work go on?** The working copy is
+  left checked out on `demo`, and Phase 4 is explicitly titled "`demo` branch" — but **Phase 3
+  never says where its changes live**, and it does involve committed code: it extends
+  `prisma/seed.js`, which is a tracked file on `main`. So the boundary is genuinely ambiguous,
+  and the risk is drifting into it rather than choosing.
+  The two defensible readings:
+  - **Everything demo-related on `demo`** (seed extensions included). Keeps `main` as the
+    untouched team project, which is what Decision 7 says `main` is for. Cost: `main`'s
+    `prisma/seed.js` stays as the team left it, so the demo tenant only exists on `demo`.
+  - **Seeding on `main`, shims on `demo`.** Treats a richer seed script as a legitimate
+    improvement to the real project and keeps `demo` purely the shim layer (auth stub, CORS
+    header, demo-password middleware, rate limits). Cost: `main` gains commits the team never
+    wrote, blurring "the real project".
+  Either works; **pick one at the start of Phase 3 and record it here**, because splitting the
+  difference later means cherry-picking seed commits between branches. Note that Phase 3's
+  other outputs — the Supabase project, the seeded rows, the uploaded documents — are database
+  and infrastructure state, not commits, so they're unaffected by this choice.
 
 ---
 
@@ -442,8 +455,8 @@ is optional insurance rather than a requirement.
       and Settings → Collaborators on both new repos lists only you. *Frontend: `git remote -v`
       verified. `git ls-remote` shows only `main` + `demo` at `0553ea3`, and no local-only
       commits. **API: git side verified** — `git remote -v` asserted as `maural-demo-backend`,
-      and `git ls-remote` shows only `main` + `demo` at `5cd2a07` with zero unpushed commits on
-      either. (Local `dev` sits at the same commit but is deliberately never pushed.)*
+      and `git ls-remote` shows only `main` + `demo`, both at the same commit, with zero
+      unpushed commits on either. (Local `dev` sits at that commit but is never pushed.)*
       **Still open on both repos: the private + Collaborators check on github.com, by hand.**
 - [x] **Salvage the architecture diagrams.** *(API repo.)* **Done in commit `8398a65`.** All ten
       standalone SVGs copied from the gitignored `docs-assets/presentation/` into a tracked
