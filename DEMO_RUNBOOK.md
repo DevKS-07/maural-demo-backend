@@ -26,7 +26,9 @@ insert + cosine search passes. **RLS is on for every table, `document_embeddings
 — the original SQL's `DISABLE ROW LEVEL SECURITY` was reversed; the anon key is verified
 locked out and `SUPABASE_SERVICE_ROLE_KEY` is now mandatory for ingestion. **The runbook's pgvector SQL could not be used as written** —
 `db push` itself creates `document_embeddings`, badly; see "Added during Phase 2" for what was
-actually run. Next: Phase 3, on `demo` (branch decided 2026-09-22).
+actually run. Next: Phase 3, on `demo` (branch decided 2026-09-22) — **start with its
+"Prerequisites" block** (schema fix commit, `prisma generate`, capped OpenAI key, seed
+invocation), and note its upload step needs two Phase 4 items done first.
 
 **Two recovery artifacts exist outside the repo — their disposal is the user's call; agents
 should not raise or act on it (2026-09-22).** They can be deleted — the push is
@@ -356,16 +358,36 @@ These were expensive to establish. Don't re-derive them.
   `Unsupported("vector")` in the schema, Prisma proposes nothing for the column. The flaw only
   fires when *no* index exists on `embedding` — i.e. building from empty, which had never
   happened until today. (Temporary index dropped afterwards; table back to pkey + org_id.)
-- **[TRAP] Any later `npx prisma db push` re-adds the B-tree index** — precisely because the
-  demo deliberately has no vector index, so there's nothing for Prisma to match. Verified with
-  the same dry run against the fixed table: its only output is
-  `CREATE INDEX "document_embeddings_embedding_idx" ON "document_embeddings"("embedding");`
-  (it does *not* touch the column type). On an empty table the push succeeds and ingestion then
-  fails; with rows present the push itself fails on the row-size limit. **Before any future
-  push, run that `migrate diff` first** and, after it, drop the index and re-run the probe.
-  The durable fix is removing `@@index([embedding])` from `schema.prisma` (and making the column
-  `Unsupported("vector(1536)")` so an empty-DB build gets the dimension too) — a committed
-  change, and it goes on `demo` with the rest of Phase 3.
+- **[TRAP — until the schema fix below is committed] Don't `npx prisma db push` against the
+  demo DB.** Every claim here was tested (2026-09-22), not inferred:
+  - **A push re-adds the B-tree index**, because the demo deliberately has no vector index and so
+    nothing for Prisma to match. Dry run against the fixed table outputs only
+    `CREATE INDEX "document_embeddings_embedding_idx" ON "document_embeddings"("embedding");`
+    — it does **not** touch the column type.
+  - **Empty table:** the push succeeds, then every ingestion insert fails (probe error above).
+  - **Rows present:** the push itself fails — building that index over one real row gave
+    `index row size 6160 exceeds btree version 4 maximum 2704` (tested inside a rolled-back
+    transaction).
+  - **If a schema change is needed before the fix lands:** don't push. Generate the script,
+    delete the `CREATE INDEX "document_embeddings_embedding_idx"` line, and apply the rest:
+
+    ```bash
+    npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script > change.sql
+    # edit change.sql: remove the document_embeddings_embedding_idx line
+    npx prisma db execute --file change.sql     # same datasource as db push: DIRECT_URL from .env
+    ```
+
+    If the diff's *only* output is that `CREATE INDEX`, there is nothing to apply — skip it.
+- **The durable fix — verified, goes on `demo` in Phase 3.** In `schema.prisma`, change the
+  column to `Unsupported("vector(1536)")` and delete `@@index([embedding])`. Tested against a
+  patched copy of the schema:
+  - **vs the live demo DB:** `migrate diff --exit-code` returns 0 with `-- This is an empty
+    migration.` — committing the fix changes nothing in the database.
+  - **from an empty DB** (`--from-empty`): `"embedding" vector(1536) NOT NULL` and only
+    `document_embeddings_org_id_idx` — no B-tree on the vector. So after the fix, a fresh build
+    is just `CREATE EXTENSION` + `db push`; Phase 2 step 3's `DROP INDEX` / `ALTER COLUMN` are no
+    longer needed (the extension must still come first — the schema doesn't declare it).
+  - Once it's committed, plain `db push` is safe again and this trap can be marked resolved.
 - **RLS is ON for all 17 tables, `document_embeddings` included — decided 2026-09-22: no table
   has RLS off.** New Supabase projects enable RLS on every table (all came up `rls = true`, zero
   policies). The original runbook SQL then *disabled* it on `document_embeddings`; that was
@@ -397,10 +419,15 @@ These were expensive to establish. Don't re-derive them.
   `.env.<NODE_ENV>.local`, `prisma.config.js` / `app.js:1` / `scripts/ingest-local.js` read
   `.env`). Resolved by the user: the new values are now in `.env`, and every other `.env*` file
   except `.env.example` was moved off the repo root.
-- **`app.js:1` loads plain `.env` as a silent fallback** after `server.js` has loaded
-  `.env.<NODE_ENV>.local`. dotenv doesn't override, so any variable *missing* from
-  `.env.demo.local` quietly comes from `.env`. Now that `.env` holds the demo values this is
-  benign, but it's why a stale `.env` was dangerous for the running app and not only for Prisma.
+- **`app.js:1` loads plain `.env` too — but too late to rescue a missing env file.**
+  *(Corrected during Phase 3 prep; this previously claimed `.env` was a general fallback.)*
+  `server.js` requires `config/env` on line 6, **before** `app.js` on line 7, and `config/env`
+  both hard-exits on missing required vars and snapshots every value into its exports at that
+  moment. So: with no `.env.<NODE_ENV>.local`, the server **exits** — the `.env` load in
+  `app.js` never gets a chance. With one present but missing a variable, the `.env` value
+  only reaches code that reads `process.env` directly (e.g. `ragService.js:42`'s
+  `process.env.DATABASE_URL` fallback), not the many modules that import from `config/env`.
+  Partial, inconsistent fallback — keep `.env.demo.local` complete rather than relying on it.
 - **`node_modules` was not installed**, which would have made `npx prisma` fetch the latest
   Prisma instead of the lockfile's and broken `prisma.config.js`'s `dotenv/config` import.
   `npm ci` fixed it (prisma 7.5.0, @prisma/client 7.4.2, dotenv 17.3.1 — all match the lock).
@@ -410,8 +437,8 @@ These were expensive to establish. Don't re-derive them.
 - **Prisma 7's `db push` did not run `prisma generate`.** Run `npx prisma generate` before
   anything in Phase 3 that uses the client (`prisma/seed.js`).
 - **`docs/diagrams/` was moved out of the repo by the user** into the gitignored
-  `docs-assets/` — no longer wanted tracked. The deletion is **not committed yet**, and the
-  files remain in pushed history on `main` and `demo` (commit `8398a65`). Phase 1's
+  `docs-assets/` — no longer wanted tracked. Untracked on `demo` in `4ef39cf`; the files remain
+  in history (commit `8398a65`) and are still tracked on `main`. Phase 1's
   "Salvage the architecture diagrams" item and Phase 7's "use the salvaged diagrams" now refer
   to `docs-assets/`, not `docs/diagrams/`.
 
@@ -638,8 +665,9 @@ is optional insurance rather than a requirement.
       npx prisma db push
       ```
       ```sql
-      -- 3. AFTER db push, one transaction. A later db push re-adds only the index (it
-      --    never touches the column type), so afterwards the DROP INDEX line is what matters.
+      -- 3. AFTER db push, one transaction. Not needed once the schema.prisma fix lands
+      --    (see the [TRAP] finding). Until then, don't db push again — use migrate diff +
+      --    db execute as described there.
       BEGIN;
       DROP INDEX IF EXISTS document_embeddings_embedding_idx;            -- Prisma's B-tree on the vector
       ALTER TABLE document_embeddings ALTER COLUMN embedding TYPE vector(1536);
@@ -670,26 +698,101 @@ is optional insurance rather than a requirement.
 Seeded data is now the only source of KPI truth. This is what a reviewer actually reads.
 **All Phase 3 commits land on `demo`** (decided 2026-09-22 — see Findings).
 
-> **Ordering dependency.** The document-upload step below calls `POST /api/docs`, and
-> `createDocument` (`docs.controller.js:169`) runs its own inline org check. With Clerk mounted
-> but no session it resolves no user and returns 403, so uploads fail before anything is
-> ingested. **Do the first item of Phase 4 (the `req.auth` stub) before this phase's upload
-> step.** Everything else in Phase 3 is independent and can be done first.
+> **Ordering dependency.** The document-upload step below calls `POST /api/docs`, which needs
+> **two Phase 4 items done first**:
+>
+> 1. **The `req.auth` stub.** `createDocument` (`docs.controller.js:169`) runs its own inline
+>    org check; with Clerk mounted but no session it resolves no user and returns 403, so
+>    uploads fail before anything is ingested.
+> 2. **`.env.demo.local`.** Uploading means running the server locally, and `server.js` exits
+>    without an `.env.<NODE_ENV>.local` — the `.env` load in `app.js` comes too late (see
+>    "Added during Phase 2"). Run it with `NODE_ENV=demo` so it picks up that file.
+>
+> Everything else in Phase 3 is independent and can be done first.
+
+**Prerequisites — do these first, in order** (all established during Phase 2):
+
+- [ ] **Commit the `schema.prisma` fix as the first Phase 3 commit.** In `document_embeddings`
+      (`prisma/schema.prisma:182`): `Unsupported("vector")` → `Unsupported("vector(1536)")`,
+      and delete `@@index([embedding])`. Already verified against a patched copy — see the
+      "durable fix" finding. Confirm on the real file that the live DB needs nothing:
+      ```bash
+      npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script --exit-code
+      # expect exit 0 and "-- This is an empty migration."
+      ```
+      Then mark the `[TRAP]` finding resolved — plain `db push` is safe again after this.
+- [ ] **`npx prisma generate`.** Prisma 7's `db push` did not generate the client, and
+      `seed.js` needs it.
+- [ ] **[BLOCKER] Put a real OpenAI key with a hard spend cap in `.env`** — the dedicated
+      demo key from Phase 6, created now instead. Ingestion embeds every chunk and retrieval
+      verification runs the chat pipeline, so Phase 3 spends money first. `.env` currently
+      holds the placeholder `sk-proj-xxx…`, which is **non-empty, so it passes
+      `config/openai.js`'s startup check** and only fails at OpenAI with a 401 — during
+      ingestion that failure is only logged (see the upload item).
+- [ ] **Run the seed as `node -r dotenv/config prisma/seed.js`** — not bare `node
+      prisma/seed.js`. `seed.js` loads no env file itself, and its `lib/prisma` →
+      `config/env` import hard-exits on missing vars. `-r dotenv/config` loads `.env` (the
+      demo values) first. (`npx prisma db seed` probably works too, via `prisma.config.js`'s
+      own dotenv load, but that path is unverified — use the explicit form.)
+
+**Seeding and content:**
 
 - [ ] **Write a one-page brief for the fictional company** — name, industry, size, revenue
       shape, the problems it has. Everything downstream should agree with it; inconsistencies
       are what a sharp reviewer notices.
 - [ ] **Seed the platform org and the demo org.** `prisma/seed.js` already creates the platform
       org and its storage bucket — extend it rather than writing a second script.
+      **Restructure it to be idempotent first:** it currently `return`s early as soon as a
+      platform org exists, so anything appended after that check silently never runs on a
+      second invocation — and the Phase 6 reseed path depends on re-running it. Use upserts
+      keyed on stable values (clerk ids, org names, fixed ids) instead of the early exit.
+- [ ] **[BLOCKER] Seed the four `Role` rows with fixed ids** — nothing creates them, and on the
+      fresh DB the table is empty. The labels must match `config/roles.js` exactly, and the
+      ids must match the frontend's hard-coded list in `../maural-kms/src/hooks/useRoles.ts`:
+      `1 = "Super Admin"`, `2 = "Admin"`, `3 = "Org Executive"`, `4 = "Org Staff"`.
+      `auth.controller.js` looks roles up by `role_name`, so a label typo fails silently.
+      **`Permission` / `RolePermission` need no rows** — the frontend's `hasPermission` is
+      defined but never called.
+- [ ] **[BLOCKER] Seed the five `Category` rows with fixed ids** — `File.ctg_id` is a foreign
+      key to `Category`, and the uploader sends ids straight from `CATEGORY_ID_MAP` in
+      `../maural-kms/src/components/DocumentsToolbar.tsx`: `1 = Sales`, `2 = Marketing`,
+      `3 = Finance`, `4 = Legal`, `5 = Technical`. ("Uncategorized" is a null `ctg_id`, no
+      row.) On an empty table, any upload with a category fails on the FK.
+- [ ] **After inserting explicit ids, advance the sequences**, or the next auto-generated id
+      collides with a seeded one:
+      ```sql
+      SELECT setval(pg_get_serial_sequence('"Role"', 'role_id'),     (SELECT max(role_id) FROM "Role"));
+      SELECT setval(pg_get_serial_sequence('"Category"', 'ctg_id'), (SELECT max(ctg_id)  FROM "Category"));
+      ```
 - [ ] **[BLOCKER] Seed four persona users**, one per role, with stable clerk ids:
       `demo_super_admin`, `demo_admin`, `demo_org_executive`, `demo_org_staff`. The Phase 5
       switcher resolves to these, so the ids must match what the backend stub expects.
+      Put `super_admin` and `admin` in the **platform** org and `org_executive` / `org_staff`
+      in the **demo** org — that mirrors how `auth.controller.js:62` provisions admins, and
+      admins bypass the org check anyway (`docs.controller.js:172`).
 - [ ] **Align both role systems per user** — `publicMetadata.role` key *and* DB `Role.role_name`
       label. See Findings.
 - [ ] **Author five or six demo documents** — strategy deck, financial summary, meeting notes,
       hiring plan, quarterly review. This is the chat's entire knowledge base.
+      **Formats ingestion can read** (`ingest.controller.js:129-159`): `pdf`, `docx`,
+      `xlsx`/`xls`, `txt`/`md`/`csv`/`json`, and images via OCR. **Not `pptx`** — export the
+      strategy deck as PDF. Prefer text-based PDFs/DOCX over scanned ones; OCR is slower and
+      noisier.
 - [ ] **Upload through `POST /api/docs`**, not by hand — it auto-ingests via `ingestSingleFile`,
       doing File row + storage + extract + chunk + embed in one step.
+      **A 201 does not mean it ingested.** `createDocument` fires `ingestSingleFile` without
+      awaiting it (`docs.controller.js:258`), so the response returns before embedding runs,
+      and failures — bad OpenAI key, `42501` from a missing service-role key, unreadable
+      file — appear only in the server log as `[ingest] ✗ "<file name>": …` (success is
+      `[ingest] ✓ "<file name>" — N chunks ingested.`). Watch the log, then confirm every
+      uploaded file has chunks — the `LEFT JOIN` makes a failed file show up as `0` rather
+      than silently vanish (chunks carry `metadata.file_id`, `ingest.controller.js:227-233`):
+      ```sql
+      SELECT f.file_name, count(e.id) AS chunks
+      FROM "File" f
+      LEFT JOIN document_embeddings e ON e.metadata->>'file_id' = f.file_id::text
+      GROUP BY f.file_name ORDER BY chunks;
+      ```
 - [ ] **Seed the KPI tables completely** — full rows in `finance_kpis`, `leads_kpis`,
       `labor_kpis` for the current period. Seed *every* field, not just the five the live
       persist path writes.
@@ -715,9 +818,15 @@ Six small, localized edits. No structural changes.
       preflight fails and every cross-origin request dies with a generic CORS error.
 - [ ] **Set `NODE_ENV=demo`** (not `production`). Keep a dummy `CLERK_SECRET_KEY` set to satisfy
       the required-vars check in `config/env.js`.
-- [ ] **Create `.env.demo.local` for local runs.** `server.js` loads `.env.<NODE_ENV>.local`, so
-      `NODE_ENV=demo` needs that exact filename or the app exits on missing required vars. Copy
-      `.env.example` as the starting point and set `PORT=5000` to match the frontend's base URL.
+- [ ] **Create `.env.demo.local` for local runs — needed before Phase 3's upload step.**
+      `server.js` loads `.env.<NODE_ENV>.local`, so `NODE_ENV=demo` needs that exact filename or
+      the app exits on missing required vars (the `.env` load in `app.js` is too late to help).
+      **Copy `.env`, not `.env.example`** — since Phase 2, `.env` holds the complete demo values
+      (all five Supabase values, and the capped OpenAI key from Phase 3), while `.env.example`
+      is placeholders. Keep `PORT=5000` to match the frontend's base URL. The `NODE_ENV` *line*
+      inside the file does nothing — the shell variable picks the file — so start the server
+      with `NODE_ENV=demo` set (PowerShell: `$env:NODE_ENV="demo"; node server.js`). Two
+      copies of the same secrets: if a value changes, change both.
 - [ ] **[BLOCKER] Add the demo-password middleware.** Check `Authorization: Bearer <key>`
       against `DEMO_ACCESS_KEY` before the routes; exempt `/api/health` so Railway's probe
       works. The frontend already sends this once the shim's `getToken` returns the key. See
@@ -800,7 +909,8 @@ Six small, localized edits. No structural changes.
 
 - [ ] **[BLOCKER] Dedicated OpenAI key with a hard spend cap.** Not your main key. A public
       unauthenticated chat endpoint running a multi-agent pipeline is the one thing here that
-      can actually cost money.
+      can actually cost money. *Created in Phase 3 (ingestion needs it first) — here, just
+      confirm the cap is set and put the same key in Railway.*
 - [ ] **Deploy the API from `demo`.** Env: `NODE_ENV=demo`, `DISABLE_AUTH=true`,
       `DEMO_ACCESS_KEY`, five Supabase values, capped OpenAI key, dummy `CLERK_SECRET_KEY`, and
       `FRONTEND_URL` / `FRONTEND_REDIRECT_URI` / `ALLOWED_ORIGINS`. No `QUICKBOOKS_*` vars
