@@ -17,11 +17,19 @@ local clone is checked out on `demo`, and `dev` is kept local at that commit and
 (No SHA recorded on purpose — edits to this file move it. Read it with `git ls-remote origin`.)
 
 **Remaining Phase 1 work is all on github.com by hand** (no `gh` on this machine): archive the
-two old team repos, and confirm private + collaborators on both new repos. **Phase 2 has not
-been started.** Next session: Phases 2–4 are backend-only, so this repo continues straight
-into Phase 2.
+two old team repos, and confirm private + collaborators on both new repos.
 
-**Two recovery artifacts exist outside the repo** and can now be deleted — the push is
+**Phase 2 is complete (2026-09-22).** Pausing decision: free tier + a DB-touching keep-alive
+job, built in Phase 6. Demo project ref is **`jnmhzhjvizkrbvgdhyms`**, schema is pushed,
+`document_embeddings` is `vector(1536)` with no vector index, and a rolled-back 1536-dim
+insert + cosine search passes. **RLS is on for every table, `document_embeddings` included**
+— the original SQL's `DISABLE ROW LEVEL SECURITY` was reversed; the anon key is verified
+locked out and `SUPABASE_SERVICE_ROLE_KEY` is now mandatory for ingestion. **The runbook's pgvector SQL could not be used as written** —
+`db push` itself creates `document_embeddings`, badly; see "Added during Phase 2" for what was
+actually run. Next: Phase 3, on `demo` (branch decided 2026-09-22).
+
+**Two recovery artifacts exist outside the repo — their disposal is the user's call; agents
+should not raise or act on it (2026-09-22).** They can be deleted — the push is
 verified, and both contain the client documents and the unredacted password:
 `../maural-kms-api-prerewrite-mirror.git` (full pre-rewrite mirror, all 12 original refs) and
 `../maural-api-uploads-backup-20260921` (the 5 tracked client documents). **Keep the uploads
@@ -235,7 +243,11 @@ These were expensive to establish. Don't re-derive them.
 
 ### Added during API Phase 1 (2026-09-21)
 
-- **[ACTION REQUIRED] The API history contained live credentials — the runbook was wrong that
+- **[RESOLVED 2026-09-22 — no action needed]** *The old Supabase project
+  `anwurvszektveevdiacu` no longer exists, so there is nothing to rotate. The frozen team repo
+  stays private, with access granted explicitly to team members only, so its unredacted history
+  is not treated as an exposure. Kept below as the record of what was found.*
+  **The API history contained live credentials — the runbook was wrong that
   it would be clean.** An old `Readme.md` (blob `133ab87`, in commits `543b5fe` and `cfae7f3`,
   both ancestors of `dev`) had a fully populated env block, not a template:
   the Supabase project ref `anwurvszektveevdiacu`, the real anon JWT, and
@@ -290,7 +302,11 @@ These were expensive to establish. Don't re-derive them.
 - **The runbook's recorded `dev` tip goes stale fast.** It said `65f5d7b`; the actual tip was
   `3c7740c`, because the runbook's own doc commits had moved it. Re-read the tip rather than
   trusting a recorded SHA.
-- **[DECIDE BEFORE PHASE 3] Which branch does the seeding work go on?** The working copy is
+- **[DECIDED 2026-09-22] Seeding work goes on `demo`.** *Everything demo-related lives on
+  `demo` — seed extensions included — and `main` stays the team project as left. This also
+  covers the durable `schema.prisma` fix for `document_embeddings` (see "Added during
+  Phase 2"). The question as originally recorded:*
+  **Which branch does the seeding work go on?** The working copy is
   left checked out on `demo`, and Phase 4 is explicitly titled "`demo` branch" — but **Phase 3
   never says where its changes live**, and it does involve committed code: it extends
   `prisma/seed.js`, which is a tracked file on `main`. So the boundary is genuinely ambiguous,
@@ -307,6 +323,97 @@ These were expensive to establish. Don't re-derive them.
   difference later means cherry-picking seed commits between branches. Note that Phase 3's
   other outputs — the Supabase project, the seeded rows, the uploaded documents — are database
   and infrastructure state, not commits, so they're unaffected by this choice.
+
+### Added during Phase 2 (2026-09-22)
+
+- **`document_embeddings` is a Prisma model** (`prisma/schema.prisma:182`), so `db push`
+  creates the table itself — the runbook assumed the pgvector SQL would. What Prisma builds is
+  wrong in two ways: the column is untyped `vector` (not `vector(1536)`), and
+  `@@index([embedding])` becomes a **B-tree** index on the vector column (Prisma can't express
+  IVFFlat, so an introspected IVFFlat index came back as a plain `@@index`). A 1536-dim vector
+  is ~6 KB against B-tree's 2.7 KB row limit, so **every embedding insert fails**. Proven on the
+  demo DB with a rolled-back probe: `index row size 6160 exceeds btree version 4 maximum 2704
+  for index "document_embeddings_embedding_idx"`. Phase 3 ingestion would have died on its
+  first chunk.
+- **Consequences for the runbook's SQL:** `db push` fails outright with no `vector` type, so the
+  extension must come **first**; the SQL's `CREATE TABLE IF NOT EXISTS` then silently no-ops;
+  and its `idx_document_embeddings_org_id` would duplicate Prisma's `document_embeddings_org_id_idx`.
+  The fix is DB-only (no code change, so no branch question) — see Phase 2 for the exact sequence.
+  Retained Prisma differences, all harmless: `content` and `embedding` are `NOT NULL`, `metadata`
+  defaults to `'{}'`, and the FK also has `ON UPDATE CASCADE`.
+- **Why this never broke in the original project, despite routine `db push` use — tested,
+  not inferred.** The old table was hand-built from SQL (`vector(1536)` + an IVFFlat index)
+  *before* the model existed; the model arrived in `cafa5a7` (2026-02-23) as `prisma db pull`
+  output — the 12 generated "row level security" comments give it away — and introspection
+  loses both the dimension and the index type. Recreating the old IVFFlat index on the empty
+  demo table and running `prisma migrate diff --from-config-datasource --to-schema
+  prisma/schema.prisma --script` (a dry run of `db push`) showed Prisma **matches indexes by
+  column and ignores the access method**: its only proposed change was
+  `ALTER INDEX "idx_document_embeddings_embedding" RENAME TO "document_embeddings_embedding_idx"`.
+  So on the old DB the first push after `cafa5a7` at most renamed the IVFFlat index (still
+  IVFFlat; nothing references it by name) and every later push was a no-op on that table.
+  The column type is **never** diffed — with `vector(1536)` in the DB and
+  `Unsupported("vector")` in the schema, Prisma proposes nothing for the column. The flaw only
+  fires when *no* index exists on `embedding` — i.e. building from empty, which had never
+  happened until today. (Temporary index dropped afterwards; table back to pkey + org_id.)
+- **[TRAP] Any later `npx prisma db push` re-adds the B-tree index** — precisely because the
+  demo deliberately has no vector index, so there's nothing for Prisma to match. Verified with
+  the same dry run against the fixed table: its only output is
+  `CREATE INDEX "document_embeddings_embedding_idx" ON "document_embeddings"("embedding");`
+  (it does *not* touch the column type). On an empty table the push succeeds and ingestion then
+  fails; with rows present the push itself fails on the row-size limit. **Before any future
+  push, run that `migrate diff` first** and, after it, drop the index and re-run the probe.
+  The durable fix is removing `@@index([embedding])` from `schema.prisma` (and making the column
+  `Unsupported("vector(1536)")` so an empty-DB build gets the dimension too) — a committed
+  change, and it goes on `demo` with the rest of Phase 3.
+- **RLS is ON for all 17 tables, `document_embeddings` included — decided 2026-09-22: no table
+  has RLS off.** New Supabase projects enable RLS on every table (all came up `rls = true`, zero
+  policies). The original runbook SQL then *disabled* it on `document_embeddings`; that was
+  applied and then **reversed**, because it bought nothing and opened a hole:
+  - **Nothing in the app needs it off.** Every path already bypasses RLS: Prisma and
+    `ragService`'s raw `pg` pool connect as `postgres` (table owner, `rolbypassrls`), and
+    `lib/supabase.js` uses the service-role key (`rolbypassrls`).
+  - **Off, it exposed the table to the anon key.** Supabase grants `anon` SELECT/INSERT/DELETE
+    on every `public` table; RLS-with-no-policies is what neutralizes that. With RLS off, anyone
+    holding the anon key could read, **inject chunks the chatbot would cite as fact**, or wipe
+    the knowledge base via `/rest/v1/document_embeddings` — bypassing `DEMO_ACCESS_KEY` and the
+    rate limits entirely. The anon key isn't in the frontend (it has no Supabase dependency at
+    all), but Supabase designs that key to be publishable, relying on RLS.
+  - **Verified after re-enabling:** `postgres` insert + cosine search OK (rolled back);
+    `supabase-js` service-role insert and delete OK; `supabase-js` **anon** insert rejected
+    (`42501: new row violates row-level security policy`), and with a real row present an anon
+    select saw 0 rows and an anon delete removed 0. Table left at 0 rows.
+  - **Why the original likely disabled it:** `lib/supabase.js:15` falls back to
+    `SUPABASE_ANON_KEY` when `SUPABASE_SERVICE_ROLE_KEY` is unset — with RLS on, that fallback
+    now fails ingestion (with `42501`) instead of silently writing through the public key.
+    That's the desired behaviour, but it makes the service-role key **mandatory** (see Phase 6).
+  - **Don't add policies** to "fix" a `42501` — the answer is always the service-role key.
+- **The extension lives in `public`**, not Supabase's recommended `extensions` schema, because
+  the runbook's plain `CREATE EXTENSION` uses the first schema on the search path
+  (`"$user", public, extensions`). Works; the Supabase dashboard's advisor may flag it as a lint.
+- **The env-file trap was live, not hypothetical.** When Phase 2 started, plain `.env` still
+  pointed at the old project `anwurvszektveevdiacu` (`aws-1-us-east-2` pooler), and the new
+  values had been put in `.env.local` — which **nothing** loads (`server.js` reads
+  `.env.<NODE_ENV>.local`, `prisma.config.js` / `app.js:1` / `scripts/ingest-local.js` read
+  `.env`). Resolved by the user: the new values are now in `.env`, and every other `.env*` file
+  except `.env.example` was moved off the repo root.
+- **`app.js:1` loads plain `.env` as a silent fallback** after `server.js` has loaded
+  `.env.<NODE_ENV>.local`. dotenv doesn't override, so any variable *missing* from
+  `.env.demo.local` quietly comes from `.env`. Now that `.env` holds the demo values this is
+  benign, but it's why a stale `.env` was dangerous for the running app and not only for Prisma.
+- **`node_modules` was not installed**, which would have made `npx prisma` fetch the latest
+  Prisma instead of the lockfile's and broken `prisma.config.js`'s `dotenv/config` import.
+  `npm ci` fixed it (prisma 7.5.0, @prisma/client 7.4.2, dotenv 17.3.1 — all match the lock).
+  Its Windows `EPERM` cleanup warning left an empty `node_modules/are-we-there-yet` that
+  `npm ls` reports as extraneous; harmless. 59 audit warnings — **don't `npm audit fix`**, it
+  rewrites the lockfile.
+- **Prisma 7's `db push` did not run `prisma generate`.** Run `npx prisma generate` before
+  anything in Phase 3 that uses the client (`prisma/seed.js`).
+- **`docs/diagrams/` was moved out of the repo by the user** into the gitignored
+  `docs-assets/` — no longer wanted tracked. The deletion is **not committed yet**, and the
+  files remain in pushed history on `main` and `demo` (commit `8398a65`). Phase 1's
+  "Salvage the architecture diagrams" item and Phase 7's "use the salvaged diagrams" now refer
+  to `docs-assets/`, not `docs/diagrams/`.
 
 ---
 
@@ -487,49 +594,81 @@ is optional insurance rather than a requirement.
 
 ## Phase 2 — Demo Supabase project
 
-- [ ] **Create the project**, collect `DATABASE_URL`, `DIRECT_URL`, `SUPABASE_URL`,
-      `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
-- [ ] **Decide how to survive free-tier pausing.** Free projects pause after roughly a week
+- [x] **Create the project**, collect `DATABASE_URL`, `DIRECT_URL`, `SUPABASE_URL`,
+      `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. *Done by the user: ref
+      `jnmhzhjvizkrbvgdhyms`, `aws-0-us-east-2` pooler, Postgres 17.6. All five values are in
+      `.env`; both anon and service-role JWTs decode to the new ref with the right roles.
+      `DATABASE_URL` = transaction pooler :6543 `?pgbouncer=true`; `DIRECT_URL` = session
+      pooler :5432.*
+- [x] **Decide how to survive free-tier pausing.** Free projects pause after roughly a week
       idle — which is the normal state of a portfolio demo, and almost certainly what killed
       the original project. Either budget for a paid plan or commit to a keep-alive (Phase 6).
       Deciding now avoids discovering it when someone reports the demo is down.
-      → *Decision:* `________`
-- [ ] **[BLOCKER] Point both database URLs at the new project.** `prisma.config.js` resolves
+      → *Decision (2026-09-22):* **Free tier + a scheduled keep-alive job, built in Phase 6.**
+      No paid plan. The job must run a **real database query** — `/api/health` (`app.js:24`)
+      returns only uptime and memory and never touches the DB, so neither it nor Railway's
+      healthcheck keeps the project awake. Details are on the Phase 6 keep-alive item.
+- [x] **[BLOCKER] Point both database URLs at the new project.** `prisma.config.js` resolves
       from `DIRECT_URL`, loaded out of plain **`.env`** via `dotenv/config` — not
       `.env.demo.local`, and not the other four stale `.env.*.local` files still on disk. Print
       the host from `DIRECT_URL` and confirm it's the new project *before* pushing; a stale
       exported shell variable also beats the file.
-- [ ] **Push the schema:** `npx prisma db push` (not `migrate dev` — no migrations exist).
-- [ ] **Run the pgvector SQL with two edits:** skip `match_documents` (ragService dropped the
-      RPC for raw SQL on its own pool) and create **no IVFFlat index** — on a demo-sized corpus
-      a sequential scan is exact and fast, and it sidesteps the recall problem that
-      `SET ivfflat.probes = 100` exists to work around.
+      *Done. The trap was live — `.env` still pointed at the old project when Phase 2 started
+      (see Findings). After the user fixed it: `DIRECT_URL`/`DATABASE_URL` resolve to
+      `postgres.jnmhzhjvizkrbvgdhyms@aws-0-us-east-2`, no `DIRECT_URL`/`DATABASE_URL`/`NODE_ENV`
+      at Process, User or Machine scope, and the only `.env*` files left are `.env` and
+      `.env.example`. Every DB write went through a script that aborts unless the `DIRECT_URL`
+      user ends in `.jnmhzhjvizkrbvgdhyms`.*
+- [x] **Push the schema:** `npx prisma db push` (not `migrate dev` — no migrations exist).
+      *Done — 17 tables in `public`; Prisma reported `aws-0-us-east-2.pooler.supabase.com:5432`.
+      Needs `npm ci` first if `node_modules` is missing, and the `vector` extension first (below).*
+- [x] **pgvector setup — NOT the SQL this file originally had.** The two intended omissions
+      stand: no `match_documents` (ragService uses raw SQL on its own pool) and **no IVFFlat
+      index** (on a demo-sized corpus a sequential scan is exact and fast, and it sidesteps the
+      recall problem `SET ivfflat.probes = 100` works around). But `document_embeddings` is a
+      Prisma model, so `db push` creates the table — with an untyped `vector` column and a
+      B-tree index that rejects every real embedding (see "Added during Phase 2"). The original
+      `CREATE TABLE IF NOT EXISTS` would silently no-op. **What was actually run, in order:**
       ```sql
-      CREATE EXTENSION IF NOT EXISTS vector;
-
-      CREATE TABLE IF NOT EXISTS document_embeddings (
-        id        bigserial PRIMARY KEY,
-        content   text,
-        metadata  jsonb,
-        org_id    uuid REFERENCES "Organisation"(org_id) ON DELETE CASCADE,
-        embedding vector(1536)
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_document_embeddings_org_id
-        ON document_embeddings (org_id);
-
+      -- 1. BEFORE db push — Prisma's schema references the vector type
+      CREATE EXTENSION IF NOT EXISTS vector;          -- landed in public, v0.8.2
+      ```
+      ```bash
+      # 2.
+      npx prisma db push
+      ```
+      ```sql
+      -- 3. AFTER db push, one transaction. A later db push re-adds only the index (it
+      --    never touches the column type), so afterwards the DROP INDEX line is what matters.
+      BEGIN;
+      DROP INDEX IF EXISTS document_embeddings_embedding_idx;            -- Prisma's B-tree on the vector
+      ALTER TABLE document_embeddings ALTER COLUMN embedding TYPE vector(1536);
       GRANT ALL ON TABLE document_embeddings TO service_role;
       GRANT ALL ON SEQUENCE document_embeddings_id_seq TO service_role;
-      ALTER TABLE document_embeddings DISABLE ROW LEVEL SECURITY;
+      ALTER TABLE document_embeddings ENABLE ROW LEVEL SECURITY;         -- already on by default; kept explicit
+      COMMIT;
+      -- No org_id index here: Prisma already made document_embeddings_org_id_idx.
+      -- NO `DISABLE ROW LEVEL SECURITY` — the original SQL had it; it was applied, then
+      -- reversed (see "Added during Phase 2"). No table in this project has RLS off.
       ```
-- [ ] **Verify** the `vector` extension is installed and `document_embeddings` exists with a
+- [x] **Verify** the `vector` extension is installed and `document_embeddings` exists with a
       1536-dimension column before spending money on embeddings.
+      *Done, all green: `vector` 0.8.2 installed; `embedding` is `vector(1536)`; indexes are
+      exactly `document_embeddings_pkey` + `document_embeddings_org_id_idx`; FK to
+      `"Organisation"(org_id)` ON DELETE CASCADE; **RLS on** (all 17 tables, zero policies);
+      `service_role` has table and sequence privileges; no `match_documents` function.
+      **Functional proof:** a random 1536-dim row inserted and came back from a `<=>` cosine
+      search with similarity 1, inside a transaction that was rolled back — table left at 0 rows.
+      The same probe **failed before** the fix with the B-tree row-size error, so it's the check
+      to repeat after any future `db push`. **RLS proof:** service-role insert/delete via
+      `supabase-js` works; the anon key is rejected on insert and sees/deletes 0 rows.*
 
 ---
 
-## Phase 3 — Seed the demo tenant
+## Phase 3 — Seed the demo tenant (`demo` branch)
 
 Seeded data is now the only source of KPI truth. This is what a reviewer actually reads.
+**All Phase 3 commits land on `demo`** (decided 2026-09-22 — see Findings).
 
 > **Ordering dependency.** The document-upload step below calls `POST /api/docs`, and
 > `createDocument` (`docs.controller.js:169`) runs its own inline org check. With Clerk mounted
@@ -665,7 +804,10 @@ Six small, localized edits. No structural changes.
 - [ ] **Deploy the API from `demo`.** Env: `NODE_ENV=demo`, `DISABLE_AUTH=true`,
       `DEMO_ACCESS_KEY`, five Supabase values, capped OpenAI key, dummy `CLERK_SECRET_KEY`, and
       `FRONTEND_URL` / `FRONTEND_REDIRECT_URI` / `ALLOWED_ORIGINS`. No `QUICKBOOKS_*` vars
-      needed.
+      needed. **`SUPABASE_SERVICE_ROLE_KEY` is mandatory, not optional:** `lib/supabase.js`
+      silently falls back to the anon key without it, and with RLS on (Phase 2) ingestion and
+      document deletes then fail with `42501 ... violates row-level security policy`. If that
+      error ever appears, check this variable — do not add RLS policies.
 - [ ] **Confirm no `.env` reaches the image** — `.dockerignore` already excludes `.env*`; verify
       it still does after the history rewrite.
 - [ ] **Check `/api/health` and CORS.** A CORS miss surfaces as AuthContext's "Unable to reach
@@ -687,10 +829,16 @@ Six small, localized edits. No structural changes.
       guardrail badge.
 - [ ] **Set up a reseed path.** Even with writes blocked the demo drifts. A one-command reseed
       is enough; a scheduled job is nicer.
-- [ ] **Set up the Supabase keep-alive** (unless a paid plan was chosen in Phase 2). A trivial
-      scheduled query every few days stops the free tier pausing on an idle demo. A Railway cron
-      or a GitHub Action hitting a cheap endpoint both work — the point is that something
-      touches the database on a schedule.
+- [ ] **[BLOCKER] Set up the Supabase keep-alive** — chosen in Phase 2 over a paid plan. A
+      scheduled query every 2–3 days stops the free tier pausing on an idle demo; that interval
+      leaves room for a missed run inside the ~7-day window. **The job must actually query the
+      database.** `/api/health` does not (`app.js:24` returns uptime/memory only), so pinging it
+      — or relying on Railway's healthcheck — keeps the *API* warm but lets Supabase pause.
+      Options: a Railway cron service running a cheap read (e.g. `select count(*) from
+      "Organisation"`) with the `DIRECT_URL` Railway already holds, which keeps DB credentials
+      out of GitHub; or a GitHub Action calling a DB-backed API endpoint with `DEMO_ACCESS_KEY`
+      as a secret. Prefer a real table read over a bare `select 1`. **Verify it works** by
+      checking the Supabase dashboard after 8+ days: the project should still be active.
 
 ---
 
