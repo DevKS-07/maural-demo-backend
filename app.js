@@ -41,7 +41,10 @@ app.use(
   cors({
     origin: ALLOWED_ORIGINS,
     credentials: true,
-    allowedHeaders: ["Content-Type", "Authorization"],
+    // X-Demo-Role carries the demo persona. A custom header triggers a
+    // preflight, and an unlisted header fails it — surfacing as a generic CORS
+    // error that looks like the API is down rather than a header problem.
+    allowedHeaders: ["Content-Type", "Authorization", "X-Demo-Role"],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   }),
 );
@@ -108,6 +111,20 @@ if (isProduction) {
   );
 } else {
   app.use(morgan("dev"));
+}
+
+// Demo gate — password check, then the destructive-route block. Mounted only in
+// demo mode, immediately before the routes so that everything above (CORS,
+// body parsing, rate limiting, /api/health) is unaffected. Order matters: the
+// password check runs first so a blocked route still requires the passphrase
+// and cannot be probed anonymously.
+if (DISABLE_AUTH) {
+  const {
+    requireDemoKey,
+    blockDestructiveRoutes,
+  } = require("./middleware/demoGate.middleware");
+  app.use(requireDemoKey);
+  app.use(blockDestructiveRoutes);
 }
 
 // Routes

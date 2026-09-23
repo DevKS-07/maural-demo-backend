@@ -3,19 +3,35 @@ const { DISABLE_AUTH } = require("../config/env");
 const prisma = require("../lib/prisma");
 
 // ---------------------------------------------------------------------------
-// Auth toggle — set DISABLE_AUTH=true in .env.development.local or
-// .env.test.local to bypass all auth checks during development/testing.
+// Auth toggle — set DISABLE_AUTH=true to bypass *authentication* (the "are you
+// logged in?" check) during development/testing and in the demo deployment.
 // Blocked in production by config/env.js.
+//
+// It does NOT bypass authorization. requireRole and requireOrgAccess still
+// evaluate, against whatever identity is mounted on req.auth — Clerk's session
+// normally, or the demo persona stub (middleware/demoAuth.middleware.js) when
+// DISABLE_AUTH is on. app.js mounts exactly one of the two, so req.auth is
+// always populated and the role/org checks always have something real to read.
+//
+// They used to short-circuit under this flag as well, which made the demo's
+// four-persona switcher cosmetic: org_staff received the admin-only scorecard
+// with a 200. See the [CONFLICT] decision in DEMO_RUNBOOK.md.
 // ---------------------------------------------------------------------------
 const AUTH_DISABLED = DISABLE_AUTH;
 
 if (AUTH_DISABLED) {
   console.warn(
-    "[auth] WARNING !!! DISABLE_AUTH=true — all routes are publicly accessible",
+    "[auth] WARNING !!! DISABLE_AUTH=true — authentication is bypassed; " +
+      "role and organisation checks still apply",
   );
 }
 
 const passThrough = (req, res, next) => next();
+
+// Guard for the (unreachable) case where neither Clerk nor the demo stub is
+// mounted: req.auth would be undefined and calling it would throw a 500 out of
+// a security middleware. Mirrors the inline check at docs.controller.js:169.
+const hasIdentity = (req) => typeof req.auth === "function";
 
 // ---------------------------------------------------------------------------
 // requireAuth
@@ -37,9 +53,10 @@ const ROLE_HIERARCHY = {
 
 // ---------------------------------------------------------------------------
 // requireRole(minRole)
-// RBAC middleware — reads the role from the Clerk JWT's publicMetadata and
-// rejects requests where the user's role is below the required minimum.
-// Bypassed when DISABLE_AUTH=true.
+// RBAC middleware — reads the role from publicMetadata and rejects requests
+// where the user's role is below the required minimum. Under DISABLE_AUTH the
+// role comes from the demo persona stub rather than a Clerk JWT; the check
+// itself runs either way.
 //
 // Usage:
 //   router.delete("/:id", requireAuth, requireRole("admin"), handler);
@@ -47,9 +64,9 @@ const ROLE_HIERARCHY = {
 // @param {string} minRole - Minimum role required (e.g. "admin", "super_admin")
 // ---------------------------------------------------------------------------
 exports.requireRole = (minRole) => {
-  if (AUTH_DISABLED) return passThrough;
-
   return (req, res, next) => {
+    if (!hasIdentity(req)) return next();
+
     const { sessionClaims } = req.auth();
     const userRole = sessionClaims?.publicMetadata?.role;
 
@@ -76,6 +93,12 @@ exports.requireRole = (minRole) => {
 // Ensures non-admin users can only access their own organisation's data.
 // Admins and super_admins bypass the check (cross-org access allowed).
 //
+// Runs under DISABLE_AUTH too, resolving the org from the demo persona's
+// seeded clerk_id. The "body" form is also the only thing sanitising
+// req.body.orgIds before it reaches ragService — see the SQL-injection finding
+// in DEMO_RUNBOOK.md. It does not cover the admin personas, which bypass this
+// check entirely, so the query is parameterised as well.
+//
 // @param {"params"|"body"} orgIdSource
 //   - "params": validates req.params.orgId matches the user's org (403 if not)
 //   - "body":   force-overrides req.body.orgIds with the user's org
@@ -85,9 +108,9 @@ exports.requireRole = (minRole) => {
 //   router.post("/", requireOrgAccess("body"), handler);
 // ---------------------------------------------------------------------------
 exports.requireOrgAccess = (orgIdSource = "params") => {
-  if (AUTH_DISABLED) return passThrough;
-
   return async (req, res, next) => {
+    if (!hasIdentity(req)) return next();
+
     const { sessionClaims, userId: clerkId } = req.auth();
     const userRole = sessionClaims?.publicMetadata?.role;
 

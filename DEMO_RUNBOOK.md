@@ -28,28 +28,100 @@ locked out and `SUPABASE_SERVICE_ROLE_KEY` is now mandatory for ingestion. **The
 `db push` itself creates `document_embeddings`, badly; see "Added during Phase 2" for what was
 actually run.
 
-**Phase 3 is complete (2026-09-23), on `demo`**, apart from the block deliberately deferred out of
-it. The `schema.prisma` fix is committed and the
+**Phase 3 is COMPLETE (2026-09-23), on `demo`** — including the block that was deferred out of
+it, which ran during Phase 4 and passed (see below). The `schema.prisma` fix is committed and the
 **`[TRAP]` on `prisma db push` is resolved — plain `db push` is safe again.** `prisma/seed.js` is
 idempotent (proven by repeated runs converging on identical row counts) and the demo tenant is
 **fully seeded**: both orgs, four roles, five categories, four persona users with the org chart
 wired, two periods of all three KPI tables with every field populated, and the VTO. Two Phase 4
-items were pulled forward and are done — the `req.auth` stub and `.env.demo.local`.
+items were pulled forward and are done — the `req.auth` stub and `.env.development.local`.
 
 **The six demo documents are authored and built** — sources tracked in `demo-content/documents/`,
 binaries generated into the gitignored `uploads/` by `demo-content/build-documents.ps1`. All six
 were extraction-tested with the libraries ingestion actually uses; the corpus is ≈47 chunks.
 
-**Deferred out of Phase 3 by the user (2026-09-23):** document upload, ingestion and retrieval
-verification — see the deferred block in Phase 3. `demo-content/upload-manifest.json` makes that
-step turnkey: it maps every file to its `ctg_id` and carries the two retrieval checks.
-**That block must run before Phase 5's WebViewer test**, which needs a seeded document to open.
+**Deferred out of Phase 3 by the user (2026-09-23), then completed during Phase 4 the same day
+once the capped OpenAI key arrived.** Document upload, ingestion and retrieval verification all
+passed — see the ticked items in the Phase 3 deferred block for the numbers.
+`demo-content/upload-manifest.json` did make it turnkey. It was deliberately run **before** the
+demo-password middleware was added, so no `Authorization` header was needed; anything re-run
+after that point does need one.
 
-**Still not in place: the capped OpenAI key.** When it arrives it must go in **both** `.env` and
-`.env.demo.local`.
+**The capped OpenAI key is in place (2026-09-23)** and present in **both** `.env` and
+`.env.development.local`, verified identical. **Phase 3's deferred block is complete** — all six
+documents uploaded, ingested and verified (47 chunks, no file at zero), and both retrieval
+checks pass. **Phase 5's WebViewer test is therefore unblocked**: there are seeded documents to
+open.
 
-**Open decision for Phase 4:** the `[CONFLICT]` finding — `DISABLE_AUTH=true` makes `requireRole`
-pass-through, so the `org_staff` 403 that demonstrates RBAC cannot currently happen.
+**Phase 4 is COMPLETE (2026-09-23), on `demo`** — every item done and verified locally against
+the demo database, except the rate limits, which the user deliberately deferred (see that item).
+**The demo-password middleware is now mounted**, so every request except `/api/health` needs
+`Authorization: Bearer thornbury-demo-2026`.
+
+> **⚠️ FOR THE FRONTEND SESSION — the `[CONFLICT]` is decided: RBAC is enforced.**
+>
+> `DISABLE_AUTH` no longer makes `requireRole` and `requireOrgAccess` pass-through. The four
+> personas now get **real 403s** from the backend. **No contract string changed** — headers,
+> persona values, default persona and `DEMO_ACCESS_KEY` are all exactly as the frozen "Shared
+> contract" section has them. What changed is behaviour, and it affects Phase 5 work:
+>
+> - **`org_staff` gets 403 on** `GET /api/summary/scorecard`, all three `/api/user/invite*`
+>   routes, and `POST|PUT|DELETE /api/vto/:orgId`. **`org_executive` gets 403 on**
+>   `GET /api/summary/scorecard` only. `admin` / `super_admin` are denied nothing.
+> - **Both org personas are confined to Thornbury** on the `:orgId` routes; requesting another
+>   org's id returns 403. Admin personas keep cross-org access.
+> - **A persona switch can 403 an in-flight request.** `DashboardPage.tsx` swaps views by role,
+>   so a visitor on the admin dashboard who switches to `org_staff` may get a 403 back from a
+>   scorecard fetch that started before the swap. Handle it as an expected state, not an error
+>   toast — this is the one new failure mode the change introduces.
+> - **The denial is real but currently invisible.** Role-based view routing means `org_staff`
+>   never navigates to the scorecard page. If the RBAC demo should be *seen*, Phase 5 needs a
+>   deliberate affordance (a disabled nav item, or a "your role can't see this" panel).
+>   Worth doing — it is the most concrete proof the persona switcher is not cosmetic.
+> - **Known cosmetic issue:** the three invitation routes return 500 for *authorised* personas
+>   too, because they proxy to Clerk with a dummy key. Hide that screen rather than showing its
+>   error state. See "Added during Phase 4".
+>
+> **WebViewer: the licence key WORKS — tested by the user 2026-09-23. Keep the viewer.**
+> Don't drop `@pdftron/webviewer`, don't touch `web-viewer.tsx`, and **don't do the
+> `filter-repo` strip of `public/lib/webviewer/`** — Decision 6 is resolved in favour of
+> keeping it. The demo-limitations note tied to dropping the viewer is moot.
+> Still do the **authentication** item: `GET /api/docs/:id` will sit behind the demo-password
+> middleware, and an `<iframe src>` cannot send an `Authorization` header — fetch through the
+> axios instance and render `URL.createObjectURL(blob)`.
+>
+> **Documents are seeded (2026-09-23):** six uploaded, ingested and verified in the demo tenant
+> — two PDFs, three DOCX and one XLSX, 47 chunks, every file confirmed non-zero.
+> `FY2026 Strategic Plan - Recurring Revenue Transition.pdf` (273 KB) is the natural one to open.
+> Chat retrieval is verified working against both documents and seeded KPI/VTO data.
+> **One frontend detail from that run:** citation chips come back with the `title`
+> **URL-encoded** (`Q2%202026%20Quarterly%20Business%20Review.docx`). Run it through
+> `decodeURIComponent` or the chips will read badly. Each chip also carries a `type` of
+> `Knowledge Base`, `KPI Data` or `VTO`, which is a ready-made grouping if you want one.
+>
+> **The backend is ready for you (2026-09-23) — Phase 4 is complete and verified.** The
+> password gate is live: every request except `/api/health` now needs
+> `Authorization: Bearer <passphrase>`, and `X-Demo-Role` is in CORS `allowedHeaders`, so the
+> preflight passes (confirmed: `204` with
+> `Access-Control-Allow-Headers: Content-Type,Authorization,X-Demo-Role`).
+> **The dashboard now returns real numbers** rather than three error cards — seeded KPI rows
+> are served with `fromCache: true` on each section when the live integration call fails, which
+> in the demo is always. Sections carry 29 / 18 / 11 populated fields.
+> **Eight route/method combinations return 403 with `{ demo: true }`** and a "disabled in the
+> demo" message: `POST /api/org`, `PUT|DELETE /api/org/:orgId`, `PUT|DELETE /api/user/:userId`,
+> `PUT|DELETE /api/docs/:id`, `POST /api/chat/ingest`. Treat `demo: true` as "show a friendly
+> notice", not an error — ideally disable the control rather than letting it fail. **Reads are
+> untouched**, and so is `POST /api/docs`: `GET /api/docs/:id` and `GET /api/org/:orgId` both
+> return 200, so the WebViewer and upload paths are clear. Note this means **document rename
+> and org rename will 403** if those controls are reachable in the UI.
+>
+> **The demo passphrase is `thornbury-demo-2026`** (chosen 2026-09-23). This is the value a
+> visitor types into the gate; it is deliberately not a secret — Phase 7 publishes it in the
+> README alongside the demo link. It lives in `DEMO_ACCESS_KEY` in both `.env` and
+> `.env.development.local`, and the frontend still needs **no env var for it** — `getToken()` returns
+> whatever the visitor typed. Recorded here only so both sessions can test against the same
+> string. **The password middleware is not mounted yet**, so requests do not need the
+> `Authorization` header until the Phase 4 item below is ticked.
 
 **Two recovery artifacts exist outside the repo — their disposal is the user's call; agents
 should not raise or act on it (2026-09-22).** They can be deleted — the push is
@@ -93,12 +165,14 @@ user. Not a production hardening exercise — the project is not being actively 
    it disconnected for the next person.
 4. **Shared demo password**, not fully open — the chat endpoint costs real money per message.
 5. **Four-role persona switcher** instead of login. Turns removed auth into a demo feature.
-6. **WebViewer:** keep it if the license key still works. If it doesn't, drop it from the
-   frontend and fall back to a plain browser PDF view — with a visible note that this is a demo
-   and some features differ from production. A simple viewer that works reads better in a
-   portfolio than a broken premium one. **The test itself lives in Phase 5**, not earlier: it
-   needs a running backend, a live database and a seeded document, and the old Supabase project
-   and hosted backend are both down.
+6. **WebViewer: KEEP IT — [RESOLVED 2026-09-23, the licence key still works].** *Tested by the
+   user; the October 2025 Apryse demo key is still active, against this file's expectation that
+   it would be dead. `web-viewer.tsx` is left alone, `public/lib/webviewer/` stays, and no
+   history rewrite is needed in the frontend repo. The one live consequence is deployment size —
+   172 MB across 677 files lands in the Vercel build output (Phase 6).* The original decision,
+   for the record: keep it if the license key still works; if not, drop it and fall back to a
+   plain browser PDF view with a visible note that this is a demo. A simple viewer that works
+   reads better in a portfolio than a broken premium one.
 7. **`main` = the real project, `demo` = demo modifications.** Deploy from `demo`.
 8. **The team repos are left completely untouched** — frozen as the snapshot of where the team
    finished, with all collaborators keeping access. Local clones are disconnected from them and
@@ -170,7 +244,10 @@ These were expensive to establish. Don't re-derive them.
 
 - **`DISABLE_AUTH` already exists** (`config/env.js:40`) and flips `requireAuth`, `requireRole`
   and `requireOrgAccess` to pass-through. But it is gated `!isProduction && ...`, so
-  `NODE_ENV=production` silently re-enables auth. Use `NODE_ENV=demo`.
+  `NODE_ENV=production` silently re-enables auth. **The only hard constraint is
+  `NODE_ENV !== "production"`** — `development`, `demo` and anything else all behave
+  identically, because every branch in the codebase tests `isProduction` and nothing tests for
+  `development` or `demo` specifically (verified 2026-09-23; see "Added during Phase 4").
 - **It does not cover everything.** Twelve call sites resolve identity by calling `req.auth()`
   directly, bypassing the middleware: `auth.controller.js:168,205`, `clickup.controller.js:26`,
   `docs.controller.js:169`, `hubspot.controller.js:30`, `invitation.controller.js:43,164,205`,
@@ -213,9 +290,11 @@ These were expensive to establish. Don't re-derive them.
   will reject unless the header is listed. Symptom is a generic CORS failure that looks like
   the API is down, not like a header problem.
 - **Local env files are named `.env.<NODE_ENV>.local`.** `server.js:1-3` loads
-  ``.env.${NODE_ENV}.local``, so running locally with `NODE_ENV=demo` looks for
-  `.env.demo.local` — which doesn't exist. `config/env.js` then hard-exits on missing required
-  vars. Create `.env.demo.local` before any local verification step.
+  ``.env.${NODE_ENV}.local``, and `NODE_ENV` defaults to `development`, so a bare
+  `npm run dev` looks for **`.env.development.local`**. If that file is absent `config/env.js`
+  hard-exits on missing required vars — and the `.env` load in `app.js` comes too late to
+  rescue it. **That file is the one the local demo uses** (see the naming decision in "Added
+  during Phase 4"); it must exist before any local verification step.
 - **Local port mismatch.** `config/env.js:30` defaults `PORT` to 3000, but the frontend's
   `.env` points at `http://localhost:5000/api`. Set `PORT=5000` locally or the frontend can't
   reach the API.
@@ -228,7 +307,7 @@ These were expensive to establish. Don't re-derive them.
   for it — adding any new `VITE_` variable means editing three files in lockstep
   (`src/env.ts`, `public/config.js`, and the envsubst list in `entrypoint.sh`), and missing one
   yields an unsubstituted `${...}` string at runtime.
-- **`prisma db push` reads `.env`, not `.env.demo.local`.** `prisma.config.js` starts with
+- **`prisma db push` reads `.env`, not `.env.development.local`.** `prisma.config.js` starts with
   `import "dotenv/config"`, which loads plain `.env` from the repo root, and then resolves
   `env("DIRECT_URL")`. The repo still has `.env`, `.env.development.local`,
   `.env.production.local`, `.env.staging.local` and `.env.test.local` on disk, all holding
@@ -454,7 +533,7 @@ These were expensive to establish. Don't re-derive them.
   `app.js` never gets a chance. With one present but missing a variable, the `.env` value
   only reaches code that reads `process.env` directly (e.g. `ragService.js:42`'s
   `process.env.DATABASE_URL` fallback), not the many modules that import from `config/env`.
-  Partial, inconsistent fallback — keep `.env.demo.local` complete rather than relying on it.
+  Partial, inconsistent fallback — keep `.env.development.local` complete rather than relying on it.
 - **`node_modules` was not installed**, which would have made `npx prisma` fetch the latest
   Prisma instead of the lockfile's and broken `prisma.config.js`'s `dotenv/config` import.
   `npm ci` fixed it (prisma 7.5.0, @prisma/client 7.4.2, dotenv 17.3.1 — all match the lock).
@@ -471,7 +550,28 @@ These were expensive to establish. Don't re-derive them.
 
 ### Added during Phase 3 (2026-09-22)
 
-- **[CONFLICT — needs a Phase 4 decision] `DISABLE_AUTH=true` defeats the RBAC demo.** Two things
+- **[CONFLICT — RESOLVED 2026-09-23. Decision: enforce. The personas are real.]**
+  *Under `DISABLE_AUTH`, `requireAuth` stays pass-through (nothing validates a Clerk session)
+  but `requireRole` and `requireOrgAccess` now evaluate normally against the stubbed identity —
+  the runbook's proposed fix below, adopted as written. Implemented in
+  `middleware/auth.middleware.js` by deleting the two `if (AUTH_DISABLED) return passThrough;`
+  lines and adding a `hasIdentity(req)` guard for the unreachable case where neither Clerk nor
+  the stub is mounted. **Verified live against the demo DB** — see "Added during Phase 4" for
+  the per-persona results. **No contract string changed**, so the frozen "Shared contract"
+  section is untouched.*
+  *Three points that settled it:*
+  - ***The codebase already did this.*** `docs.controller.js:169` gates its inline org check on
+    `typeof req.auth === "function"`, **not** on `DISABLE_AUTH` — so document upload has been
+    enforcing org scoping against the demo stub all along, and Phase 3 depended on it. The
+    middleware was the inconsistent part, not the proposal.
+  - ***It is a no-op in production.*** `config/env.js:40` is `!isProduction && ...`, so
+    `AUTH_DISABLED` is already `false` in production and the deleted branch was already dead
+    code there. The change cannot affect the real project.
+  - ***The pass-through guarded a condition that can no longer occur.*** It existed because
+    Clerk-with-no-session yields `{userId: null}`, which would 403 everything. `app.js:53`
+    mounts the stub or Clerk but never neither, and the stub always yields a valid persona.
+  **Original finding, kept as the record of what was decided:**
+  **`DISABLE_AUTH=true` defeats the RBAC demo.** Two things
   this file already says are in direct tension, and nothing reconciles them:
   - Findings: `DISABLE_AUTH` flips `requireAuth`, `requireRole` **and** `requireOrgAccess` to
     pass-through. Confirmed in `middleware/auth.middleware.js` — `requireRole` and
@@ -547,6 +647,147 @@ These were expensive to establish. Don't re-derive them.
   in Supabase". `AI_CHATBOT_README.md:146` states it outright: the RPC is retained for backwards
   compatibility, and live retrieval uses direct SQL on a dedicated `pg` Pool so
   `SET ivfflat.probes` persists on the same connection.
+
+### Added during Phase 4 (2026-09-23)
+
+**The RBAC enforcement change, verified live** against the demo DB (with `NODE_ENV=demo`, which
+was the local value at the time — it is `development` now, and the behaviour is identical), all four
+personas, before the demo-password middleware existed (so no `Authorization` header was needed
+yet). This is the evidence behind the `[CONFLICT]` resolution:
+
+| Route | super_admin | admin | org_executive | org_staff |
+| --- | --- | --- | --- | --- |
+| `GET /summary/scorecard` (`requireRole("admin")`) | 200 | 200 | **403** | **403** |
+| `GET /summary/summary/:orgId` — own org | — | 200 | 200 | 200 |
+| `GET /summary/summary/:orgId` — other org | — | 200 (bypass) | **403** | **403** |
+| `GET /user/invitations` (`requireRole("org_executive")`) | — | 500¹ | 500¹ | **403** |
+| `DELETE /vto/:orgId` (`requireRole("org_executive")`) | — | — | — | **403** |
+
+With **no** `X-Demo-Role` header the scorecard returns 403 as `org_executive`, confirming the
+contract's default persona is applied before the role check rather than falling through. The
+403s land **before** the handler, so the `DELETE` probe mutated nothing.
+¹ *Not a regression — see the first finding below.*
+
+- **The three invitation routes 500 in demo mode, for every authorised persona.** `admin` and
+  `org_executive` clear `requireRole` and then fail in the handler with
+  `[invitation] Failed to list invitations: Unauthorized` — that is **Clerk's Backend API**
+  rejecting the dummy `CLERK_SECRET_KEY`. `invitation.controller.js` proxies to Clerk to
+  create, list and revoke invitations, and there is no Clerk organisation behind the demo, so
+  this cannot be made to work without real Clerk credentials. Affects
+  `POST /api/user/invite`, `GET /api/user/invitations`, `DELETE /api/user/invite/:invitationId`.
+  **Not a security problem — it fails closed**, and `POST /api/user/invite` is therefore
+  self-blocking without being on the destructive-routes list. **It is a cosmetic problem** if
+  the frontend surfaces invitations on a manage-users page: an `org_executive` persona would
+  see an error state. Left unfixed — outside Phase 4's stated scope and it fails safely.
+  Add the routes to a frontend-side hide list in Phase 5 if that screen is reachable.
+- **The SQL injection was in *two* queries, not one. Fixing only the flagged lines would have
+  left the hole open.** The original finding named `ragService.js:214-215` (the vector search).
+  But `orgFilter` was interpolated into the **keyword/full-text query** at the old line 255 as
+  well, and that query additionally interpolated the user-derived `tsWords`. Both now bind
+  every caller-supplied value; `vectorQuery(sql)` gained a `params` argument.
+  **Proven closed, not assumed.** With an `admin` persona — which bypasses
+  `requireOrgAccess("body")`, so the raw body value reaches the query — and the payload
+  `00000000-0000-4000-a000-000000000001') OR 1=1--` (a *valid* uuid plus an injection tail,
+  which against the old interpolation produced `... = ANY(ARRAY['<uuid>']) OR 1=1--` and would
+  have returned every row of every tenant), Postgres now reports:
+  `invalid input syntax for type uuid: "00000000-0000-4000-a000-000000000001') OR 1=1--"`
+  — the whole string treated as **one data value**. Both the vector and keyword searches logged
+  it, which is the direct evidence that the second query had the identical flaw. 0 rows
+  returned. A legitimate two-uuid admin query still returns chunks, so the array binding works.
+  *Two false starts worth recording, because both produced a misleading "pass":*
+  (1) a payload whose uuid was invalid (`x') OR 1=1--`) errors on the **old** code too, so it
+  proves nothing — the payload must be a well-formed uuid; (2) a trivial message like `"test"`
+  never reaches retrieval at all, because the intent router short-circuits it — the probe needs
+  a real question or the query under test is never executed.
+- **`getFullDashboardSummary`'s DB fallback could not key on the resolved period — "nearly
+  drop-in" was optimistic.** `resolvePeriod()` (`engine.controller.js:298`) defaults to the
+  **current calendar month** (1st → last day), while Phase 3 seeded KPI rows per **quarter**
+  (`2026-07-01` → `2026-09-30`). A fallback doing `findUnique` on the
+  `org_id_periodStart_periodEnd` composite therefore matches **nothing**, returns no row, and
+  leaves the error cards exactly as they were — a silent no-op that looks identical to having
+  built no fallback at all. The implemented version tries the exact period first and then falls
+  back to the most recent row for the org (`orderBy: { periodStart: "desc" }`).
+  Sections that fall back are marked `fromCache: true`; a section with no live result *and* no
+  persisted row still returns its original error, so a genuine failure stays visible rather
+  than being disguised as empty data.
+- **[DECIDED 2026-09-23] The local env file is `.env.development.local`, not `.env.demo.local`.
+  There is no `.env.demo.local` any more.** The local demo runs under the default
+  `NODE_ENV=development`, so **`npm run dev` works with nothing set** — which is the whole
+  point of the change.
+  *The reasoning, and the thing that makes it safe:* **no `.env` file ever reaches the
+  deployment.** `.dockerignore:14` is `.env*` and Railway supplies its variables directly, so
+  the local filename and the deployed `NODE_ENV` are **completely decoupled** — the local file
+  is a local concern only. That also means the earlier framing of "one file for dev, one for
+  deployment" was never available: both would have been local files.
+  *Why nothing breaks:* **no code branches on `development` vs `demo`.** Every environment
+  check in the codebase tests `isProduction` (`NODE_ENV === "production"`) — `app.js:96`,
+  `lib/prisma.js:15,18`, `config/env.js:40`. Verified by grepping every `NODE_ENV` /
+  `isProduction` use outside `node_modules`. So the only hard constraint anywhere is
+  **never `production`**, which would force-disable `DISABLE_AUTH`.
+  *Verified after the rename:* 34/34 keys parity-checked against `.env`, all eight secrets
+  identical, still gitignored, and a bare `node server.js` boots, loads 34 vars from
+  `.env.development.local` and 0 from `.env`, with RBAC still enforcing.
+  **Two consequences worth keeping in view:**
+  - The **two-copies constraint is unchanged** — `.env` is still mandatory and separate,
+    because `prisma.config.js`, `app.js:1` and `scripts/ingest-local.js` read plain `.env`
+    regardless of `NODE_ENV`. Renaming the sibling file did not reduce the duplication.
+  - `/api/health` is public and echoes the environment (`app.js:35`). Locally it now reports
+    `"development"`. **On Railway, `NODE_ENV=demo` is still the better value** for exactly that
+    reason, and it costs nothing — the deployed app has no env file to match it to.
+- **[TRAP] `GUARDRAIL_CONFIDENCE_THRESHOLD` is a *skip* threshold, not a minimum-to-answer —
+  and the `.env` comment describing it is wrong.** `.env` says "Minimum confidence score (0–100)
+  the guardrail requires before returning an AI answer". It does no such thing: **no answer is
+  ever blocked by it.** `chat.controller.js:126` uses it to decide whether to **skip the
+  guardrail LLM call** when the pre-confidence heuristic
+  (`40 + min(groundedChunks×10, 60) − (intents−1)×15`, line 128) is already at or above it. The
+  only confidence-driven behaviour change is at `guardrail.js:114`: below **60**, a transparency
+  note is prepended.
+  **The direction is counterintuitive and matters for the cost item:** *raising* the threshold
+  makes the guardrail run **more** often — more spend, more latency — while *lowering* it skips
+  more. Anyone tuning this for cost will move it the wrong way. Observed directly: the
+  document question scored pre-confidence 100 (6+ grounded chunks, one intent), skipped the
+  guardrail and answered in **8.4s**; the KPI question fell below the threshold of 90, ran the
+  extra call, and took **57s**.
+  *Also stale: `chat.controller.js:124` says "default 80"; `config/env.js` actually defaults it
+  to **90**.*
+- **Chat latency is a demo-experience risk, not just a cost one.** 8.4s when the guardrail is
+  skipped, **57s when it runs** — on a local machine with a warm connection. A visitor watching
+  a spinner for a minute reads the demo as broken. Relevant to Phase 6's Railway deploy (proxy
+  timeouts) and worth a visible streaming/progress affordance in Phase 5 — `/api/chat/stream`
+  exists and is what the frontend chatbot already uses, so the SSE path likely masks this; the
+  57s figure is from the non-streaming `/api/chat` endpoint used for this verification.
+- **[DECIDED 2026-09-23] Swapping embeddings to local Ollama (`nomic-embed-text`) was considered
+  and rejected. Keep OpenAI.** Raised as a way to avoid the capped-key blocker. Four reasons,
+  all checked against the code rather than assumed:
+  - **`OLLAMA_EMBED_MODEL` is read by nothing.** `config/env.js` exports only
+    `OPENAI_EMBED_MODEL` (line 57) and has no `OLLAMA_*` key at all — so `config/ollama.js`
+    destructures `OLLAMA_API_KEY` from a module that never exports it and
+    `getOllamaHeaders()` always returns `{}`. Setting the variable would be a silent no-op.
+  - **No code path, and building one rewrites the lockfile.** All three embedding sites
+    construct `OpenAIEmbeddings`; `@langchain/ollama` is **not** in `node_modules`. Adding it
+    means `npm install` — the lockfile rewrite Phases 2 and 3 both avoided.
+  - **It is a one-way DB change.** `nomic-embed-text` is 768-dim against the demo's
+    `vector(1536)`, so it needs `ALTER COLUMN ... TYPE vector(768)` plus a re-do of the Phase 3
+    `schema.prisma` durable fix. Embeddings from different models are not comparable, so
+    switching back later means wiping `document_embeddings` and re-embedding. (The table is at
+    0 rows today, so this was the cheapest possible moment to decide — and it was decided.)
+    **Still do not use the old 768-dim SQL script** — it `DROP TABLE`s and has no `org_id`.
+  - **The decisive one: Railway has no Ollama.** Embedding is not only an ingestion cost —
+    `ragService.js:72` embeds the **query on every chat message**. Local ingestion would work;
+    the deployed demo would have nothing to call at runtime. Fixing that means a second Railway
+    service hosting the model, or a paid remote Ollama proxy (which is what the dead
+    `OLLAMA_API_KEY` helper implies the team once used).
+  **And it would save almost nothing.** The corpus is ~47 chunks — a fraction of a cent. The
+  cost risk is the **chat** model (four `ChatOpenAI` sites, 3–6 calls per message on a public
+  endpoint), which is what the rate limits and the hard spend cap address.
+  *New fact worth recording: **Ollama v0.17.7 IS installed on this machine** (the earlier
+  finding established only that no live code path exists, not that the binary was absent).*
+- **`getFullDashboardSummary` error cards reproduced, exactly as the original finding predicts.**
+  `GET /summary/summary/:orgId` returns 200 with
+  `{"financial":{"error":"No QuickBooks token found for organisation: …"}}` and the same shape
+  for the other two sections. Confirms the DB-fallback item is required, and that the failure is
+  per-section inside a 200 rather than a non-200 — so the fallback has to inspect each section,
+  not catch a rejected request.
 
 ---
 
@@ -743,7 +984,7 @@ is optional insurance rather than a requirement.
       healthcheck keeps the project awake. Details are on the Phase 6 keep-alive item.
 - [x] **[BLOCKER] Point both database URLs at the new project.** `prisma.config.js` resolves
       from `DIRECT_URL`, loaded out of plain **`.env`** via `dotenv/config` — not
-      `.env.demo.local`, and not the other four stale `.env.*.local` files still on disk. Print
+      `.env.development.local`, and not the other four stale `.env.*.local` files still on disk. Print
       the host from `DIRECT_URL` and confirm it's the new project *before* pushing; a stale
       exported shell variable also beats the file.
       *Done. The trap was live — `.env` still pointed at the old project when Phase 2 started
@@ -810,9 +1051,10 @@ Seeded data is now the only source of KPI truth. This is what a reviewer actuall
 > 1. **The `req.auth` stub.** `createDocument` (`docs.controller.js:169`) runs its own inline
 >    org check; with Clerk mounted but no session it resolves no user and returns 403, so
 >    uploads fail before anything is ingested.
-> 2. **`.env.demo.local`.** Uploading means running the server locally, and `server.js` exits
+> 2. **`.env.development.local`.** Uploading means running the server locally, and `server.js` exits
 >    without an `.env.<NODE_ENV>.local` — the `.env` load in `app.js` comes too late (see
->    "Added during Phase 2"). Run it with `NODE_ENV=demo` so it picks up that file.
+>    "Added during Phase 2"). A bare `npm run dev` picks that file up, since `NODE_ENV`
+>    defaults to `development`.
 >
 > Everything else in Phase 3 is independent and can be done first.
 
@@ -834,12 +1076,19 @@ Seeded data is now the only source of KPI truth. This is what a reviewer actuall
 - [x] **`npx prisma generate`.** Prisma 7's `db push` did not generate the client, and
       `seed.js` needs it. *Done — client v7.5.0, matching the lockfile. The CLI advertises
       8.0.0-rc; **don't take it**, it would rewrite the lockfile.*
-- [ ] **[BLOCKER] Put a real OpenAI key with a hard spend cap in `.env`** — the dedicated
+- [x] **[BLOCKER] Put a real OpenAI key with a hard spend cap in `.env`** — the dedicated
       demo key from Phase 6, created now instead. Ingestion embeds every chunk and retrieval
-      verification runs the chat pipeline, so Phase 3 spends money first. `.env` currently
-      holds the placeholder `sk-proj-xxx…`, which is **non-empty, so it passes
+      verification runs the chat pipeline, so Phase 3 spends money first. `.env` previously
+      held the placeholder `sk-proj-xxx…`, which is **non-empty, so it passes
       `config/openai.js`'s startup check** and only fails at OpenAI with a 401 — during
       ingestion that failure is only logged (see the upload item).
+      *Done 2026-09-23 (user supplied the capped key). **The two-copies constraint was violated
+      in transit and caught by a parity check** — the key had been put in `.env.development.local`
+      only, leaving `.env` on the placeholder. That split is worse than it looks: the running
+      server reads `.env.development.local` (real key, works), while `prisma.config.js`, `app.js:1`
+      and **`scripts/ingest-local.js` read plain `.env`** — so a local ingest run would have
+      401'd silently. Now identical in both files, verified by comparing the lines directly.
+      **Check parity, don't assume it.***
 - [x] **Run the seed as `node -r dotenv/config prisma/seed.js`** — not bare `node
       prisma/seed.js`. `seed.js` loads no env file itself, and its `lib/prisma` →
       `config/env` import hard-exits on missing vars. `-r dotenv/config` loads `.env` (the
@@ -970,7 +1219,7 @@ Seeded data is now the only source of KPI truth. This is what a reviewer actuall
 > The documents themselves are still authored in Phase 3, so the deferred work is only "upload
 > and verify", not "write the content".
 
-- [ ] **Upload through `POST /api/docs`**, not by hand — it auto-ingests via `ingestSingleFile`,
+- [x] **Upload through `POST /api/docs`**, not by hand — it auto-ingests via `ingestSingleFile`,
       doing File row + storage + extract + chunk + embed in one step.
       **A 201 does not mean it ingested.** `createDocument` fires `ingestSingleFile` without
       awaiting it (`docs.controller.js:258`), so the response returns before embedding runs,
@@ -985,6 +1234,25 @@ Seeded data is now the only source of KPI truth. This is what a reviewer actuall
       LEFT JOIN document_embeddings e ON e.metadata->>'file_id' = f.file_id::text
       GROUP BY f.file_name ORDER BY chunks;
       ```
+      *Done 2026-09-23, run **before** the demo-password middleware was added, so no
+      `Authorization` header was needed. All six uploaded as `org_executive` (Dana, `user_id` 3)
+      to the Thornbury org per `demo-content/upload-manifest.json`; all six returned 201 **and**
+      all six logged `[ingest] ✓`. The LEFT JOIN check is the one that counts:*
+
+      | chunks | ctg | file |
+      | --- | --- | --- |
+      | 10 | 1 | FY2026 Strategic Plan - Recurring Revenue Transition.pdf |
+      | 10 | 4 | Client Master Services Agreement - Template.docx |
+      | 8 | 5 | MBCx Delivery Standard v3.pdf |
+      | 7 | 3 | Q2 2026 Quarterly Business Review.docx |
+      | 7 | *null* | Leadership Team Meeting Notes - 8 Sep 2026.docx |
+      | 5 | 3 | FY2026 Financial Summary and KPI Detail.xlsx |
+      | **47** | | **TOTAL across 6 files — zero files with 0 chunks** |
+
+      *Three independent cross-checks alongside it, so a join bug could not mask a failure:
+      `document_embeddings` holds exactly 47 rows; **0 orphaned chunks** (no chunk whose
+      `metadata.file_id` has no `File`); **1 distinct `org_id`**, confirming tenant isolation;
+      and `vector_dims` is **1536** on every row. 47 matches the manifest's estimate exactly.*
 - [x] **Seed the KPI tables completely** — full rows in `finance_kpis`, `leads_kpis`,
       `labor_kpis` for the current period. Seed *every* field, not just the five the live
       persist path writes.
@@ -1003,14 +1271,36 @@ Seeded data is now the only source of KPI truth. This is what a reviewer actuall
       target market, proven process ("Baseline → Retrofit → Verify → Monitor"), differentiators,
       guarantee, and a three-year picture dated Dec 31 2028 whose measurables are the same KPIs
       the dashboard shows.*
-- [ ] **Verify retrieval end to end.** Ask something only a seeded document can answer, and
+- [x] **Verify retrieval end to end.** Ask something only a seeded document can answer, and
       something only a seeded KPI can answer. Check citation chips list both.
+      *Done 2026-09-23 — both `retrieval_checks` from the manifest, via `POST /api/chat` as
+      `org_executive`. **Both passed.***
+      - *Multi-hop, documents-only ("Why did Thornbury miss its Q3 utilization target?"):
+        returned the intended synthesis — Q2's audit-backfill rule, triggered twice in Q3 and
+        executed zero times because audit scoping needed founder sign-off while the founder was
+        on the Cascadia rebid. **Neither document contains that answer alone**, so this is real
+        multi-hop retrieval, not a lucky single-chunk hit. Cited both expected documents.
+        8.4s, guardrail confidence 100.*
+      - *KPI-only ("current DSO vs target?"): **68.0 days against the 45-day target**, drawn
+        from the seeded KPI rows and the VTO — matching the expected shape. 57s, confidence 85.*
+      - *Citation chips carry a `type` discriminator — `Knowledge Base` / `KPI Data` / `VTO` —
+        so both halves are visibly cited, which is what this check was for. Note the chip
+        `title` is the **URL-encoded** file name (`Q2%202026%20...docx`); the frontend should
+        `decodeURIComponent` it or the chips read badly.*
 
 ---
 
 ## Phase 4 — Backend demo changes (`demo` branch)
 
 Six small, localized edits. No structural changes.
+
+- [x] **[BLOCKER] Resolve the `[CONFLICT]` — enforce RBAC under `DISABLE_AUTH`.**
+      *Decided and implemented 2026-09-23: `requireAuth` stays pass-through; `requireRole` and
+      `requireOrgAccess` now evaluate against the demo stub. `middleware/auth.middleware.js` —
+      the two `if (AUTH_DISABLED) return passThrough;` lines deleted, a `hasIdentity(req)` guard
+      added, and the comments that claimed the checks were bypassed corrected. Verified live
+      across all four personas — results table in "Added during Phase 4". No contract string
+      changed. The frontend consequences are in the Status block at the top of this file.*
 
 - [x] **[BLOCKER] Stub `req.auth` instead of removing auth.** Replace `clerkMiddleware()` when
       `DISABLE_AUTH` is on. Fixes all twelve call sites at once.
@@ -1027,45 +1317,92 @@ Six small, localized edits. No structural changes.
         sessionClaims: { publicMetadata: { role: req.get("X-Demo-Role") || "org_executive" } }
       });
       ```
-- [ ] **[BLOCKER] Add `X-Demo-Role` to CORS `allowedHeaders`** in `app.js:43`. Without it the
+- [x] **[BLOCKER] Add `X-Demo-Role` to CORS `allowedHeaders`** in `app.js:43`. Without it the
       preflight fails and every cross-origin request dies with a generic CORS error.
-- [ ] **Set `NODE_ENV=demo`** (not `production`). Keep a dummy `CLERK_SECRET_KEY` set to satisfy
-      the required-vars check in `config/env.js`.
-- [x] **Create `.env.demo.local` for local runs — needed before Phase 3's upload step.**
-      *Done early, for the same reason. Copied from `.env` (all 33 keys present, parity checked)
-      with only `NODE_ENV` changed to `demo`; `PORT=5000` and `DISABLE_AUTH=true` were already
-      correct. Confirmed gitignored by `.gitignore:5` (`.env*`, with only `.env.example`
-      negated). Boot verified with `NODE_ENV=demo node server.js`. **The `.env` fallback is
-      confirmed inert**: the startup log shows dotenv injecting 32 vars from `.env.demo.local` and
-      then **0 from `.env`**, since everything was already set. **The placeholder OpenAI key is in
-      both files — when the capped key arrives it must be changed in `.env` AND
-      `.env.demo.local`.**
-      `server.js` loads `.env.<NODE_ENV>.local`, so `NODE_ENV=demo` needs that exact filename or
-      the app exits on missing required vars (the `.env` load in `app.js` is too late to help).
+- [x] **Set `NODE_ENV` to anything that is not `production`.** Keep a dummy `CLERK_SECRET_KEY`
+      set to satisfy the required-vars check in `config/env.js`.
+      *Done/decided 2026-09-23. **Locally: `development`**, which is the default, so
+      `npm run dev` works with nothing set and reads `.env.development.local`. **On Railway:
+      still a free choice** — set it there explicitly and never to `production`, or
+      `DISABLE_AUTH` is force-disabled (`config/env.js:40`) and every request 401s with no
+      Clerk session behind it. `demo` reads better in the public `/api/health` response
+      (`app.js:35`) than `development` does; either works. The two are decoupled because no
+      `.env` file reaches the image (`.dockerignore:14` is `.env*`).*
+- [x] **Create `.env.development.local` for local runs — needed before Phase 3's upload step.**
+      *Created early as `.env.demo.local`, then **renamed to `.env.development.local` on
+      2026-09-23 (user decision — see the naming decision in "Added during Phase 4")**. Copied
+      from `.env`, **all 34 keys parity-checked**, `PORT=5000` and `DISABLE_AUTH=true` correct,
+      and confirmed gitignored by `.gitignore:5` (`.env*`, with only `.env.example` negated).
+      **Boot verified with a bare `node server.js` and no `NODE_ENV` set** — dotenv injects 34
+      vars from `.env.development.local` and **0 from `.env`**, so the `.env` fallback is
+      confirmed inert; `DISABLE_AUTH` engages and the RBAC checks still enforce (`admin` 200 /
+      `org_staff` 403 on the scorecard).*
+      `server.js` loads `.env.<NODE_ENV>.local` and `NODE_ENV` defaults to `development`, so
+      this exact filename is what a bare `npm run dev` picks up; without it the app exits on
+      missing required vars (the `.env` load in `app.js` is too late to help).
       **Copy `.env`, not `.env.example`** — since Phase 2, `.env` holds the complete demo values
       (all five Supabase values, and the capped OpenAI key from Phase 3), while `.env.example`
       is placeholders. Keep `PORT=5000` to match the frontend's base URL. The `NODE_ENV` *line*
-      inside the file does nothing — the shell variable picks the file — so start the server
-      with `NODE_ENV=demo` set (PowerShell: `$env:NODE_ENV="demo"; node server.js`). Two
-      copies of the same secrets: if a value changes, change both.
-- [ ] **[BLOCKER] Add the demo-password middleware.** Check `Authorization: Bearer <key>`
+      inside the file is **inert** — the shell variable picks the file, and dotenv does not
+      override an already-set variable — so it is kept consistent only so it cannot mislead a
+      reader. **Two copies of the same secrets: if a value changes, change both** — this
+      constraint survived the rename, and it has already been violated once (see the OpenAI key
+      item in Phase 3). Verify parity rather than assuming it.
+- [x] **[BLOCKER] Add the demo-password middleware.** Check `Authorization: Bearer <key>`
       against `DEMO_ACCESS_KEY` before the routes; exempt `/api/health` so Railway's probe
       works. The frontend already sends this once the shim's `getToken` returns the key. See
       "Shared contract" for exact strings.
-- [ ] **[BLOCKER] Parameterize the vector query** at `services/ragService.js:214-215` —
+- [x] **[BLOCKER] Parameterize the vector query** at `services/ragService.js:214-215` —
       bind as `$1::uuid[]`.
-- [ ] **Block the destructive routes:** `DELETE /api/org/:orgId`, `PUT|DELETE /api/user/:userId`,
+- [x] **Block the destructive routes:** `DELETE /api/org/:orgId`, `PUT|DELETE /api/user/:userId`,
       `DELETE /api/docs/:id`, `POST /api/chat/ingest`. All anonymous without auth; ingest
       re-embeds every file in the database on demand.
-- [ ] **Lower the rate limits** in `app.js:75,85` — currently 1000 global / 200 chat per 15 min,
-      both carrying "lower this back" TODOs. Chat is three to six model calls per message.
-- [ ] **[BLOCKER] Add a DB fallback to `getFullDashboardSummary`.** When a section rejects, read
+      *Done in `middleware/demoGate.middleware.js`, and **extended beyond this list with the
+      user's approval (2026-09-23)** — the four above left three more mutating routes reachable:*
+      - *`POST /api/org` — new organisations appear on the admin scorecard, so an anonymous
+        create visibly pollutes the demo for the next visitor.*
+      - *`PUT /api/org/:orgId` — renames the demo tenant; `storage_bucket` drift would orphan
+        every uploaded file.*
+      - *`PUT /api/docs/:id` — renames or recategorises the seeded documents.*
+      ***Eight route/method combinations are now blocked**, returning 403 with
+      `{ demo: true }` and a "disabled in the demo" message. Verified all eight, plus the
+      negative cases: `GET /api/docs/:id` → 200 (the WebViewer path), `GET /api/org/:orgId` →
+      200, and **`POST /api/docs` → 400 "No file provided"**, proving the upload route reaches
+      its controller rather than the gate — the pattern requires an id segment, so the
+      collection-level POST is untouched. Row counts confirmed unchanged after probing
+      (2 orgs / 4 users / 6 files / 47 chunks), since every block lands before its handler.*
+- [ ] **[DEFERRED 2026-09-23 — user decision: leave out for now]** ~~Lower the rate limits~~ in
+      `app.js:75,85` — currently **1000 global / 200 chat per 15 min**, both still carrying their
+      "lower this back" TODOs. Chat is three to six model calls per message.
+      **Consequence to carry forward, since this is the demo's one real money lever:** the chat
+      endpoint is public and unauthenticated apart from the shared password, so with these
+      limits **the OpenAI hard spend cap is the only backstop left**. That makes the cap
+      non-optional rather than belt-and-braces — confirm it in Phase 6 before going public.
+      Revisit before Phase 7 flips the repos public; until then the demo is private and the
+      exposure is limited to whoever has the link and the passphrase.
+- [x] **[BLOCKER] Add a DB fallback to `getFullDashboardSummary`.** When a section rejects, read
       the persisted KPI row for that period. Nearly drop-in — the Prisma models use the same
       field names the services return.
-- [ ] **Verify locally** against the demo database: `/api/auth/me`,
+- [x] **Verify locally** against the demo database: `/api/auth/me`,
       `/api/summary/summary/:orgId`, `/api/chat/stream` with each of the four `X-Demo-Role`
       values. Confirm `org_staff` gets 403 on `/api/summary/scorecard` — that denial is the RBAC
       demo working, not a bug.
+      *Done 2026-09-23, end-to-end with every Phase 4 change in place:*
+      - ***Password gate:*** no header → 401, wrong key → 401, correct key → 200,
+        `/api/health` → 200 unauthenticated (exempt, per the contract).
+      - ***CORS preflight*** with `Access-Control-Request-Headers: authorization,x-demo-role`
+        → `204` and `Access-Control-Allow-Headers: Content-Type,Authorization,X-Demo-Role`.
+      - ***RBAC:*** all four personas 200 on `/auth/me`; scorecard 200/200/**403**/**403** for
+        super_admin/admin/org_executive/org_staff.
+      - ***Destructive routes:*** all five blocked with 403. **`GET /api/docs/:id` still 200**
+        (the WebViewer path is not over-blocked), and `DELETE /api/user/invite/:id` correctly
+        passes through since it is not on the list.
+      - ***Dashboard fallback:*** three error cards replaced by **29 / 18 / 11 populated
+        fields** from the seeded rows, `fromCache: true`. Spot-checked `dso=68`,
+        `billableUtilization=66.4`, `conversionRate=20.6` — all matching the seed.
+      - ***Chat:*** still retrieves after parameterisation (4 document sources, answer contains
+        the seeded DSO), and a legitimate two-uuid admin query returns 4 chunks, proving the
+        `ANY($n::uuid[])` array binding works.
 
 ---
 
@@ -1099,30 +1436,35 @@ Six small, localized edits. No structural changes.
       visually.
 - [ ] **Replace `ProfilePage`** with a static card from the seeded user, and **`nav-user`'s sign
       out** with one that clears the demo key.
-- [ ] **[BLOCKER] Test the WebViewer license.** *Do this after Phases 2–4 and after the demo
+- [x] **[BLOCKER] Test the WebViewer license.** *Do this after Phases 2–4 and after the demo
       shim above works* — it needs a running backend, the new Supabase project, a seeded
       document and a way into the app. The key in `../maural-kms/.env` is
       `demo:1760471071849:...`, stamped October 2025; Apryse demo keys are short-lived, so
       expect it to be dead. Open a document and watch the console.
-      → *Test outcome:* `________`
-- [ ] **Apply the viewer decision.** If the key works, leave `web-viewer.tsx` alone. If not:
+      → *Test outcome:* **THE KEY STILL WORKS — verified by the user, 2026-09-23.** The
+      expectation recorded above was wrong; the October 2025 demo key is still active.
+      **WebViewer stays.** This resolves Decision 6 in favour of keeping the premium viewer.
+- [x] **Apply the viewer decision.** If the key works, leave `web-viewer.tsx` alone. If not:
       drop `@pdftron/webviewer` and `public/lib/webviewer/` and render documents in a plain PDF
       view instead.
-- [ ] **If the viewer was dropped, strip it from history too.** 172 MB across 677 files. The
-      repo is private with only you on it, so a rewrite plus force-push is safe.
-      ```bash
-      # in ../maural-kms
-      git filter-repo --path public/lib/webviewer --invert-paths --force
-      git push --force origin main demo
-      ```
+      *Key works → **leave `web-viewer.tsx` alone**. No frontend change, and the
+      "demo-limitations note" item below is moot.*
+- [x] ~~**If the viewer was dropped, strip it from history too.**~~ **NOT NEEDED** — the licence
+      test passed, so `public/lib/webviewer/` stays and there is no second `filter-repo` pass.
+      The frontend therefore needs **no history rewrite at all** (Phase 0–1 findings already
+      established it had nothing else to strip).
+      **But this makes a Phase 6 item live rather than hypothetical:** 172 MB across 677 files
+      now definitely lands in the Vercel build output. Check the deployment size there, and see
+      the Deferred section on fetching the viewer at build time if it becomes a problem.
 - [ ] **Whichever viewer survives, check it can authenticate.** `GET /api/docs/:id` is behind
       the demo-password middleware, and an `<iframe src="...">` cannot send an `Authorization`
       header. Fetch the file through the existing axios instance (which already attaches the
       header via the shim's `getToken`), then render `URL.createObjectURL(blob)` as the source.
       That keeps it working with no backend exemption. Verify the same for WebViewer's own
       document-fetch path if it stays.
-- [ ] **If the viewer was dropped, add the demo-limitations note** — a short line on the
-      documents page saying this is a demo and the production build uses a full document viewer.
+- [x] ~~**If the viewer was dropped, add the demo-limitations note**~~ — **moot**, the viewer
+      survived. (The general "this is a demo, data is synthetic" banner in Phase 7 still stands;
+      that one is unrelated to the viewer.)
 
 ---
 
@@ -1132,7 +1474,9 @@ Six small, localized edits. No structural changes.
       unauthenticated chat endpoint running a multi-agent pipeline is the one thing here that
       can actually cost money. *Created in Phase 3 (ingestion needs it first) — here, just
       confirm the cap is set and put the same key in Railway.*
-- [ ] **Deploy the API from `demo`.** Env: `NODE_ENV=demo`, `DISABLE_AUTH=true`,
+- [ ] **Deploy the API from `demo`.** Env (set in the **Railway dashboard** — no `.env` file
+      reaches the image, `.dockerignore:14`): `NODE_ENV=demo` (any value except `production`;
+      `demo` is preferred because `/api/health` shows it publicly), `DISABLE_AUTH=true`,
       `DEMO_ACCESS_KEY`, five Supabase values, capped OpenAI key, dummy `CLERK_SECRET_KEY`, and
       `FRONTEND_URL` / `FRONTEND_REDIRECT_URI` / `ALLOWED_ORIGINS`. No `QUICKBOOKS_*` vars
       needed. **`SUPABASE_SERVICE_ROLE_KEY` is mandatory, not optional:** `lib/supabase.js`
@@ -1153,8 +1497,9 @@ Six small, localized edits. No structural changes.
 - [ ] **Allowlist the right origin.** Vercel mints a unique preview URL per deployment, and
       those won't be in `ALLOWED_ORIGINS` — previews will fail CORS while production works.
       Either test only on the production domain or add a pattern for previews.
-- [ ] **Check the deployment size** if WebViewer survived the Phase 5 licence test —
-      `public/lib/webviewer` is 172 MB and lands in the build output.
+- [ ] **[NOW UNCONDITIONAL] Check the deployment size.** WebViewer **did** survive the licence
+      test (2026-09-23), so `public/lib/webviewer` — 172 MB across 677 files — lands in the
+      Vercel build output for certain. Verify it deploys within limits before assuming it does.
 - [ ] **Walk the whole journey as a visitor:** passphrase → each of the four personas →
       dashboard → documents → open a file → connect flow → two chatbot questions → citations and
       guardrail badge.
@@ -1204,4 +1549,6 @@ Recorded so they aren't rediscovered as surprises. None block the demo.
 - `controllers/__hubspot.controller.js` and `__quickbooks.controller.js` are ~1,140 lines of
   dead code.
 - `../maural-kms/public/lib/webviewer` is 172 MB across 677 committed files — heavy clones and
-  a large deploy. Consider fetching at build time if the viewer survives the Phase 5 test.
+  a large deploy. **The viewer survived the licence test (2026-09-23), so this is now certain
+  rather than conditional**: it ships. Consider fetching at build time if Vercel's deployment
+  size becomes a problem.

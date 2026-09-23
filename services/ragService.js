@@ -48,15 +48,19 @@ function getVectorPool() {
 /**
  * Run a vector similarity query on a dedicated client so that
  * `SET ivfflat.probes` applies to the same connection as the SELECT.
+ *
+ * @param {string} sql     - Parameterised SQL ($1, $2, …)
+ * @param {Array}  [params] - Bound values. Always pass caller-supplied data
+ *   (org ids, search terms) here rather than interpolating it into `sql`.
  */
-async function vectorQuery(sql) {
+async function vectorQuery(sql, params = []) {
   const pool = getVectorPool();
   const client = await pool.connect();
   try {
     // The IVFFlat index uses 100 lists; probe all of them to guarantee correct
     // results. Without this, default probes=1 visits 1 list and misses all rows.
     await client.query("SET ivfflat.probes = 100");
-    const result = await client.query(sql);
+    const result = await client.query(sql, params);
     return result.rows;
   } finally {
     client.release();
@@ -211,18 +215,30 @@ async function retrieveDocuments(query, orgIds, topK = 12, history = []) {
   // -------------------------------------------------------------------------
   const queryEmbedding = await embeddings.embedQuery(searchQuery);
   const vecStr = "[" + queryEmbedding.join(",") + "]";
-  const orgFilter = orgIdList ? orgIdList.map((id) => `'${id}'`).join(",") : null;
-  const orgWhere = orgFilter ? `WHERE org_id = ANY(ARRAY[${orgFilter}]::uuid[])` : "";
+
+  // Every caller-supplied value is bound, never interpolated. orgIds arrives
+  // from the request body: requireOrgAccess("body") overwrites it for non-admin
+  // roles, but admins bypass that check, so the binding here is what actually
+  // closes the injection path rather than merely narrowing it.
+  const vecParams = [vecStr];
+  let orgWhere = "";
+  if (orgIdList) {
+    vecParams.push(orgIdList);
+    orgWhere = `WHERE org_id = ANY($${vecParams.length}::uuid[])`;
+  }
+  vecParams.push(topK);
+  const vecLimit = `$${vecParams.length}`;
 
   let vectorChunks = [];
   try {
     const rows = await vectorQuery(
       `SELECT content, metadata,
-              1 - (embedding <=> '${vecStr}'::vector) AS similarity
+              1 - (embedding <=> $1::vector) AS similarity
        FROM document_embeddings
        ${orgWhere}
-       ORDER BY embedding <=> '${vecStr}'::vector
-       LIMIT ${topK}`,
+       ORDER BY embedding <=> $1::vector
+       LIMIT ${vecLimit}`,
+      vecParams,
     );
     vectorChunks = rows.map((r) => ({
       content: r.content,
@@ -251,15 +267,25 @@ async function retrieveDocuments(query, orgIds, topK = 12, history = []) {
       .join(" & ");
 
     if (tsWords.length > 0) {
-      const orgWhereKeyword = orgFilter
-        ? `AND org_id = ANY(ARRAY[${orgFilter}]::uuid[])`
-        : "";
+      // Same treatment as the vector query above — this one interpolated both
+      // the org ids and the user-derived tsquery, so fixing only the vector
+      // query would have left the identical hole open here.
+      const kwParams = [tsWords];
+      let orgWhereKeyword = "";
+      if (orgIdList) {
+        kwParams.push(orgIdList);
+        orgWhereKeyword = `AND org_id = ANY($${kwParams.length}::uuid[])`;
+      }
+      kwParams.push(topK);
+      const kwLimit = `$${kwParams.length}`;
+
       const rows = await vectorQuery(
         `SELECT content, metadata, 0.5 AS similarity
          FROM document_embeddings
-         WHERE to_tsvector('english', content) @@ to_tsquery('english', '${tsWords}')
+         WHERE to_tsvector('english', content) @@ to_tsquery('english', $1)
          ${orgWhereKeyword}
-         LIMIT ${topK}`,
+         LIMIT ${kwLimit}`,
+        kwParams,
       );
       keywordChunks = rows.map((r) => ({
         content: r.content,

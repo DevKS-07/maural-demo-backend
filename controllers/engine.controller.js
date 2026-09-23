@@ -188,28 +188,19 @@ const getFullDashboardSummary = async (req, res) => {
         );
     }
 
+    // Fall back to the persisted KPI row for any section whose live call
+    // failed. Without integration tokens all three fail, which is the normal
+    // state of the demo.
+    const [financialSection, leadsSection, laborSection] = await Promise.all([
+      sectionOrFallback(financialResult, prisma.financeKpi, org_id, start, end, "financial"),
+      sectionOrFallback(leadsResult, prisma.leadsKpi, org_id, start, end, "leads"),
+      sectionOrFallback(laborResult, prisma.laborKpi, org_id, start, end, "labor"),
+    ]);
+
     return res.status(200).json({
-      financial: financial ?? {
-        error:
-          financialResult.reason?.message || "Failed to fetch financial data",
-      },
-
-      leads:
-        leadsResult.status === "fulfilled"
-          ? leadsResult.value
-          : {
-              error:
-                leadsResult.reason?.message || "Failed to fetch leads data",
-            },
-
-      labor:
-        laborResult.status === "fulfilled"
-          ? laborResult.value
-          : {
-              error:
-                laborResult.reason?.message || "Failed to fetch labor data",
-            },
-
+      financial: financialSection,
+      leads: leadsSection,
+      labor: laborSection,
       fetchedAt: new Date().toISOString(),
     });
   } catch (error) {
@@ -304,6 +295,82 @@ const resolvePeriod = (startDate, endDate) => {
     ? new Date(endDate)
     : new Date(now.getFullYear(), now.getMonth() + 1, 0);
   return { start, end };
+};
+
+// ---------------------------------------------------------------------------
+// Persisted-KPI fallback
+//
+// getFullDashboardSummary always calls the live integration services. With no
+// integration tokens connected all three reject, and the dashboard renders
+// three error cards. Reading the persisted row instead makes seeded data the
+// source of truth when the live call cannot succeed.
+//
+// Columns that describe the cache rather than the business.
+// ---------------------------------------------------------------------------
+const INTERNAL_KPI_FIELDS = new Set([
+  "id",
+  "org_id",
+  "organisation",
+  "createdAt",
+  "updatedAt",
+  "lastFetchedAt",
+  "fetchSource",
+  "isStale",
+]);
+
+const stripInternal = (row) =>
+  Object.fromEntries(
+    Object.entries(row).filter(([k]) => !INTERNAL_KPI_FIELDS.has(k)),
+  );
+
+/**
+ * Read the persisted KPI row for an organisation.
+ *
+ * Tries the exact period first, then falls back to the most recent row.
+ * The fallback is not optional: resolvePeriod() defaults to the current
+ * *calendar month*, while KPI rows are seeded per *quarter*, so an
+ * exact-match-only lookup finds nothing and silently leaves the error cards
+ * in place — which looks identical to having no fallback at all.
+ *
+ * @param {object} delegate - prisma.financeKpi | prisma.leadsKpi | prisma.laborKpi
+ */
+const readPersistedKpi = async (delegate, org_id, start, end) => {
+  try {
+    const exact = await delegate.findUnique({
+      where: {
+        org_id_periodStart_periodEnd: { org_id, periodStart: start, periodEnd: end },
+      },
+    });
+    if (exact) return stripInternal(exact);
+
+    const latest = await delegate.findFirst({
+      where: { org_id },
+      orderBy: { periodStart: "desc" },
+    });
+    return latest ? stripInternal(latest) : null;
+  } catch (e) {
+    console.warn("[SummaryEngine] KPI fallback read failed:", e.message);
+    return null;
+  }
+};
+
+/**
+ * Resolve one dashboard section: the live result when it succeeded, otherwise
+ * the persisted row, otherwise the original error so a genuine failure is
+ * still visible rather than being disguised as empty data.
+ */
+const sectionOrFallback = async (settled, delegate, org_id, start, end, label) => {
+  if (settled.status === "fulfilled" && settled.value) return settled.value;
+
+  const cached = await readPersistedKpi(delegate, org_id, start, end);
+  if (cached) {
+    console.log(`[SummaryEngine] ${label}: live call failed, served persisted row`);
+    return { ...cached, fromCache: true };
+  }
+
+  return {
+    error: settled.reason?.message || `Failed to fetch ${label} data`,
+  };
 };
 
 /**

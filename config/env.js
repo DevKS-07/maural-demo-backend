@@ -38,6 +38,11 @@ module.exports = {
 
   // Auth
   DISABLE_AUTH: !isProduction && process.env.DISABLE_AUTH === "true",
+
+  // Shared demo passphrase. Required whenever DISABLE_AUTH is on; the demo gate
+  // throws at startup if it is missing. Not in the required-vars list above
+  // because the non-demo app has no use for it.
+  DEMO_ACCESS_KEY: process.env.DEMO_ACCESS_KEY,
   CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
   CLERK_PUBLISHABLE_KEY: process.env.CLERK_PUBLISHABLE_KEY,
   CLERK_WEBHOOK_SECRET: process.env.CLERK_WEBHOOK_SECRET,
@@ -54,7 +59,8 @@ module.exports = {
   // OpenAI / LLM
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || "",
   OPENAI_CHAT_MODEL: process.env.OPENAI_CHAT_MODEL || "gpt-4o-mini",
-  OPENAI_EMBED_MODEL: process.env.OPENAI_EMBED_MODEL || "text-embedding-3-small",
+  OPENAI_EMBED_MODEL:
+    process.env.OPENAI_EMBED_MODEL || "text-embedding-3-small",
   GUARDRAIL_CONFIDENCE_THRESHOLD:
     process.env.GUARDRAIL_CONFIDENCE_THRESHOLD || "90",
 
@@ -81,6 +87,7 @@ module.exports = {
   CLICKUP_REDIRECT_URI: process.env.CLICKUP_REDIRECT_URI,
 
   // Frontend
-  FRONTEND_REDIRECT_URI: process.env.FRONTEND_REDIRECT_URI || "http://localhost:5173/integrations",
+  FRONTEND_REDIRECT_URI:
+    process.env.FRONTEND_REDIRECT_URI || "http://localhost:5173/integrations",
   FRONTEND_URL: process.env.FRONTEND_URL || "http://localhost:5173",
 };
