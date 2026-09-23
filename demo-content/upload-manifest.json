@@ -1,0 +1,76 @@
+{
+  "_comment": [
+    "Drives the deferred upload step (see DEMO_RUNBOOK.md, Phase 3).",
+    "Each entry is one POST /api/docs multipart upload.",
+    "ctg_id values are the frontend's CATEGORY_ID_MAP and are foreign keys to Category:",
+    "1=Sales 2=Marketing 3=Finance 4=Legal 5=Technical. null means Uncategorized, which is",
+    "a null ctg_id and NOT a Category row.",
+    "org_id is the Thornbury demo tenant. user_id is resolved at upload time from the",
+    "clerk_id, because User.user_id autogenerates and is not pinned.",
+    "Files live in uploads/ and are gitignored; rebuild them with",
+    "demo-content/build-documents.ps1 before uploading."
+  ],
+  "org_id": "00000000-0000-4000-a000-000000000003",
+  "upload_as_clerk_id": "demo_org_executive",
+  "expected_total_chunks_approx": 47,
+  "documents": [
+    {
+      "file": "FY2026 Strategic Plan - Recurring Revenue Transition.pdf",
+      "source": "demo-content/documents/01-fy2026-strategic-plan.html",
+      "ctg_id": 1,
+      "category": "Sales",
+      "approx_chunks": 10
+    },
+    {
+      "file": "Q2 2026 Quarterly Business Review.docx",
+      "source": "demo-content/documents/02-q2-2026-quarterly-business-review.html",
+      "ctg_id": 3,
+      "category": "Finance",
+      "approx_chunks": 7
+    },
+    {
+      "file": "FY2026 Financial Summary and KPI Detail.xlsx",
+      "source": "demo-content/build-xlsx.js",
+      "ctg_id": 3,
+      "category": "Finance",
+      "approx_chunks": 5
+    },
+    {
+      "file": "MBCx Delivery Standard v3.pdf",
+      "source": "demo-content/documents/04-mbcx-delivery-standard.html",
+      "ctg_id": 5,
+      "category": "Technical",
+      "approx_chunks": 8
+    },
+    {
+      "file": "Client Master Services Agreement - Template.docx",
+      "source": "demo-content/documents/05-client-msa-template.html",
+      "ctg_id": 4,
+      "category": "Legal",
+      "approx_chunks": 10
+    },
+    {
+      "file": "Leadership Team Meeting Notes - 8 Sep 2026.docx",
+      "source": "demo-content/documents/06-leadership-meeting-notes-2026-09-08.html",
+      "ctg_id": null,
+      "category": "Uncategorized",
+      "approx_chunks": 7
+    }
+  ],
+  "retrieval_checks": [
+    {
+      "question": "Why did Thornbury miss its Q3 utilization target?",
+      "kind": "documents-only, multi-hop",
+      "expected_sources": [
+        "Q2 2026 Quarterly Business Review.docx",
+        "Leadership Team Meeting Notes - 8 Sep 2026.docx"
+      ],
+      "expected_answer_shape": "Q2 approved an audit backfill rule to absorb project slippage; in Q3 it was triggered twice and executed zero times, because audit scoping needed founder sign-off and the founder was committed to Cascadia rebid preparation. Neither document contains the whole answer."
+    },
+    {
+      "question": "What is our current DSO and how does it compare to target?",
+      "kind": "KPI-only",
+      "expected_answer_shape": "68 days against a 45-day target, up from 61 in Q2."
+    }
+  ]
+}

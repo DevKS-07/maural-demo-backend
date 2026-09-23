@@ -1,0 +1,168 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>MBCx Delivery Standard v3</title>
+<style>
+  body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #1a1a1a; }
+  h1 { font-size: 19pt; margin-bottom: 2pt; }
+  h2 { font-size: 13.5pt; margin-top: 18pt; border-bottom: 1px solid #bbb; padding-bottom: 3pt; }
+  h3 { font-size: 11.5pt; margin-top: 13pt; margin-bottom: 4pt; }
+  .sub { color: #555; font-size: 10pt; margin-top: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 10pt 0; font-size: 10pt; }
+  th, td { border: 1px solid #999; padding: 4pt 6pt; text-align: left; vertical-align: top; }
+  th { background: #eee; }
+  code { background: #f0f0f0; padding: 0 3px; font-family: Consolas, monospace; font-size: 9.5pt; }
+  .callout { border-left: 3px solid #666; padding: 6pt 10pt; margin: 10pt 0; background: #f6f6f6; }
+</style>
+</head>
+<body>
+
+<h1>Monitoring-Based Commissioning — Delivery Standard</h1>
+<p class="sub">Thornbury Energy Group &middot; Version 3.0 &middot; Effective 1 March 2026 &middot;
+Owner: Marcus Oyelaran, Senior Commissioning Engineer &middot; Supersedes v2.1 (June 2024)</p>
+
+<h2>1. Purpose and scope</h2>
+
+<p>This standard defines how Thornbury delivers Monitoring-Based Commissioning (MBCx) engagements.
+It applies to every paid MBCx contract and to the 24-month monitoring period included with every
+retrofit project.</p>
+
+<p>MBCx exists because retrofit savings decay. A building commissioned to a verified baseline will
+typically give back between 15% and 30% of its measured savings within two years if nobody is
+watching — through overridden setpoints, altered schedules, failed sensors, and changes made by
+other trades. The purpose of MBCx is to detect that drift and correct it before the client notices
+it on a utility bill.</p>
+
+<h2>2. The proven process</h2>
+
+<p>Every engagement follows the same four stages. The stages are not optional and they are not
+reordered.</p>
+
+<table>
+<tr><th>Stage</th><th>What it establishes</th><th>Exit criterion</th></tr>
+<tr>
+  <td><strong>Baseline</strong></td>
+  <td>What the building actually does now, measured rather than modeled</td>
+  <td>A signed baseline model with at least 12 months of interval data, weather-normalised</td>
+</tr>
+<tr>
+  <td><strong>Retrofit</strong></td>
+  <td>The physical and controls changes</td>
+  <td>Installed, functionally tested, and accepted by the client</td>
+</tr>
+<tr>
+  <td><strong>Verify</strong></td>
+  <td>That the savings are real and attributable</td>
+  <td>Measured savings within the guarantee band for one full year</td>
+</tr>
+<tr>
+  <td><strong>Monitor</strong></td>
+  <td>That they stay real</td>
+  <td>Ongoing; quarterly tuning and an annual verification report</td>
+</tr>
+</table>
+
+<h2>3. Baseline requirements</h2>
+
+<p>A baseline that cannot be defended is worse than no baseline, because it converts a savings
+guarantee into an argument. Minimum requirements:</p>
+
+<ul>
+  <li><strong>Twelve months of interval data</strong> at no coarser than hourly resolution, from
+      utility meters or a trusted building management system historian.</li>
+  <li><strong>Weather normalisation</strong> against the nearest NOAA station with a complete
+      record for the baseline year.</li>
+  <li><strong>Documented exclusions.</strong> Any period excluded from the baseline — construction,
+      an extended vacancy, a meter failure — is listed with dates and reason.</li>
+  <li><strong>A recorded sequence of operations</strong> as found, not as designed. These differ in
+      the large majority of buildings we survey.</li>
+  <li><strong>Client countersignature</strong> on the baseline model before retrofit work begins.
+      This is the single most effective dispute-prevention step in the process.</li>
+</ul>
+
+<div class="callout">
+<p>Every artifact listed in this section is filed to the knowledge base against the building, not
+to a project folder. A building outlives the project that created it, and it will outlive the
+engineer who commissioned it.</p>
+</div>
+
+<h2>4. Monitoring period — what we actually do</h2>
+
+<h3>4.1 Continuous</h3>
+<ul>
+  <li>Automated fault detection on the points identified during commissioning.</li>
+  <li>Alarm on deviation from the verified sequence of operations.</li>
+  <li>Monthly energy performance against the weather-normalised baseline.</li>
+</ul>
+
+<h3>4.2 Quarterly tuning visit</h3>
+<ul>
+  <li>Review of all faults raised since the last visit, with disposition for each.</li>
+  <li>Setpoint and schedule audit against the recorded sequence — <strong>this is where most drift
+      is found.</strong></li>
+  <li>Trend review of the five highest-consumption systems.</li>
+  <li>A written summary to the facilities lead within five business days.</li>
+</ul>
+
+<h3>4.3 Annual verification report</h3>
+<p>Measured savings for the year, weather-normalised, against the signed baseline. States plainly
+whether the guarantee band was met. Where it was not, states what we are doing about it and by
+when.</p>
+
+<h2>5. The savings guarantee</h2>
+
+<p>Thornbury guarantees measured first-year savings against the modeled figure in the signed
+baseline. If measured savings fall short, we true up the difference or continue working the
+building at no additional fee until they are met.</p>
+
+<p><strong>The guarantee is void only where</strong> the building's use changes materially from the
+baseline assumptions (occupancy, operating hours, process load), where the client or another
+contractor alters the commissioned sequence without notifying us, or where required maintenance in
+the operations and maintenance schedule is not performed. Each exclusion must be documented and
+notified within 30 days of discovery to be relied upon.</p>
+
+<h2>6. Staffing and continuity</h2>
+
+<p>Every MBCx engagement has a <strong>named lead engineer</strong> and a <strong>named second
+engineer</strong>. The second engineer is not a formality: they attend at least one tuning visit
+per year and are expected to be able to take the building over without a handover meeting.</p>
+
+<p>This requirement was added in v3.0. Under v2.1, buildings were single-staffed, and the practical
+effect was that the company could not reassign an engineer without losing the building's history.
+Every building's baseline, sequence, fault history and tuning record is filed to the knowledge base
+so that the second engineer can be genuinely interchangeable.</p>
+
+<h2>7. Conversion from included monitoring</h2>
+
+<p>Every retrofit includes 24 months of monitoring at no additional charge. This is a commercial
+decision as much as a technical one: it is the demonstration that sells the paid contract.</p>
+
+<p><strong>At month 18, a named conversion owner is assigned</strong> and the following are prepared
+for the client conversation:</p>
+
+<ol>
+  <li>Measured savings to date against the signed baseline.</li>
+  <li>Every fault detected and corrected during the included period, with an estimate of the
+      savings that would have been lost had it gone undetected.</li>
+  <li>A drift projection for the building with no monitoring in place.</li>
+  <li>A priced MBCx proposal, presented as protecting the capital already spent rather than as new
+      spend.</li>
+</ol>
+
+<p>Assignment of the conversion owner at month 18 is mandatory under v3.0. Under v2.1 conversion
+happened when the project engineer happened to have a good relationship with the facilities
+director, which converted six of twenty-three completions in FY2025.</p>
+
+<h2>8. Document control</h2>
+
+<table>
+<tr><th>Version</th><th>Date</th><th>Change</th></tr>
+<tr><td>1.0</td><td>Mar 2021</td><td>Initial standard</td></tr>
+<tr><td>2.0</td><td>Sep 2022</td><td>Added weather normalisation requirement; formalised guarantee band</td></tr>
+<tr><td>2.1</td><td>Jun 2024</td><td>Quarterly tuning visit made mandatory (previously semi-annual)</td></tr>
+<tr><td>3.0</td><td>Mar 2026</td><td>Named second engineer required; month-18 conversion owner required; all building artifacts filed to the knowledge base rather than project folders</td></tr>
+</table>
+
+</body>
+</html>

@@ -28,18 +28,22 @@ locked out and `SUPABASE_SERVICE_ROLE_KEY` is now mandatory for ingestion. **The
 `db push` itself creates `document_embeddings`, badly; see "Added during Phase 2" for what was
 actually run.
 
-**Phase 3 is nearly done (2026-09-23), on `demo`.** The `schema.prisma` fix is committed and the
+**Phase 3 is complete (2026-09-23), on `demo`**, apart from the block deliberately deferred out of
+it. The `schema.prisma` fix is committed and the
 **`[TRAP]` on `prisma db push` is resolved — plain `db push` is safe again.** `prisma/seed.js` is
 idempotent (proven by repeated runs converging on identical row counts) and the demo tenant is
 **fully seeded**: both orgs, four roles, five categories, four persona users with the org chart
 wired, two periods of all three KPI tables with every field populated, and the VTO. Two Phase 4
 items were pulled forward and are done — the `req.auth` stub and `.env.demo.local`.
 
-**Remaining in Phase 3: author the six demo documents.** Then Phase 3 is closed.
+**The six demo documents are authored and built** — sources tracked in `demo-content/documents/`,
+binaries generated into the gitignored `uploads/` by `demo-content/build-documents.ps1`. All six
+were extraction-tested with the libraries ingestion actually uses; the corpus is ≈47 chunks.
 
 **Deferred out of Phase 3 by the user (2026-09-23):** document upload, ingestion and retrieval
-verification — see the deferred block in Phase 3. **That block must run before Phase 5's
-WebViewer test**, which needs a seeded document to open.
+verification — see the deferred block in Phase 3. `demo-content/upload-manifest.json` makes that
+step turnkey: it maps every file to its `ctg_id` and carries the two retrieval checks.
+**That block must run before Phase 5's WebViewer test**, which needs a seeded document to open.
 
 **Still not in place: the capped OpenAI key.** When it arrives it must go in **both** `.env` and
 `.env.demo.local`.
@@ -485,6 +489,24 @@ These were expensive to establish. Don't re-derive them.
   the original pass-through was protecting against. `requireOrgAccess` additionally needs the
   persona users seeded with `org_id`, which Phase 3 does. The `demoAuth` stub as written is
   compatible with either choice, so nothing is foreclosed.
+- **The document build pipeline, and two traps in it.** Sources are HTML in
+  `demo-content/documents/` (Markdown was ruled out — no converter is installed and none of
+  `marked`/`markdown-it`/`showdown` is in `node_modules`). `build-documents.ps1` drives Word COM
+  for PDF/DOCX; `build-xlsx.js` writes the workbook with the already-present `xlsx` package.
+  **Nothing was added to `package.json` and the lockfile is untouched.**
+  - **Word COM rejects the `[ref]` argument form.** `$doc.SaveAs([ref]$path, [ref]$fmt)` — the
+    VBScript idiom that most examples use — fails under PowerShell 5.1 with *"Cannot convert the
+    ... value of type psobject to type Object"*. Pass arguments directly:
+    `$doc.SaveAs([string]$path, [int]$fmt)`.
+  - **Set spreadsheet number formats per row, not per column range.** Ingestion extracts a
+    workbook as *formatted* text via `sheet_to_csv`, so a percentage cell carrying an integer
+    money format is extracted as `37` rather than `37.1`. The stored value is correct and the
+    error is invisible in Excel — it only appears in what the chatbot reads.
+- **The generated documents are excluded from the repo, deliberately.** `.gitignore` has
+  `/uploads/*` with only `.gitkeep` negated, and all six outputs were confirmed ignored. The
+  tracked HTML sources plus the two build scripts reproduce them exactly, so nothing is lost and
+  the repo does not carry ~600 KB of binaries that would also have to be re-reviewed on every
+  change.
 - **No document-conversion tooling on this machine, but Office COM is available.** No `pandoc`,
   `soffice`/`libreoffice` or `wkhtmltopdf` on PATH, and the only relevant npm dependencies are
   readers (`pdf-parse`, `pdfjs-dist`) — except `xlsx`, which does write. Phase 5's WebViewer test
@@ -898,12 +920,31 @@ Seeded data is now the only source of KPI truth. This is what a reviewer actuall
       label. See Findings. *Done, and now enforced from both ends: `prisma/seed.js` throws if its
       labels drift from `config/roles.js`, and `middleware/demoAuth.middleware.js` throws at
       startup if a persona has no mapped clerk id.*
-- [ ] **Author five or six demo documents** — strategy deck, financial summary, meeting notes,
+- [x] **Author five or six demo documents** — strategy deck, financial summary, meeting notes,
       hiring plan, quarterly review. This is the chat's entire knowledge base.
       **Formats ingestion can read** (`ingest.controller.js:129-159`): `pdf`, `docx`,
       `xlsx`/`xls`, `txt`/`md`/`csv`/`json`, and images via OCR. **Not `pptx`** — export the
       strategy deck as PDF. Prefer text-based PDFs/DOCX over scanned ones; OCR is slower and
       noisier.
+      *Done — six, covering PDF, DOCX and XLSX, and every `Category` id plus the null case.
+      **Sources are tracked HTML in `demo-content/documents/`; the binaries are built into
+      `uploads/` and are gitignored**, so the repo stays small and the documents are reproducible.
+      Build with `demo-content/build-documents.ps1`. `demo-content/upload-manifest.json` maps each
+      file to its `ctg_id` and carries the two retrieval checks, so the deferred upload step is
+      turnkey.*
+      **Verified without spending anything:** all six were extracted with the exact libraries
+      ingestion uses (`pdf-parse`, `mammoth`, `xlsx`) — all six return well over the 50-character
+      threshold, so **no OCR path is triggered**, and a spot-check confirmed the specific figures
+      each document is supposed to carry survived conversion. **Total corpus ≈ 47 chunks**, so the
+      embedding spend for a full ingestion is a fraction of a cent.
+      | Document | Format | Category |
+      | --- | --- | --- |
+      | FY2026 Strategic Plan — Recurring Revenue Transition | PDF | Sales (1) |
+      | Q2 2026 Quarterly Business Review | DOCX | Finance (3) |
+      | FY2026 Financial Summary & KPI Detail | XLSX | Finance (3) |
+      | MBCx Delivery Standard v3 | PDF | Technical (5) |
+      | Client Master Services Agreement — Template | DOCX | Legal (4) |
+      | Leadership Team Meeting Notes — 8 Sep 2026 | DOCX | *null* |
 > **[DEFERRED 2026-09-23 — user decision] Upload, ingestion and retrieval verification move out
 > of Phase 3.** The three unticked items below (upload + chunk-count check, and end-to-end
 > retrieval) are deferred to a later phase. Rationale given: most of this path works in the

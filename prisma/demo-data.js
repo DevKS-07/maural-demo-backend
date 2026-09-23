@@ -320,9 +320,31 @@ const VTO = {
     "Three offices — Seattle, Portland, and a new Spokane branch opened in 2027. A Monitoring-Based Commissioning book of business large enough that January starts with $14M already contracted. A sales team of four closing the majority of new work, with Dana in the room only for the largest accounts. Cascadia Health retained through a competitive rebid, but no longer large enough to be existential. Every building we have touched since 2024 still reporting verified savings on a dashboard the client can see without calling us.",
 };
 
+/**
+ * Fiscal-year history and the FY2026 quarterly plan. Not seeded — no model
+ * holds them — but exported so the generated spreadsheet and the authored
+ * documents quote the same figures the KPI rows do.
+ */
+const FISCAL_HISTORY = [
+  { year: "FY2023 actual", revenue: 17_200_000, ebitda: 900_000, ebitdaMargin: 5.2 },
+  { year: "FY2024 actual", revenue: 21_100_000, ebitda: 1_400_000, ebitdaMargin: 6.6 },
+  { year: "FY2025 actual", revenue: 24_800_000, ebitda: 1_800_000, ebitdaMargin: 7.3 },
+  { year: "FY2026 plan", revenue: 31_500_000, ebitda: 2_900_000, ebitdaMargin: 9.2 },
+  { year: "FY2026 forecast", revenue: 29_800_000, ebitda: 2_300_000, ebitdaMargin: 7.7 },
+];
+
+const FY2026_QUARTERS = [
+  { quarter: "Q1 2026", plan: 6_700_000, actual: 6_900_000, status: "Actual", note: "Ahead of plan" },
+  { quarter: "Q2 2026", plan: 7_900_000, actual: 7_620_000, status: "Actual", note: "Two retrofits slipped their construction windows" },
+  { quarter: "Q3 2026", plan: 6_420_000, actual: 5_980_000, status: "Period to date, 22 Sep", note: "Full-quarter forecast $8.1M" },
+  { quarter: "Q4 2026", plan: 10_500_000, actual: 7_200_000, status: "Forecast", note: "Depends on the Cascadia phase 2 award" },
+];
+
 module.exports = {
   PLATFORM_ORG_ID,
   DEMO_ORG_ID,
+  FISCAL_HISTORY,
+  FY2026_QUARTERS,
   PLATFORM_ORG,
   DEMO_ORG,
   USERS,
