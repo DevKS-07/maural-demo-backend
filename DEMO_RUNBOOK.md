@@ -456,6 +456,32 @@ These were expensive to establish. Don't re-derive them.
 
 ### Added during Phase 3 (2026-09-22)
 
+- **[CONFLICT — needs a Phase 4 decision] `DISABLE_AUTH=true` defeats the RBAC demo.** Two things
+  this file already says are in direct tension, and nothing reconciles them:
+  - Findings: `DISABLE_AUTH` flips `requireAuth`, `requireRole` **and** `requireOrgAccess` to
+    pass-through. Confirmed in `middleware/auth.middleware.js` — `requireRole` and
+    `requireOrgAccess` both begin `if (AUTH_DISABLED) return passThrough;`.
+  - Phase 4's verify step: "Confirm `org_staff` gets 403 on `/api/summary/scorecard` — that
+    denial is the RBAC demo working, not a bug."
+  With `DISABLE_AUTH=true` that 403 **cannot happen**: `requireRole` never runs, so `org_staff`
+  gets a 200. Decision 5 calls the four-role switcher the feature that "turns removed auth into a
+  demo feature", and its most visible demonstration is exactly this denial — so this is not a
+  cosmetic gap.
+  **Proposed fix, for Phase 4 to decide (deliberately not applied during Phase 3):** under
+  `DISABLE_AUTH`, keep `requireAuth` as pass-through but let `requireRole` and `requireOrgAccess`
+  evaluate normally against the stubbed identity. That is safe *because* of the stub — `demoAuth`
+  guarantees `req.auth()` always returns a known role and a seeded `clerk_id`, which is the thing
+  the original pass-through was protecting against. `requireOrgAccess` additionally needs the
+  persona users seeded with `org_id`, which Phase 3 does. The `demoAuth` stub as written is
+  compatible with either choice, so nothing is foreclosed.
+- **No document-conversion tooling on this machine, but Office COM is available.** No `pandoc`,
+  `soffice`/`libreoffice` or `wkhtmltopdf` on PATH, and the only relevant npm dependencies are
+  readers (`pdf-parse`, `pdfjs-dist`) — except `xlsx`, which does write. Phase 5's WebViewer test
+  needs a real PDF, so authoring everything as `.md`/`.txt` is not sufficient.
+  **`Word.Application` and `Excel.Application` are both available via COM**, so genuine
+  `.docx`/`.xlsx`/`.pdf` can be produced through PowerShell with **zero new npm dependencies and
+  no lockfile change** — which also avoids `npm install` rewriting the lockfile.
+
 - **`OPENAI_EMBED_MODEL` is pinned by the column type, and a wrong value fails silently.** The
   demo column is `vector(1536)`. `text-embedding-3-small` (the `.env` value and the
   `config/env.js:57` default) and `ada-002` are 1536; **`text-embedding-3-large` is 3072** and
@@ -810,7 +836,17 @@ Seeded data is now the only source of KPI truth. This is what a reviewer actuall
       `1 = "Super Admin"`, `2 = "Admin"`, `3 = "Org Executive"`, `4 = "Org Staff"`.
       `auth.controller.js` looks roles up by `role_name`, so a label typo fails silently.
       **`Permission` / `RolePermission` need no rows** — the frontend's `hasPermission` is
-      defined but never called.
+      defined but never called. **[CONFIRMED + DECIDED 2026-09-23: leave both tables empty.]**
+      Verified across both repos: `hasPermission` (`AuthContext.tsx:138`) has **zero call sites**;
+      the only backend references are `include` clauses at `auth.controller.js:176` and
+      `user.controller.js:126`, plus `user.controller.js:136` which returns the mapped list from a
+      permissions endpoint. With no rows those return `[]` and a 200 — **empty is safe, not merely
+      unused**: the optional chain short-circuits and Prisma's `include` always yields an array,
+      so there is no crash path, and `useRoles.ts` already hard-codes `RolePermission: []` itself.
+      Access control runs entirely off `publicMetadata.role` (backend `requireRole`) and
+      `Role.role_name` (frontend guards, e.g. `IntegrationsPage.tsx:5`). Old SQL for these tables
+      exists but was deliberately not used — seeding data nothing consumes would add reseed
+      surface and imply permissions matter here, when the team gated on role names instead.
       *Done, and both id maps were **re-verified against the frontend source** rather than taken
       on trust: `useRoles.ts:6-9` and `CATEGORY_ID_MAP` match this file exactly. `seed.js` also
       now cross-checks its four labels against `config/roles.js` and throws on drift, so the
@@ -872,8 +908,15 @@ Seeded data is now the only source of KPI truth. This is what a reviewer actuall
 
 Six small, localized edits. No structural changes.
 
-- [ ] **[BLOCKER] Stub `req.auth` instead of removing auth.** Replace `clerkMiddleware()` when
+- [x] **[BLOCKER] Stub `req.auth` instead of removing auth.** Replace `clerkMiddleware()` when
       `DISABLE_AUTH` is on. Fixes all twelve call sites at once.
+      *Done early, because Phase 3's upload step depends on it — `middleware/demoAuth.middleware.js`,
+      mounted at `app.js` as `app.use(DISABLE_AUTH ? demoAuth : clerkMiddleware())`. Verified all
+      four personas resolve to their seeded clerk ids, and that both an unrecognised
+      `X-Demo-Role` and a missing one fall back to `org_executive` per the shared contract. It
+      throws at startup if the persona list ever drifts from `config/roles.js`. **See the
+      `[CONFLICT]` finding** — this stub does not by itself restore the `org_staff` 403, because
+      `requireRole` is still pass-through under `DISABLE_AUTH`.*
       ```js
       req.auth = () => ({
         userId: DEMO_USERS[req.get("X-Demo-Role") || "org_executive"],
@@ -884,7 +927,15 @@ Six small, localized edits. No structural changes.
       preflight fails and every cross-origin request dies with a generic CORS error.
 - [ ] **Set `NODE_ENV=demo`** (not `production`). Keep a dummy `CLERK_SECRET_KEY` set to satisfy
       the required-vars check in `config/env.js`.
-- [ ] **Create `.env.demo.local` for local runs — needed before Phase 3's upload step.**
+- [x] **Create `.env.demo.local` for local runs — needed before Phase 3's upload step.**
+      *Done early, for the same reason. Copied from `.env` (all 33 keys present, parity checked)
+      with only `NODE_ENV` changed to `demo`; `PORT=5000` and `DISABLE_AUTH=true` were already
+      correct. Confirmed gitignored by `.gitignore:5` (`.env*`, with only `.env.example`
+      negated). Boot verified with `NODE_ENV=demo node server.js`. **The `.env` fallback is
+      confirmed inert**: the startup log shows dotenv injecting 32 vars from `.env.demo.local` and
+      then **0 from `.env`**, since everything was already set. **The placeholder OpenAI key is in
+      both files — when the capped key arrives it must be changed in `.env` AND
+      `.env.demo.local`.**
       `server.js` loads `.env.<NODE_ENV>.local`, so `NODE_ENV=demo` needs that exact filename or
       the app exits on missing required vars (the `.env` load in `app.js` is too late to help).
       **Copy `.env`, not `.env.example`** — since Phase 2, `.env` holds the complete demo values

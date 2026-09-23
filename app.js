@@ -7,7 +7,8 @@ const cookieParser = require("cookie-parser");
 const compression = require("compression");
 const rateLimit = require("express-rate-limit");
 const { clerkMiddleware } = require("@clerk/express");
-const { ALLOWED_ORIGINS, isProduction } = require("./config/env");
+const { ALLOWED_ORIGINS, isProduction, DISABLE_AUTH } = require("./config/env");
+const { demoAuth } = require("./middleware/demoAuth.middleware");
 const routes = require("./routes");
 
 // Allow JSON.stringify() to serialize Prisma BigInt fields
@@ -45,8 +46,11 @@ app.use(
   }),
 );
 
-// Clerk middleware — must be before routes so req.auth() is available everywhere
-app.use(clerkMiddleware());
+// Clerk middleware — must be before routes so req.auth() is available everywhere.
+// In demo mode Clerk is replaced rather than merely bypassed: twelve controller
+// call sites read req.auth() directly, and with Clerk mounted but no session
+// they resolve no user and fail quietly. See middleware/demoAuth.middleware.js.
+app.use(DISABLE_AUTH ? demoAuth : clerkMiddleware());
 
 // Raw body parser for Clerk webhook route — must come before express.json()
 // Svix needs the unparsed request body to verify the webhook signature
