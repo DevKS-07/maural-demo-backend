@@ -857,18 +857,20 @@ Seeded data is now the only source of KPI truth. This is what a reviewer actuall
       chatbot nothing to explain. Each of its five problems maps to a dashboard KPI, so the
       chatbot can tie a number to a narrative. The seeded half of the brief lives in
       `prisma/demo-data.js`.*
-- [ ] **Seed the platform org and the demo org.** `prisma/seed.js` already creates the platform
+- [x] **Seed the platform org and the demo org.** `prisma/seed.js` already creates the platform
       org and its storage bucket — extend it rather than writing a second script.
       **Restructure it to be idempotent first:** it currently `return`s early as soon as a
       platform org exists, so anything appended after that check silently never runs on a
       second invocation — and the Phase 6 reseed path depends on re-running it. Use upserts
       keyed on stable values (clerk ids, org names, fixed ids) instead of the early exit.
-      *Restructure **done** — the early return is gone and every write is an upsert on a fixed
-      id; proven by running it twice to identical state. The **platform org is seeded** with a
-      pinned `org_id` and `storage_bucket` (`00000000-0000-4000-a000-00000000000{1,2}`) rather
-      than generated uuids, so a reseed converges instead of creating a second org and the
-      bucket name never drifts. **The demo org is still to do** — it is named after the company
-      brief, so it waits on that. `seed.js` has a marked extension point for it.*
+      ***Both orgs are seeded.*** *The early return is gone and every write is an upsert on a
+      fixed id, proven by running the seed repeatedly to identical row counts.
+      **Maural Solutions** (platform, `…0001` / bucket `…0002`) and **Thornbury Energy Group**
+      (demo tenant, `…0003` / bucket `…0004`) are both created by `seedOrg` in `main()`, with
+      pinned uuids rather than generated ones so a reseed converges instead of creating a second
+      org and the bucket names never drift. `storage_bucket` is written on create but never on
+      update — changing it would orphan every file already uploaded to the old bucket. The four
+      persona users, both KPI periods and the VTO all hang off the Thornbury org.*
 - [x] **[BLOCKER] Seed the four `Role` rows with fixed ids** — nothing creates them, and on the
       fresh DB the table is empty. The labels must match `config/roles.js` exactly, and the
       ids must match the frontend's hard-coded list in `../maural-kms/src/hooks/useRoles.ts`:
