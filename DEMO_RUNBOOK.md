@@ -772,15 +772,16 @@ Seeded data is now the only source of KPI truth. This is what a reviewer actuall
       shell override first; the diff returned exit 0 and `-- This is an empty migration.`
       `[TRAP]` marked resolved. A comment now sits where `@@index([embedding])` was, explaining
       why there is no index there, since `prisma db pull` is what introduced it originally.*
-- [ ] **`npx prisma generate`.** Prisma 7's `db push` did not generate the client, and
-      `seed.js` needs it.
+- [x] **`npx prisma generate`.** Prisma 7's `db push` did not generate the client, and
+      `seed.js` needs it. *Done — client v7.5.0, matching the lockfile. The CLI advertises
+      8.0.0-rc; **don't take it**, it would rewrite the lockfile.*
 - [ ] **[BLOCKER] Put a real OpenAI key with a hard spend cap in `.env`** — the dedicated
       demo key from Phase 6, created now instead. Ingestion embeds every chunk and retrieval
       verification runs the chat pipeline, so Phase 3 spends money first. `.env` currently
       holds the placeholder `sk-proj-xxx…`, which is **non-empty, so it passes
       `config/openai.js`'s startup check** and only fails at OpenAI with a 401 — during
       ingestion that failure is only logged (see the upload item).
-- [ ] **Run the seed as `node -r dotenv/config prisma/seed.js`** — not bare `node
+- [x] **Run the seed as `node -r dotenv/config prisma/seed.js`** — not bare `node
       prisma/seed.js`. `seed.js` loads no env file itself, and its `lib/prisma` →
       `config/env` import hard-exits on missing vars. `-r dotenv/config` loads `.env` (the
       demo values) first. (`npx prisma db seed` probably works too, via `prisma.config.js`'s
@@ -797,20 +798,34 @@ Seeded data is now the only source of KPI truth. This is what a reviewer actuall
       platform org exists, so anything appended after that check silently never runs on a
       second invocation — and the Phase 6 reseed path depends on re-running it. Use upserts
       keyed on stable values (clerk ids, org names, fixed ids) instead of the early exit.
-- [ ] **[BLOCKER] Seed the four `Role` rows with fixed ids** — nothing creates them, and on the
+      *Restructure **done** — the early return is gone and every write is an upsert on a fixed
+      id; proven by running it twice to identical state. The **platform org is seeded** with a
+      pinned `org_id` and `storage_bucket` (`00000000-0000-4000-a000-00000000000{1,2}`) rather
+      than generated uuids, so a reseed converges instead of creating a second org and the
+      bucket name never drifts. **The demo org is still to do** — it is named after the company
+      brief, so it waits on that. `seed.js` has a marked extension point for it.*
+- [x] **[BLOCKER] Seed the four `Role` rows with fixed ids** — nothing creates them, and on the
       fresh DB the table is empty. The labels must match `config/roles.js` exactly, and the
       ids must match the frontend's hard-coded list in `../maural-kms/src/hooks/useRoles.ts`:
       `1 = "Super Admin"`, `2 = "Admin"`, `3 = "Org Executive"`, `4 = "Org Staff"`.
       `auth.controller.js` looks roles up by `role_name`, so a label typo fails silently.
       **`Permission` / `RolePermission` need no rows** — the frontend's `hasPermission` is
       defined but never called.
-- [ ] **[BLOCKER] Seed the five `Category` rows with fixed ids** — `File.ctg_id` is a foreign
+      *Done, and both id maps were **re-verified against the frontend source** rather than taken
+      on trust: `useRoles.ts:6-9` and `CATEGORY_ID_MAP` match this file exactly. `seed.js` also
+      now cross-checks its four labels against `config/roles.js` and throws on drift, so the
+      silent-lookup-failure mode is converted into a loud one.*
+- [x] **[BLOCKER] Seed the five `Category` rows with fixed ids** — `File.ctg_id` is a foreign
       key to `Category`, and the uploader sends ids straight from `CATEGORY_ID_MAP` in
       `../maural-kms/src/components/DocumentsToolbar.tsx`: `1 = Sales`, `2 = Marketing`,
       `3 = Finance`, `4 = Legal`, `5 = Technical`. ("Uncategorized" is a null `ctg_id`, no
       row.) On an empty table, any upload with a category fails on the FK.
-- [ ] **After inserting explicit ids, advance the sequences**, or the next auto-generated id
-      collides with a seeded one:
+- [x] **After inserting explicit ids, advance the sequences**, or the next auto-generated id
+      collides with a seeded one. *Done inside `seed.js` (an `advanceSequence` helper), not as a
+      one-off by hand — so the reseed path carries it too. Verified: both sequences read
+      `last_value = 4` / `5` with `is_called = true`, so the next generated ids are 5 and 6.
+      Re-running with the same max is harmless. Note the `User` table needs no equivalent —
+      persona users key on `clerk_id` and let `user_id` auto-generate.*
       ```sql
       SELECT setval(pg_get_serial_sequence('"Role"', 'role_id'),     (SELECT max(role_id) FROM "Role"));
       SELECT setval(pg_get_serial_sequence('"Category"', 'ctg_id'), (SELECT max(ctg_id)  FROM "Category"));
