@@ -50,13 +50,21 @@ after that point does need one.
 **The capped OpenAI key is in place (2026-09-23)** and present in **both** `.env` and
 `.env.development.local`, verified identical. **Phase 3's deferred block is complete** — all six
 documents uploaded, ingested and verified (47 chunks, no file at zero), and both retrieval
-checks pass. **Phase 5's WebViewer test is therefore unblocked**: there are seeded documents to
-open.
+checks pass.
+
+**The WebViewer licence key still works — tested 2026-09-23, Decision 6 resolved: keep the
+viewer.** The seeded documents unblocked that test and it passed, against this file's
+expectation that the October 2025 key would be dead. No `@pdftron/webviewer` removal, and **no
+`filter-repo` pass on the frontend repo**. See Phase 5 and Decision 6.
 
 **Phase 4 is COMPLETE (2026-09-23), on `demo`** — every item done and verified locally against
 the demo database, except the rate limits, which the user deliberately deferred (see that item).
+**Committed and pushed**: `feat(demo): enforce RBAC and gate the demo API`, `origin/demo` on
+`maural-demo-backend`. `origin/main` is untouched, still the team project as left (Decision 7).
 **The demo-password middleware is now mounted**, so every request except `/api/health` needs
 `Authorization: Bearer thornbury-demo-2026`.
+
+**Next backend phase is 6 (deploy).** Phase 5 is the frontend session's.
 
 > **⚠️ FOR THE FRONTEND SESSION — the `[CONFLICT]` is decided: RBAC is enforced.**
 >
@@ -86,9 +94,11 @@ the demo database, except the rate limits, which the user deliberately deferred 
 > Don't drop `@pdftron/webviewer`, don't touch `web-viewer.tsx`, and **don't do the
 > `filter-repo` strip of `public/lib/webviewer/`** — Decision 6 is resolved in favour of
 > keeping it. The demo-limitations note tied to dropping the viewer is moot.
-> Still do the **authentication** item: `GET /api/docs/:id` will sit behind the demo-password
-> middleware, and an `<iframe src>` cannot send an `Authorization` header — fetch through the
-> axios instance and render `URL.createObjectURL(blob)`.
+> Still do the **authentication** item — and note it is now live, not pending:
+> `GET /api/docs/:id` **already sits** behind the demo-password middleware, and an
+> `<iframe src>` cannot send an `Authorization` header. Fetch through the axios instance and
+> render `URL.createObjectURL(blob)`. Verified: that route returns 200 with the Bearer header
+> and 401 without it.
 >
 > **Documents are seeded (2026-09-23):** six uploaded, ingested and verified in the demo tenant
 > — two PDFs, three DOCX and one XLSX, 47 chunks, every file confirmed non-zero.
@@ -1292,7 +1302,10 @@ Seeded data is now the only source of KPI truth. This is what a reviewer actuall
 
 ## Phase 4 — Backend demo changes (`demo` branch)
 
-Six small, localized edits. No structural changes.
+Originally scoped as "six small, localized edits. No structural changes." It ended up as eleven
+items and one new file (`middleware/demoGate.middleware.js`) — the `[CONFLICT]` resolution and
+the `.env` rename were added during the phase, and two items were pulled forward into Phase 3.
+Still no structural changes: every edit is localized, and the only new module is the demo gate.
 
 - [x] **[BLOCKER] Resolve the `[CONFLICT]` — enforce RBAC under `DISABLE_AUTH`.**
       *Decided and implemented 2026-09-23: `requireAuth` stays pass-through; `requireRole` and
