@@ -26,9 +26,15 @@ insert + cosine search passes. **RLS is on for every table, `document_embeddings
 — the original SQL's `DISABLE ROW LEVEL SECURITY` was reversed; the anon key is verified
 locked out and `SUPABASE_SERVICE_ROLE_KEY` is now mandatory for ingestion. **The runbook's pgvector SQL could not be used as written** —
 `db push` itself creates `document_embeddings`, badly; see "Added during Phase 2" for what was
-actually run. Next: Phase 3, on `demo` (branch decided 2026-09-22) — **start with its
-"Prerequisites" block** (schema fix commit, `prisma generate`, capped OpenAI key, seed
-invocation), and note its upload step needs two Phase 4 items done first.
+actually run.
+
+**Phase 3 is in progress (2026-09-22), on `demo`.** The `schema.prisma` fix is committed and the
+**`[TRAP]` on `prisma db push` is resolved — plain `db push` is safe again.** Work is proceeding
+in the order: prerequisites → `seed.js` restructure → company brief → seeded rows → KPIs/VTO →
+the two Phase 4 items → documents → upload + verification. **Blocked at the money line:** the
+capped OpenAI key is not in place yet (the user will add it later), so nothing that embeds —
+document upload, ingestion, retrieval verification — has been attempted. Everything before that
+point is safe to run.
 
 **Two recovery artifacts exist outside the repo — their disposal is the user's call; agents
 should not raise or act on it (2026-09-22).** They can be deleted — the push is
@@ -358,8 +364,14 @@ These were expensive to establish. Don't re-derive them.
   `Unsupported("vector")` in the schema, Prisma proposes nothing for the column. The flaw only
   fires when *no* index exists on `embedding` — i.e. building from empty, which had never
   happened until today. (Temporary index dropped afterwards; table back to pkey + org_id.)
-- **[TRAP — until the schema fix below is committed] Don't `npx prisma db push` against the
-  demo DB.** Every claim here was tested (2026-09-22), not inferred:
+- **[TRAP — RESOLVED 2026-09-22, schema fix committed in Phase 3. `db push` is safe again.]**
+  *The fix below is now on `demo`: `Unsupported("vector(1536)")` and no `@@index([embedding])`.
+  `migrate diff --from-config-datasource --exit-code` against the real file returned exit 0 and
+  `-- This is an empty migration.`, confirming the commit changed nothing in the database. The
+  record of the trap is kept below because the same failure returns if `@@index([embedding])` is
+  ever reintroduced — e.g. by a future `prisma db pull`, which is how it got there originally.*
+  **Was: don't `npx prisma db push` against the demo DB.** Every claim here was tested
+  (2026-09-22), not inferred:
   - **A push re-adds the B-tree index**, because the demo deliberately has no vector index and so
     nothing for Prisma to match. Dry run against the fixed table outputs only
     `CREATE INDEX "document_embeddings_embedding_idx" ON "document_embeddings"("embedding");`
@@ -378,7 +390,7 @@ These were expensive to establish. Don't re-derive them.
     ```
 
     If the diff's *only* output is that `CREATE INDEX`, there is nothing to apply — skip it.
-- **The durable fix — verified, goes on `demo` in Phase 3.** In `schema.prisma`, change the
+- **The durable fix — [DONE 2026-09-22, committed on `demo`].** In `schema.prisma`, change the
   column to `Unsupported("vector(1536)")` and delete `@@index([embedding])`. Tested against a
   patched copy of the schema:
   - **vs the live demo DB:** `migrate diff --exit-code` returns 0 with `-- This is an empty
@@ -441,6 +453,41 @@ These were expensive to establish. Don't re-derive them.
   in history (commit `8398a65`) and are still tracked on `main`. Phase 1's
   "Salvage the architecture diagrams" item and Phase 7's "use the salvaged diagrams" now refer
   to `docs-assets/`, not `docs/diagrams/`.
+
+### Added during Phase 3 (2026-09-22)
+
+- **`OPENAI_EMBED_MODEL` is pinned by the column type, and a wrong value fails silently.** The
+  demo column is `vector(1536)`. `text-embedding-3-small` (the `.env` value and the
+  `config/env.js:57` default) and `ada-002` are 1536; **`text-embedding-3-large` is 3072** and
+  would be rejected by every insert — which, during ingestion, is only logged (see the Phase 3
+  upload item). Treat this as a fifth silent-failure mode alongside the four already listed.
+  Verified: all three embedding call sites use `OpenAIEmbeddings` —
+  `controllers/ingest.controller.js:191`, `services/ragService.js:72`,
+  `scripts/ingest-local.js:225`. There is **no live Ollama path**; `config/ollama.js` is a
+  vestigial header helper that nothing instantiates.
+- **Two comments in live code still say the system is 768-dimensional** —
+  `services/ragService.js:156` and `lib/prismaVector.js:5`. They are leftovers from the project's
+  original Ollama era and are **wrong about the current system**. Don't read them as current, and
+  don't "fix" the column to match them.
+- **The project ran locally on Ollama before OpenAI, and old 768-dim SQL is still findable.**
+  `AI_MODEL_SWITCHING_GUIDE.md` records the original design — `qwen3.5:9b` chat and
+  `nomic-embed-text` embeddings at **768 dims**, chosen so no document content left the server —
+  and the migration to OpenAI when the team's EC2 credits ran out. A surviving SQL script from
+  that era (found in the old Supabase project, 2026-09-22) recreates `document_embeddings` at
+  `vector(768)`, **with no `org_id` column**, and opens with `DROP TABLE IF EXISTS
+  document_embeddings`. **Never run it against the demo DB**: wrong dimension, and it would drop
+  a table that now carries an FK to `Organisation` and destroy the tenant isolation
+  `ragService` depends on. It is useful only as provenance — it is the direct evidence for the
+  hand-built IVFFlat index (`lists = 100`) that the Phase 2 finding deduced, and the origin of
+  the `DISABLE ROW LEVEL SECURITY` line that the original runbook SQL carried and that Phase 2
+  reversed.
+- **`match_documents` is genuinely unused — confirmed, not assumed.** The demo DB has no such
+  function and needs none. There is **no `.rpc(` call anywhere in the repo**; every
+  `match_documents` reference is in a `.md` file or a stale comment, including
+  `services/ragService.js:9`, whose header still lists it under "Requires the following to exist
+  in Supabase". `AI_CHATBOT_README.md:146` states it outright: the RPC is retained for backwards
+  compatibility, and live retrieval uses direct SQL on a dedicated `pg` Pool so
+  `SET ivfflat.probes` persists on the same connection.
 
 ---
 
@@ -712,7 +759,7 @@ Seeded data is now the only source of KPI truth. This is what a reviewer actuall
 
 **Prerequisites — do these first, in order** (all established during Phase 2):
 
-- [ ] **Commit the `schema.prisma` fix as the first Phase 3 commit.** In `document_embeddings`
+- [x] **Commit the `schema.prisma` fix as the first Phase 3 commit.** In `document_embeddings`
       (`prisma/schema.prisma:182`): `Unsupported("vector")` → `Unsupported("vector(1536)")`,
       and delete `@@index([embedding])`. Already verified against a patched copy — see the
       "durable fix" finding. Confirm on the real file that the live DB needs nothing:
@@ -721,6 +768,10 @@ Seeded data is now the only source of KPI truth. This is what a reviewer actuall
       # expect exit 0 and "-- This is an empty migration."
       ```
       Then mark the `[TRAP]` finding resolved — plain `db push` is safe again after this.
+      *Done. `DIRECT_URL` confirmed as `postgres.jnmhzhjvizkrbvgdhyms@aws-0-us-east-2` with no
+      shell override first; the diff returned exit 0 and `-- This is an empty migration.`
+      `[TRAP]` marked resolved. A comment now sits where `@@index([embedding])` was, explaining
+      why there is no index there, since `prisma db pull` is what introduced it originally.*
 - [ ] **`npx prisma generate`.** Prisma 7's `db push` did not generate the client, and
       `seed.js` needs it.
 - [ ] **[BLOCKER] Put a real OpenAI key with a hard spend cap in `.env`** — the dedicated
