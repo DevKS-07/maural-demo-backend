@@ -9,21 +9,29 @@
  * `-r dotenv/config` loads plain `.env` first.
  *
  * Every write here is an upsert keyed on a stable value (fixed uuid, fixed
- * integer id, or clerk id), so the script can be re-run any number of times
- * and converge on the same state. Do not reintroduce an early `return` when
- * a row already exists — the Phase 6 reseed path depends on re-running this,
- * and anything after such a check would silently never run.
+ * integer id, clerk id, or the org+period composite), so the script can be
+ * re-run any number of times and converge on the same state. Do not
+ * reintroduce an early `return` when a row already exists — the Phase 6
+ * reseed path depends on re-running this, and anything after such a check
+ * would silently never run.
+ *
+ * The data itself lives in ./demo-data.js, which tracks
+ * demo-content/COMPANY_BRIEF.md.
  */
 
 const prisma = require("../lib/prisma");
 const { getSupabase } = require("../lib/supabase");
 const { CLERK_ROLE_TO_DB_ROLE } = require("../config/roles");
-
-// ── Fixed ids ────────────────────────────────────────────────────────────
-// Pinned rather than generated so that a reseed converges instead of creating
-// a second org, and so the storage bucket name is stable across reseeds.
-const PLATFORM_ORG_ID = "00000000-0000-4000-a000-000000000001";
-const PLATFORM_BUCKET = "00000000-0000-4000-a000-000000000002";
+const {
+  DEMO_ORG_ID,
+  PLATFORM_ORG,
+  DEMO_ORG,
+  USERS,
+  FINANCE_KPIS,
+  LEADS_KPIS,
+  LABOR_KPIS,
+  VTO,
+} = require("./demo-data");
 
 /**
  * Role ids are hard-coded in the FRONTEND (`src/hooks/useRoles.ts`) and the
@@ -85,20 +93,17 @@ async function advanceSequence(table, column) {
   console.log(`[seed] Sequence "${table}"."${column}" advanced to ${setval}`);
 }
 
-async function seedPlatformOrg() {
-  const org = await prisma.organisation.upsert({
-    where: { org_id: PLATFORM_ORG_ID },
-    create: {
-      org_id: PLATFORM_ORG_ID,
-      org_name: "Maural Solutions",
-      is_platform: true,
-      storage_bucket: PLATFORM_BUCKET,
-    },
-    update: { org_name: "Maural Solutions", is_platform: true },
+async function seedOrg(org) {
+  const { org_id, storage_bucket, ...rest } = org;
+  const result = await prisma.organisation.upsert({
+    where: { org_id },
+    create: { org_id, storage_bucket, ...rest },
+    // storage_bucket is deliberately left out of the update — changing it
+    // would orphan every file already uploaded to the old bucket.
+    update: rest,
   });
-
-  console.log(`[seed] Platform org: "${org.org_name}" (${org.org_id})`);
-  return org;
+  console.log(`[seed] Org: "${result.org_name}" (${result.org_id})`);
+  return result;
 }
 
 /**
@@ -118,8 +123,7 @@ async function ensureStorageBucket(bucketName) {
   }
 
   const alreadyExists =
-    error.statusCode === "409" ||
-    error.statusCode === 409 ||
+    String(error.statusCode) === "409" ||
     /already exists/i.test(error.message || "");
 
   if (alreadyExists) {
@@ -155,19 +159,90 @@ async function seedCategories() {
   await advanceSequence("Category", "ctg_id");
 }
 
+/**
+ * Two passes: `reports_to` references `user_id`, which autogenerates, so the
+ * org chart can only be wired once every row exists. No sequence fix is
+ * needed here — `user_id` is never supplied explicitly.
+ */
+async function seedUsers() {
+  for (const user of USERS) {
+    const { reports_to_clerk_id, ...fields } = user;
+    await prisma.user.upsert({
+      where: { clerk_id: user.clerk_id },
+      create: fields,
+      update: fields,
+    });
+  }
+
+  const rows = await prisma.user.findMany({
+    where: { clerk_id: { in: USERS.map((u) => u.clerk_id) } },
+    select: { user_id: true, clerk_id: true },
+  });
+  const byClerkId = new Map(rows.map((u) => [u.clerk_id, u.user_id]));
+
+  for (const user of USERS) {
+    if (!user.reports_to_clerk_id) continue;
+    await prisma.user.update({
+      where: { clerk_id: user.clerk_id },
+      data: { reports_to: byClerkId.get(user.reports_to_clerk_id) },
+    });
+  }
+
+  console.log(`[seed] Users: ${USERS.length} upserted, org chart wired`);
+}
+
+/**
+ * All three KPI tables are unique on (org_id, periodStart, periodEnd), so the
+ * period composite is the natural idempotency key.
+ */
+async function seedKpis() {
+  const tables = [
+    ["financeKpi", FINANCE_KPIS, "finance"],
+    ["leadsKpi", LEADS_KPIS, "leads"],
+    ["laborKpi", LABOR_KPIS, "labor"],
+  ];
+
+  for (const [model, rows, label] of tables) {
+    for (const row of rows) {
+      await prisma[model].upsert({
+        where: {
+          org_id_periodStart_periodEnd: {
+            org_id: DEMO_ORG_ID,
+            periodStart: row.periodStart,
+            periodEnd: row.periodEnd,
+          },
+        },
+        create: { org_id: DEMO_ORG_ID, ...row },
+        update: row,
+      });
+    }
+    console.log(`[seed] KPIs (${label}): ${rows.length} periods upserted`);
+  }
+}
+
+async function seedVto() {
+  await prisma.vTO.upsert({
+    where: { org_id: DEMO_ORG_ID },
+    create: { org_id: DEMO_ORG_ID, ...VTO },
+    update: VTO,
+  });
+  console.log(`[seed] VTO: "${VTO.title}"`);
+}
+
 async function main() {
   assertRoleLabelsMatchConfig();
 
-  const platformOrg = await seedPlatformOrg();
+  const platformOrg = await seedOrg(PLATFORM_ORG);
   await ensureStorageBucket(platformOrg.storage_bucket);
+
+  const demoOrg = await seedOrg(DEMO_ORG);
+  await ensureStorageBucket(demoOrg.storage_bucket);
 
   await seedRoles();
   await seedCategories();
-
-  // ── Extension point ────────────────────────────────────────────────────
-  // Still to come in Phase 3, once the company brief is settled: the demo
-  // organisation, the four persona users, the KPI rows and the VTO. Append
-  // them here — there is no early return to work around.
+  await seedUsers();
+  await seedKpis();
+  await seedVto();
 
   console.log("[seed] Done.");
 }

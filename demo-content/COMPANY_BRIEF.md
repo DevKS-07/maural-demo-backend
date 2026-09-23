@@ -111,17 +111,35 @@ net income −61.3%.
 ### Leads — Q3 2026 to date
 
 `leads` 147 · `calls` 412 · `proposals` 34 · `dealsWon` 7 · `conversionRate` 20.6% ·
-`pipelineCoverage` 1.72 · `recurringRevenue` $3,240,000 · `recurringPercent` 12.4% ·
-`clientConcentration` 58.2% · `founderDependencySales` 43.0% · `dealVelocity` 94 days ·
-`forecastAccuracy` 92.4% · `retentionRate` 88.0%
+`pipelineCoverage` 1.72 · `recurringRevenue` $741,000 · `recurringPercent` 12.4% ·
+`oneTimeRevenue` $5,239,000 · `clientConcentration` 58.2% · `founderDependencySales` 43.0% ·
+`dealVelocity` 94 days · `forecastAccuracy` 92.4% · `retentionRate` 88.0% ·
+`customerEngagement` 71
 
-Segment split: retrofit delivery 61%, commissioning 19%, MBCx recurring 12%, energy audits 8%.
+Segment split: retrofit delivery $3,635,000 · commissioning $1,126,000 · MBCx recurring
+$741,000 · energy audits $478,000 — summing to `totalIncome`.
+
+**`recurringRevenue` is period-scoped, not trailing-twelve-month**, because `oneTimeRevenue` is
+its remainder against the same period's `totalIncome`. The **TTM recurring figure is ~$3.24M**
+(~12.4% of TTM revenue) — that is the number the documents should quote when talking about the
+recurring book as a whole, and it must not be put in this field.
 
 ### Labor — Q3 2026 to date
 
-`laborSource` monday · `directLaborHours` 41,280 · `billableFTEs` 48 · `nonBillableFTEs` 20 ·
+`laborSource` monday · `directLaborHours` 15,300 · `billableFTEs` 48 · `nonBillableFTEs` 20 ·
 `billableUtilization` 66.4% · `laborCostPerHour` $64.50 · `revenuePerBillableFTE` $124,583 ·
-`founderDependencyService` 18.0%
+`founderDependencyService` 18.0% · `hasBillableColumn` true
+
+`directLaborHours` is **billable hours actually delivered**, not headcount × calendar — which is
+why it tracks utilization rather than headcount. 48 FTEs over the ~12 working weeks of the period
+is about 23,000 available hours; at 66.4% that is the 15,300 seeded here.
+
+### Prior period — Q2 2026 (closed)
+
+Seeded so the dashboard has a comparison and the decline is visible: revenue $7,620,000 ·
+gross margin 37.1% · EBITDA $737,000 (9.7%) · net income $439,000 (5.8%) · DSO 61 ·
+utilization 71.2% · 47 billable FTEs · conversion rate 28.2% · client concentration 56.4% ·
+founder-closed 41.5%.
 
 ---
 
@@ -188,17 +206,15 @@ including the null case.
 
 ---
 
-## Open questions for the user
+## Decisions (2026-09-23)
 
-1. **Marketing has no document**, so that filter renders empty. Adding a seventh (a positioning
-   and pricing one-pager) would complete category coverage. The runbook says five or six — say the
-   word and I'll add it.
-2. **`runwayMonths` is defined in the schema as `cashPosition / monthlyBurn`**, where `monthlyBurn`
-   is gross (COGS + OpEx + distributions). For a cash-generating services business that yields
-   ~0.8 months, which reads as alarming rather than informative. I propose seeding it faithfully
-   to the formula and having the financial document explain that Thornbury tracks DSO and working
-   capital instead, because runway is a startup metric that doesn't fit a project business. The
-   alternative is to seed a flattering number that doesn't match the stated formula. I'd rather be
-   faithful to the code — but it's your call.
-3. **Document domain** is `@thornburyenergy.com` in emails and the MSA. Fictional; say if you'd
-   rather it were obviously unregistrable.
+1. **Brief approved** as the basis for the seeded data and the documents.
+2. **`runwayMonths` seeded faithfully to the schema's formula** (`cashPosition / monthlyBurn`,
+   gross burn) — 0.84 for Q3, 0.88 for Q2. The user's requirement was simply that the field render
+   something on the frontend, so the faithful value stands rather than a flattered one.
+   `netBurnRate` is the field that actually shows the company near breakeven on cash: +$14,000/mo
+   in Q3, −$121,000/mo (i.e. generating) in Q2.
+3. **No Marketing document.** Six documents; the Marketing filter renders empty, which is
+   realistic — a company need not hold documents in every category. Not every feature needs a
+   populated example.
+4. **Domain `@thornburyenergy.com` kept** — fictional, and not worth changing for a demo.
