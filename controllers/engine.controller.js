@@ -231,7 +231,11 @@ const getScorecardSummary = async (req, res) => {
   const { startDate, endDate, asOfDate } = req.query;
 
   try {
+    // Client organisations only. The platform org (Maural Solutions) holds the
+    // admin users and has no KPIs of its own, so it could only ever render as
+    // an empty row.
     const orgs = await prisma.organisation.findMany({
+      where: { is_platform: false },
       select: { org_id: true, org_name: true },
     });
 
@@ -324,30 +328,53 @@ const stripInternal = (row) =>
   );
 
 /**
- * Read the persisted KPI row for an organisation.
+ * Find the persisted KPI row that best matches a period, in three steps:
  *
- * Tries the exact period first, then falls back to the most recent row.
- * The fallback is not optional: resolvePeriod() defaults to the current
- * *calendar month*, while KPI rows are seeded per *quarter*, so an
- * exact-match-only lookup finds nothing and silently leaves the error cards
- * in place — which looks identical to having no fallback at all.
+ *   1. The exact period — what the live persist path writes.
+ *   2. The most recent row overlapping the requested range. Exact matching
+ *      alone almost never hits: seeded rows end at 23:59:59Z on the quarter's
+ *      last day, while a "YYYY-MM-DD" query parses to midnight, and
+ *      resolvePeriod() defaults to a calendar month where rows are quarterly.
+ *      Without this step every range served the latest row, so an earlier
+ *      seeded quarter could never be shown.
+ *   3. The most recent row for the org, so a range with no data still shows
+ *      something. The row's own periodStart/periodEnd are returned with it,
+ *      so the caller can tell which period it actually got.
+ *
+ * Returns the raw row (internal columns included) or null. Throws on DB error.
  *
  * @param {object} delegate - prisma.financeKpi | prisma.leadsKpi | prisma.laborKpi
  */
+const findPersistedKpi = async (delegate, org_id, start, end) => {
+  const exact = await delegate.findUnique({
+    where: {
+      org_id_periodStart_periodEnd: { org_id, periodStart: start, periodEnd: end },
+    },
+  });
+  if (exact) return exact;
+
+  const overlapping = await delegate.findFirst({
+    where: { org_id, periodStart: { lte: end }, periodEnd: { gte: start } },
+    orderBy: { periodStart: "desc" },
+  });
+  if (overlapping) return overlapping;
+
+  return delegate.findFirst({
+    where: { org_id },
+    orderBy: { periodStart: "desc" },
+  });
+};
+
+/**
+ * Read the persisted KPI row for an organisation, for the dashboard fallback.
+ *
+ * The fallback is not optional: with no integration tokens every live call
+ * fails, and without a persisted row the dashboard renders error cards.
+ */
 const readPersistedKpi = async (delegate, org_id, start, end) => {
   try {
-    const exact = await delegate.findUnique({
-      where: {
-        org_id_periodStart_periodEnd: { org_id, periodStart: start, periodEnd: end },
-      },
-    });
-    if (exact) return stripInternal(exact);
-
-    const latest = await delegate.findFirst({
-      where: { org_id },
-      orderBy: { periodStart: "desc" },
-    });
-    return latest ? stripInternal(latest) : null;
+    const row = await findPersistedKpi(delegate, org_id, start, end);
+    return row ? stripInternal(row) : null;
   } catch (e) {
     console.warn("[SummaryEngine] KPI fallback read failed:", e.message);
     return null;
@@ -389,34 +416,13 @@ const fetchOrgScorecardData = async (
   const orgId = org.org_id;
 
   // ── 1. Read all three KPI tables from DB in parallel ────────────
+  // Same lookup as the dashboard fallback. An exact-period-only read missed
+  // every seeded row, so each org scored all nulls whenever the live call
+  // failed — which, with no integration tokens, is always.
   const [dbFinance, dbLeads, dbLabor] = await Promise.all([
-    prisma.financeKpi.findUnique({
-      where: {
-        org_id_periodStart_periodEnd: {
-          org_id: orgId,
-          periodStart: start,
-          periodEnd: end,
-        },
-      },
-    }),
-    prisma.leadsKpi.findUnique({
-      where: {
-        org_id_periodStart_periodEnd: {
-          org_id: orgId,
-          periodStart: start,
-          periodEnd: end,
-        },
-      },
-    }),
-    prisma.laborKpi.findUnique({
-      where: {
-        org_id_periodStart_periodEnd: {
-          org_id: orgId,
-          periodStart: start,
-          periodEnd: end,
-        },
-      },
-    }),
+    findPersistedKpi(prisma.financeKpi, orgId, start, end),
+    findPersistedKpi(prisma.leadsKpi, orgId, start, end),
+    findPersistedKpi(prisma.laborKpi, orgId, start, end),
   ]);
 
   // ── 2. Determine what needs a live fetch ────────────────────────
@@ -588,10 +594,11 @@ const buildOrgScore = ({ financial, leads, labor }) => {
   const headcount =
     (labor?.billableFTEs ?? 0) + (labor?.nonBillableFTEs ?? 0) || null;
 
-  // EBITDA % = EBITDA / net revenue
+  // EBITDA % = EBITDA / total revenue. netIncome is profit, not revenue —
+  // dividing by it reported a 5% margin as 269%. Matches FinanceKpi.ebitdaMargin.
   const ebitdaPct =
-    ebitda !== null && netRevenue
-      ? parseFloat(((ebitda / netRevenue) * 100).toFixed(1))
+    ebitda !== null && totalRevenue
+      ? parseFloat(((ebitda / totalRevenue) * 100).toFixed(1))
       : null;
 
   // Revenue per head = total revenue / total headcount
@@ -600,10 +607,13 @@ const buildOrgScore = ({ financial, leads, labor }) => {
       ? parseFloat((totalRevenue / headcount).toFixed(0))
       : null;
 
-  // Pipeline coverage ratio = pipeline / revenue (target >= 2)
+  // Pipeline coverage ratio (target >= 2). LeadsKpi.pipelineCoverage is
+  // already the ratio (schema: "proposed work / revenue goal"), and the
+  // dashboard and chat both present it as one; dividing it by revenue again
+  // rounded every org to 0.
   const pipelineCoverageRatio =
-    totalPipelineValue !== null && totalRevenue
-      ? parseFloat((totalPipelineValue / totalRevenue).toFixed(2))
+    totalPipelineValue !== null
+      ? parseFloat(totalPipelineValue.toFixed(2))
       : null;
 
   return {

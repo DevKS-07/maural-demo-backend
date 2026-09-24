@@ -90,6 +90,16 @@ const BLOCKED_ROUTES = [
   { methods: ["PUT", "DELETE"], pattern: /^\/api\/docs\/[^/]+\/?$/ },
 
   { methods: ["POST"], pattern: /^\/api\/chat\/ingest\/?$/ },
+
+  // VTO create / update / delete. The VTO is free text that every later visitor
+  // sees and that businessDataService feeds into the chat prompt, so a write
+  // would let one visitor put words in the chatbot's mouth for everyone after
+  // them. The frontend keeps the editor, saving to the visitor's browser only.
+  { methods: ["POST", "PUT", "DELETE"], pattern: /^\/api\/vto\/[^/]+\/?$/ },
+
+  // Labor KPI source override. Guarded only by requireAuth (a pass-through in
+  // demo mode), so any persona could change it, and nothing in the demo needs it.
+  { methods: ["PUT"], pattern: /^\/api\/integrations\/labor-config\/?$/ },
 ];
 
 const blockDestructiveRoutes = (req, res, next) => {
