@@ -66,6 +66,12 @@ the demo database, except the rate limits, which the user deliberately deferred 
 
 **Next backend phase is 6 (deploy).** Phase 5 is the frontend session's.
 
+**Phase 6 code half IN PROGRESS (2026-09-24), on `demo`.** Step 1 done: the three items Phase 5
+left for the backend are resolved (VTO + labor-config writes blocked; period-aware KPI lookup;
+scorecard fixed). **Owed by the frontend session before the deployed demo is seen on/after
+1 Oct 2026:** pin the demo clock to 22 Sep 2026, and make the VTO editor save per-visitor.
+Remaining here: rate limits, reseed path, keep-alive script. See "Added during Phase 6".
+
 **Phase 5 is COMPLETE apart from the joint verification pass (2026-09-24), on `demo` in
 `maural-demo-frontend`** — four commits, all pushed to `origin/demo`:
 `14d9806` (Clerk → passphrase gate, welcome page with persona picker, demo banner, mock
@@ -910,7 +916,11 @@ contract's default persona is applied before the role check rather than falling 
 - **The banner's "Viewing as" name comes from `/auth/me`**, not the stored persona, so it doubles
   as proof that `X-Demo-Role` reaches the backend.
 
-**Open — for the backend session:**
+**Open — for the backend session:** *All three resolved in Phase 6 (2026-09-24) — see "Added
+during Phase 6". VTO and labor-config writes are blocked (the VTO editor moves to per-visitor
+browser saves); the backend now serves the seeded quarter overlapping the requested range, with
+the frontend's clock pin handed to the frontend session; the scorecard excludes the platform org
+and — a bigger fix than recorded here — now shows Thornbury's real numbers, which were also null.*
 
 - **VTO writes are not blocked.** `POST|PUT|DELETE /api/vto/:orgId` is allowed for
   `org_executive`, so any visitor using Dana can overwrite or delete the seeded VTO — which feeds
@@ -938,6 +948,79 @@ contract's default persona is applied before the role check rather than falling 
   `DemoDisabled` wrapper: `InviteUserModal`, `EditUserModal`, `DeleteUserAlert`,
   `CreateOrganisationModal`; `ApiTestPage` is unrouted.
 - A browser that blocks storage can't pass the gate — the passphrase can't be stored.
+
+### Added during Phase 6 (2026-09-24)
+
+**Scope of the backend session:** the code half of Phase 6 only, on `demo`. Nothing is deployed
+from this session; Railway and Vercel are dashboard work the user does afterwards. The frontend
+has its own session, which does **not** edit this file.
+
+**Decisions — made by the user:**
+
+- **[DECIDED] VTO writes are blocked; the frontend editor saves to the visitor's browser only.**
+  `POST|PUT|DELETE /api/vto/:orgId` are on the demo-gate block list and return
+  `403 { demo: true }`. The reason that settled it: the VTO is free text that every later visitor
+  sees and that `businessDataService` quotes in the chat prompt, so an open write is a
+  defacement surface on a link meant for recruiters — worse than a degraded chatbot. The editor
+  stays, saving per-visitor in `localStorage` like the mock OAuth (Decision 3); the chatbot never
+  sees those edits. Until that frontend pass lands, a save shows the existing `demo: true`
+  safety-net toast, so nothing breaks in the meantime.
+- **[DECIDED] `PUT /api/integrations/labor-config` is blocked too.** It was guarded only by
+  `requireAuth` — a pass-through in demo mode — so any persona, Marcus included, could change
+  the org's labor source. Nothing visible depends on it (labor numbers always come from the
+  seeded rows), so there was no reason to leave it open.
+- **[DECIDED] Document upload (`POST /api/docs`) stays open.** Raised because it is the same
+  class of risk as the VTO — an uploaded file is embedded, becomes citable by the chatbot and
+  appears in everyone's document list — and kept deliberately: it is there to show the upload
+  feature. The reseed path is what cleans it up.
+- **[DECIDED] The demo's clock is frozen at 22 Sep 2026; KPI periods do not move with the
+  date.** Rolling seeded periods forward was rejected: the six documents, the VTO and the seed's
+  own revenue table ("Period to date, 22 Sep") are all written around Q3 2026, and moving the
+  numbers would desynchronise them — the inconsistency Phase 3 warned about. The fix is split:
+  backend (done, below) and a frontend pin of "now" to 22 Sep 2026 in `currentQuarter()` and the
+  two landing-page quarter headers, **handed to the frontend session** — not done here. **It must
+  land before anyone sees the deployed demo on or after 1 October 2026**, when the frontend's
+  "current quarter" becomes Q4.
+
+**Findings — things this file didn't anticipate:**
+
+- **The admin scorecard was broken for Thornbury too, not only the platform org.** Measured
+  before any change: `GET /summary/scorecard` for the Q3 range returned **all-null scores for
+  both orgs**. `fetchOrgScorecardData` did its own exact-period `findUnique` and never used the
+  Phase 4 fallback, so it missed every seeded row. The runbook's pointer to
+  `buildEmptyScorecard()` (`engine.controller.js:630`) was a red herring: `fetchOrgScorecardData`
+  swallows its own failures, so the `rejected` branch that calls it cannot run; the nulls came
+  from `buildOrgScore` receiving nothing.
+- **Exact-period matching could never hit a seeded row, so Q2 was unreachable.** Seeded rows end
+  at `2026-09-30T23:59:59Z`; the date picker sends `2026-09-30`, which parses to midnight.
+  Every range therefore fell through to "most recent row" — including a request for Q2, which is
+  seeded but was never shown. The shared lookup (`findPersistedKpi`) now tries exact → **most
+  recent row overlapping the range** → most recent row overall. Overlap matching also absorbs
+  the frontend's `toISOString()` off-by-one for visitors east of UTC (a Q3 range starting
+  `2026-06-30` still resolves to Q3).
+- **Once the scorecard received real data, two of its formulas turned out to be wrong** — they had
+  never been exercised against real numbers:
+  - `ebitdaPct` divided EBITDA by `netIncome` (profit), reporting Thornbury's 5.2% margin as
+    **269%**. Now EBITDA / total revenue — matches the seeded `ebitdaMargin` exactly (5.2 / 9.7).
+  - `pipelineCoverageRatio` divided `pipelineCoverage` by revenue again, rounding to **0**. The
+    schema defines `pipelineCoverage` as the ratio ("proposed work / revenue goal") and the
+    dashboard and chatbot both display it as `1.72x`; it is now passed through. **Left as-is:**
+    `totalPipelineValue` still carries that ratio under a dollar-sounding name — the frontend
+    never reads it. And `leads.service.js:470` (live HubSpot path, dead in the demo) writes a
+    dollar pipeline value into `pipelineCoverage`, contradicting the schema; not touched.
+- **The platform org is excluded by `is_platform`, not by "has no data".** Filtering on
+  `is_platform: false` is correct outside the demo too — it is a *client* scorecard — whereas
+  dropping orgs with no KPI rows would hide a newly onboarded client in production.
+- **VTO writes as `org_staff` now get the demo 403, not the role 403.** The demo gate runs before
+  `requireRole`, so the Phase 4 table's `DELETE /vto/:orgId → 403` for `org_staff` now carries
+  `demo: true`. Harmless: none of the locked-sidebar probes use a VTO route.
+
+**Verified locally against the demo DB (2026-09-24):** scorecard Q3 → Thornbury only, EBITDA
+5.2%, coverage 1.72x, utilization 66.4; Q2 → 9.7%, 1.94x, 71.2; `org_executive` still 403.
+Dashboard Q3 → Q3 rows, Q2 → Q2 rows (`dso` 61 vs 68), Q4 → Q3 rows carrying their own
+`periodStart`/`periodEnd`. VTO `POST|PUT|DELETE` as `org_executive`, `org_staff` and `admin` →
+all nine `403 { demo: true }`, VTO `updatedAt` unchanged afterwards; `PUT /integrations/labor-config`
+→ `403 { demo: true }`, status still `monday`; `POST /api/docs` still reaches its controller.
 
 ---
 
@@ -1661,6 +1744,13 @@ Still no structural changes: every edit is localized, and the only new module is
       - locked sidebar items show a 403 for Dana and Marcus; Priya and Avery have none;
       - as Dana: connect QuickBooks, then the Finance tab shows figures (not the prompt again);
         the VTO tab saves; org details can't be saved;
+        *(Amended in Phase 6: VTO writes are now blocked on the backend. "Saves" means saves
+        **to this browser only** — the edit survives a reload, and a second browser still shows
+        the seeded VTO. Depends on the frontend's per-visitor VTO pass.)*
+      - the date picker: Q2 2026 (Apr–Jun) shows different numbers from Q3; the landing headers
+        say Q3 2026 whatever today's date is *(added in Phase 6; depends on the frontend clock pin)*;
+      - as Priya: the admin scorecard lists Thornbury only, with real numbers (EBITDA 5.2%,
+        coverage 1.72x) *(added in Phase 6)*;
       - disabled controls show their tooltip, by mouse and by keyboard;
       - a document opens in WebViewer (`FY2026 Strategic Plan … .pdf`);
       - `/welcome` at phone width.
