@@ -66,6 +66,17 @@ the demo database, except the rate limits, which the user deliberately deferred 
 
 **Next backend phase is 6 (deploy).** Phase 5 is the frontend session's.
 
+**Phase 5 is COMPLETE apart from the joint verification pass (2026-09-24), on `demo` in
+`maural-demo-frontend`** — four commits, all pushed to `origin/demo`:
+`14d9806` (Clerk → passphrase gate, welcome page with persona picker, demo banner, mock
+integrations, finance gate, profile), `8c1016b` (actions the demo can't perform shown disabled;
+static invitation sample), `54c1b27` (locked sidebar items that show live backend 403s),
+`f73c63a` (welcome-page copy aligned with what the demo allows). `origin/main` untouched.
+**The persona switcher is not a topbar dropdown** — decided mid-phase: it is a welcome page
+(`/welcome`, which replaced `/login`) plus a demo banner inside the app. Decisions and findings
+are in "Added during Phase 5". **Two items need the backend session:** VTO writes are not on the
+block list, and the dashboard fallback returns the same seeded quarter for every date range.
+
 > **⚠️ FOR THE FRONTEND SESSION — the `[CONFLICT]` is decided: RBAC is enforced.**
 >
 > `DISABLE_AUTH` no longer makes `requireRole` and `requireOrgAccess` pass-through. The four
@@ -130,8 +141,8 @@ the demo database, except the rate limits, which the user deliberately deferred 
 > README alongside the demo link. It lives in `DEMO_ACCESS_KEY` in both `.env` and
 > `.env.development.local`, and the frontend still needs **no env var for it** — `getToken()` returns
 > whatever the visitor typed. Recorded here only so both sessions can test against the same
-> string. **The password middleware is not mounted yet**, so requests do not need the
-> `Authorization` header until the Phase 4 item below is ticked.
+> string. *(Stale sentence corrected in Phase 5: the password middleware **is** mounted —
+> every request except `/api/health` needs the `Authorization` header. See Phase 4.)*
 
 **Two recovery artifacts exist outside the repo — their disposal is the user's call; agents
 should not raise or act on it (2026-09-22).** They can be deleted — the push is
@@ -175,6 +186,11 @@ user. Not a production hardening exercise — the project is not being actively 
    it disconnected for the next person.
 4. **Shared demo password**, not fully open — the chat endpoint costs real money per message.
 5. **Four-role persona switcher** instead of login. Turns removed auth into a demo feature.
+   *Implemented in Phase 5 as a **welcome page**, not the topbar dropdown originally planned — a
+   small "Viewing as" control next to the notifications bell read as an app setting, and gave a
+   visitor no idea what the personas were. `/welcome` explains the product, shows the four
+   personas as selectable cards, and takes the passphrase; a demo banner in the app links back to
+   it. See "Added during Phase 5".*
 6. **WebViewer: KEEP IT — [RESOLVED 2026-09-23, the licence key still works].** *Tested by the
    user; the October 2025 Apryse demo key is still active, against this file's expectation that
    it would be dead. `web-viewer.tsx` is left alone, `public/lib/webviewer/` stays, and no
@@ -228,6 +244,19 @@ Three rules that follow from it:
   cross-origin request fails preflight.
 - **The frontend needs no env var for the password.** The visitor types it; `getToken()`
   returns it. Only the backend knows the expected value.
+
+**Behaviour both sides rely on (recorded in Phase 5 — the table above is unchanged).** These
+aren't strings, but the frontend is built on them, so changing one on the backend breaks it:
+
+| Backend behaviour | What the frontend does with it |
+| --- | --- |
+| Missing or wrong passphrase → **401** | The gate shows "That passphrase isn't right". `AuthContext` **clears the stored key on a 401 from `/auth/me`** — a 403 there would strand a returning visitor on a blank page |
+| Blocked write → **403 `{ demo: true, message }`** | Shows `message` as a friendly toast (safety net; the controls are disabled anyway) |
+| Role/tenant denial → **403 `{ message }`** (no `demo` flag) | The locked-sidebar panels quote `message` verbatim |
+
+**Frontend-only storage** (not part of the contract, recorded so nobody reuses the names):
+`localStorage["demo_role"]` — active persona; `localStorage["demo_connections"]` — per-visitor
+mock integration state (JSON).
 
 ### Working in parallel
 
@@ -766,6 +795,11 @@ contract's default persona is applied before the role check rather than falling 
   timeouts) and worth a visible streaming/progress affordance in Phase 5 — `/api/chat/stream`
   exists and is what the frontend chatbot already uses, so the SSE path likely masks this; the
   57s figure is from the non-streaming `/api/chat` endpoint used for this verification.
+  **[CORRECTED in Phase 5] The SSE path does not mask it.** `streamChat`
+  (`chat.controller.js:233-240`) awaits the whole `orchestrate()` pipeline, guardrail included,
+  *before* the first event, then replays the finished answer through `streamFromBuffer`. The
+  visitor sees nothing for the full 8–57s. Accepted by the user as a demo limitation — see
+  "Added during Phase 5".
 - **[DECIDED 2026-09-23] Swapping embeddings to local Ollama (`nomic-embed-text`) was considered
   and rejected. Keep OpenAI.** Raised as a way to avoid the capped-key blocker. Four reasons,
   all checked against the code rather than assumed:
@@ -798,6 +832,112 @@ contract's default persona is applied before the role check rather than falling 
   for the other two sections. Confirms the DB-fallback item is required, and that the failure is
   per-section inside a 200 rather than a non-200 — so the fallback has to inspect each section,
   not catch a rejected request.
+
+### Added during Phase 5 (2026-09-23 → 24)
+
+**Decisions — all made by the user during the phase:**
+
+- **[DECIDED] The persona switcher is a welcome page plus a demo banner, not a topbar
+  dropdown.** The dropdown was built first and rejected: too small to notice, no explanation of
+  what a persona is, and it read as part of the product rather than the demo. `/welcome`
+  (`WelcomePage.tsx`, replacing `LoginPage.tsx`; `/login` now redirects there) explains the
+  product, shows the four personas as selectable cards, and takes the passphrase. Inside the app,
+  an amber **demo banner** (`demo-banner.tsx`) says "Demo mode · Viewing as …" and links back to
+  `/welcome#personas`. The banner also ticks Phase 7's "demo banner" item.
+- **[DECIDED] The passphrase stays.** A temporary frontend fallback key used while the dashboard
+  was tested was removed once the backend gate went live (see the trap below).
+- **[DECIDED] Persona cards show the seeded people** (Dana Thornbury, Marcus Oyelaran, Priya
+  Raghunathan, Avery Nakamura) — copied from `prisma/demo-data.js`, because nothing can be fetched
+  before the passphrase is entered.
+- **[DECIDED] Actions the demo can't perform are disabled, not hidden** — shown with a "Disabled
+  in the demo — works in the full app" tooltip (`src/lib/demoLimits.tsx`). Covers org create /
+  rename, user edit / deactivate / delete, document delete, invite and revoke. The `/api-test`
+  developer page is no longer routed. A safety net in `AuthContext` turns any missed
+  `403 { demo: true }` into a friendly toast.
+- **[DECIDED] Invitations show a static sample** (five, relative dates, real seeded org ids) and
+  the invitation API is never called — it 500s for every persona without Clerk.
+- **[DECIDED] The RBAC denial is made visible with locked sidebar items**, but **only for
+  refusals the backend enforces** — never for menus the frontend merely hides. Each opens
+  `/restricted/:feature`, which makes the real read-only request and quotes the server's 403.
+  Org Executive: *Client scorecard*, *Other organisations*. Org Staff: those two plus
+  *Invitations*. Admin / Super Admin: none (the backend denies them nothing). Verified against the
+  running backend — all five persona/route pairs returned 403, admin control returned 200.
+- **[DECIDED] Citation chips and the chat wait are accepted as demo limitations** — not built.
+- **[DECIDED] Activity and Reports stay in the menus as-is** (placeholder data / "Coming soon" —
+  unfinished team work). The welcome page's "What's different in this demo" note explains them.
+- **[DECIDED] Welcome-page copy promises only what works.** A three-line "What's different in this
+  demo" note sits above the passphrase box. Credit line: "Dev K Sarthi — Technical Lead". Product
+  and persona copy is marked `DRAFT COPY` for the user to edit.
+
+**Findings — things this file didn't anticipate:**
+
+- **`localStorage` isn't reactive.** The plan's `isSignedIn = !!localStorage.getItem(...)` is read
+  once, so storing the key wouldn't trigger the profile fetch. `src/lib/demoAuth.tsx` wraps the
+  key and persona in a small store read through `useSyncExternalStore`, with a `storage` listener
+  so other tabs follow.
+- **A rejected stored key caused a redirect loop** between `/` and the login page (`/auth/me` 401
+  → redirect to login → login sees a key → back to `/`). Fixed by clearing the key on a 401 from
+  `/auth/me`. That is why the contract section now records "401, not 403".
+- **[TRAP] A frontend fallback key breaks once the backend gate exists.** A temporary
+  `getDemoKey() → "demo"` fallback (used to test before the gate existed) produced a stream of
+  401s and a blank page: the fallback also made the frontend believe it was signed in, so the
+  passphrase field was hidden and there was no way to recover. **To test without the gate, turn it
+  off on the backend — never fake a key on the frontend.**
+- **Headers are set in three places, not two.** The contract's two (axios interceptor, chatbot
+  `fetch`) plus the passphrase check on `/welcome`, which uses plain axios so a stale stored key
+  can't leak into it. All three read `DEMO_ROLE_HEADER` and `getDemoRole()` from `demoAuth.tsx`.
+- **A persona switch does a full reload to `/`, not `refreshProfile`.** Pages fetch once on mount,
+  so a soft switch leaves the previous persona's data on screen. The reload also means nothing
+  from the old persona is in flight (the Phase 4 "in-flight 403" concern) and nobody is stranded
+  on a route the new persona can't see. A switch in another tab triggers the same reload.
+- **Citation chips existed and were removed.** Added in `9d6901c` (Priya Pandey, 22 Feb), dropped
+  by the chatbot rewrite in `bebb3ac` (s-tus, 17 Mar, "quick fix"). `src/services/chatService.ts`
+  still parses the `sources` event but nothing imports it; the chatbot's own stream handler reads
+  only `chunk` and `guardrail`. The backend still sends `sources`, so restoring chips means
+  reviving the rendering from `9d6901c`. The chatbot also ignores the `error` event, and its
+  failure text tells visitors to check that "Ollama" is running (`floating-chatbot.tsx:1389`).
+- **User edit and status toggle never reached a handler.** The frontend sends
+  `PATCH /user/:id` and `PATCH /user/:id/status`; the backend has only `PUT` and `DELETE` on
+  `/user/:userId`, so both 404 regardless of the demo gate. Disabled with the rest.
+- **WebViewer authentication needed no change.** `DocumentViewerPage.tsx:33` already fetches the
+  file through the shared `api` instance as a blob, so it carries both headers.
+- **Small gaps in the original integration code, fixed while rewiring:** the cards' "Enabled"
+  switch had an empty handler (now opens consent / disconnect), and the icon paths were relative
+  and broke on nested routes. The consent route must stay in the same route group as
+  `/integrations`, or the layout remounts and the success toast can be lost.
+- **New hand-sync points with the backend seed**, alongside `useRoles.ts` and `CATEGORY_ID_MAP`:
+  `src/lib/demoPersonas.ts` (names, titles, orgs) and `src/lib/demoSeed.ts` (the two org ids).
+- **The banner's "Viewing as" name comes from `/auth/me`**, not the stored persona, so it doubles
+  as proof that `X-Demo-Role` reaches the backend.
+
+**Open — for the backend session:**
+
+- **VTO writes are not blocked.** `POST|PUT|DELETE /api/vto/:orgId` is allowed for
+  `org_executive`, so any visitor using Dana can overwrite or delete the seeded VTO — which feeds
+  the chatbot — for everyone after them. The frontend deliberately leaves the VTO editor working.
+  `PUT /integrations/labor-config` (switches the active labor source) persists the same way.
+- **Every date range shows the same numbers.** The dashboard fallback returns the most recent
+  seeded row whatever range is requested, so the date picker shows Q3 2026 for every choice. From
+  **1 October 2026** the frontend's "current quarter" is Q4, and the executive landing header will
+  label Q3 data as Q4. Options: seed periods that move with the date (fits Phase 6's reseed), or
+  pin the frontend's default range to the seeded quarter.
+- **The admin scorecard includes the platform org** (Maural Solutions) with `null` scores, which
+  will look like a broken row next to Thornbury.
+
+**Frontend loose ends — known, not being fixed now:**
+
+- `@clerk/clerk-react` is still a dependency (removing it rewrites the lockfile);
+  `VITE_CLERK_PUBLISHABLE_KEY` in `env.ts` and the `--clerk-color-*` CSS variables are unused.
+- The QuickBooks logo on the finance connect prompt is hotlinked from `cdn-assets-us.frontify.com`
+  (`FinanceModule.tsx`); `public/assets/integrations/quickbooks.svg` is a local replacement.
+- Only finance is gated on a mock connection; leads and labor show regardless. Admin-facing views
+  show the org's seeded `*_connected` flags, not the visitor's mock state.
+- Org Staff can reach `/summary` by typing the URL (frontend-only restriction; the backend allows
+  own-org reads). Pre-existing.
+- Components now unreachable but kept, so re-enabling a control is just removing its
+  `DemoDisabled` wrapper: `InviteUserModal`, `EditUserModal`, `DeleteUserAlert`,
+  `CreateOrganisationModal`; `ApiTestPage` is unrouted.
+- A browser that blocks storage can't pass the gate — the passphrase can't be stored.
 
 ---
 
@@ -1421,34 +1561,66 @@ Still no structural changes: every edit is localized, and the only new module is
 
 ## Phase 5 — Frontend demo changes (`demo` branch)
 
-- [ ] **[BLOCKER] Write the `demoAuth` shim module** exporting Clerk's shapes: `ClerkProvider`
+**All code is on `demo` in `maural-demo-frontend`, pushed:** `14d9806`, `8c1016b`, `54c1b27`,
+`f73c63a`. Decisions and findings are in "Added during Phase 5".
+
+- [x] **[BLOCKER] Write the `demoAuth` shim module** exporting Clerk's shapes: `ClerkProvider`
       as pass-through, `useAuth` → `{getToken, isSignedIn, isLoaded}`, `useUser` →
       `{user:{imageUrl}, isLoaded}`, plus `SignIn`, `SignOutButton`, `UserProfile`.
-- [ ] **`getToken()` returns the demo password.** This is the whole gate.
-- [ ] **Swap the seven Clerk imports** (list in Findings). Keep imports explicit rather than
+      *`src/lib/demoAuth.tsx`. `SignIn` and `UserProfile` ended up with no shim equivalent — the
+      welcome page and profile page replaced them outright. Key and persona live in a small
+      reactive store (`localStorage` alone isn't reactive — see Findings).*
+- [x] **`getToken()` returns the demo password.** This is the whole gate.
+- [x] **Swap the seven Clerk imports** (list in Findings). Keep imports explicit rather than
       aliasing the package in Vite — a reviewer reading `main.tsx` shouldn't think real Clerk is
-      wired up.
-- [ ] **Turn `LoginPage` into the passphrase gate.** Set
+      wired up. *Done; no Clerk code in the built bundle. Local names say `useDemoAuth` /
+      `DemoAuthProvider`. The package itself is still in `package.json` (loose end).*
+- [x] **Turn `LoginPage` into the passphrase gate.** Set
       `isSignedIn = !!localStorage.getItem("demo_key")` and `AuthenticatedLayout`'s existing
       redirect-to-login logic works unchanged.
-- [ ] **[BLOCKER] Build the persona switcher** — a "Viewing as" control in the topbar that sets
+      *Superseded: `LoginPage.tsx` was deleted; the gate is part of `/welcome` (`/login`
+      redirects). It checks the typed key against `/auth/me` before storing it; wrong key → "That
+      passphrase isn't right".*
+- [x] **[BLOCKER] Build the persona switcher** — a "Viewing as" control in the topbar that sets
       the active persona, sends `X-Demo-Role` on every request, and calls `refreshProfile` so
       `/auth/me` returns the matching seeded user. Add the header in **both** send paths (axios
       interceptor and the chatbot's raw `fetch`), or the chatbot will answer as a different
       persona than the rest of the app.
-- [ ] **Add the mock consent route** `/demo/connect/:provider` — provider name, the scopes it
+      *Built as specified, then **replaced by user decision**: persona cards on `/welcome` plus a
+      demo banner in the app. Both headers are sent in both paths. A switch does a full reload to
+      `/` rather than `refreshProfile`.*
+- [x] **Add the mock consent route** `/demo/connect/:provider` — provider name, the scopes it
       would request, Authorize / Cancel. No credential fields. Label it plainly as simulated and
       use a neutral treatment rather than reproducing Intuit's actual login page.
-- [ ] **Rewire `integration-card.tsx`.** `handleConnect` currently calls install then redirects —
+      *`DemoConnectPage.tsx`: Maural and provider icons, plain-language read-only scopes, a
+      "Simulated for this demo" box. Org Executive only, like `/integrations`.*
+- [x] **Rewire `integration-card.tsx`.** `handleConnect` currently calls install then redirects —
       point it at the consent route. Drive `enabled` from local demo state rather than
       `user.Organisation.*_connected`. Existing connecting states, confirm dialog and toasts all
-      carry over.
-- [ ] **Apply the same treatment to all four providers** — one parameterized component, so the
+      carry over. *State in `src/lib/demoConnections.ts` (`localStorage["demo_connections"]`),
+      all providers start disconnected.*
+- [x] **Apply the same treatment to all four providers** — one parameterized component, so the
       Integrations page looks finished rather than one-of-four.
-- [ ] **Gate the financial section on the connection flag** so the connect step means something
-      visually.
-- [ ] **Replace `ProfilePage`** with a static card from the seeded user, and **`nav-user`'s sign
-      out** with one that clears the demo key.
+- [x] **Gate the financial section on the connection flag** so the connect step means something
+      visually. *Gated in the executive's own analytics and landing page; the admin view shows
+      seeded figures. **Depends on Phase 4's dashboard fallback** — without it the connect prompt
+      would reappear after connecting.*
+- [x] **Replace `ProfilePage`** with a static card from the seeded user, and **`nav-user`'s sign
+      out** with one that clears the demo key. *Also removed `nav-user`'s "Security" link (pointed
+      at a Clerk-only page) and replaced its hard-coded "CN" avatar fallback with real initials.*
+
+**Added during the phase:**
+
+- [x] **Welcome page** (`/welcome`) — product intro, persona cards, passphrase; replaces the
+      login page. Credit line and draft copy included. *(`14d9806`, copy revised `f73c63a`.)*
+- [x] **Demo banner** in the app — "Viewing as …" from `/auth/me`, "Switch persona" link.
+- [x] **Disable actions the backend blocks or that can't work** — tooltip "Disabled in the demo";
+      static invitation sample; `/api-test` unrouted; safety-net toast for `403 { demo: true }`.
+      *(`8c1016b`.)*
+- [x] **Make the RBAC denial visible** — locked sidebar items opening a live permission check,
+      backend-enforced refusals only. Verified against the running backend. *(`54c1b27`.)*
+- [x] **Align the welcome copy with what the demo allows** — no promises of disabled or
+      unfinished features; "What's different in this demo" note. *(`f73c63a`.)*
 - [x] **[BLOCKER] Test the WebViewer license.** *Do this after Phases 2–4 and after the demo
       shim above works* — it needs a running backend, the new Supabase project, a seeded
       document and a way into the app. The key in `../maural-kms/.env` is
@@ -1469,15 +1641,29 @@ Still no structural changes: every edit is localized, and the only new module is
       **But this makes a Phase 6 item live rather than hypothetical:** 172 MB across 677 files
       now definitely lands in the Vercel build output. Check the deployment size there, and see
       the Deferred section on fetching the viewer at build time if it becomes a problem.
-- [ ] **Whichever viewer survives, check it can authenticate.** `GET /api/docs/:id` is behind
+- [x] **Whichever viewer survives, check it can authenticate.** `GET /api/docs/:id` is behind
       the demo-password middleware, and an `<iframe src="...">` cannot send an `Authorization`
       header. Fetch the file through the existing axios instance (which already attaches the
       header via the shim's `getToken`), then render `URL.createObjectURL(blob)` as the source.
       That keeps it working with no backend exemption. Verify the same for WebViewer's own
       document-fetch path if it stays.
+      *No change needed — confirmed by reading the code: `DocumentViewerPage.tsx:33` already
+      fetches through the shared `api` instance with `responseType: "blob"` and hands WebViewer
+      the blob, never a URL. Confirm at runtime in the joint pass.*
 - [x] ~~**If the viewer was dropped, add the demo-limitations note**~~ — **moot**, the viewer
       survived. (The general "this is a demo, data is synthetic" banner in Phase 7 still stands;
       that one is unrelated to the viewer.)
+- [ ] **Joint verification pass** — frontend against the running backend, in a browser. The only
+      open Phase 5 item. Check:
+      - wrong passphrase is rejected; `thornbury-demo-2026` gets in;
+      - each of the four personas: banner name matches the chosen card, `/` loads, and the
+        chatbot answers as the same persona as the rest of the app;
+      - locked sidebar items show a 403 for Dana and Marcus; Priya and Avery have none;
+      - as Dana: connect QuickBooks, then the Finance tab shows figures (not the prompt again);
+        the VTO tab saves; org details can't be saved;
+      - disabled controls show their tooltip, by mouse and by keyboard;
+      - a document opens in WebViewer (`FY2026 Strategic Plan … .pdf`);
+      - `/welcome` at phone width.
 
 ---
 
@@ -1516,6 +1702,11 @@ Still no structural changes: every edit is localized, and the only new module is
 - [ ] **Walk the whole journey as a visitor:** passphrase → each of the four personas →
       dashboard → documents → open a file → connect flow → two chatbot questions → citations and
       guardrail badge.
+      *Amended in Phase 5: start at `/welcome` (the passphrase is entered there, with a persona
+      card), and **there are no citation chips** in the demo chatbot — they were removed from the
+      frontend in `bebb3ac` and the user accepted that as a demo limitation. Expect the guardrail
+      badge only, and a silent 8–57s wait before an answer appears. Add the locked sidebar items
+      (as Dana or Marcus) to the walk.*
 - [ ] **Set up a reseed path.** Even with writes blocked the demo drifts. A one-command reseed
       is enough; a scheduled job is nicer.
 - [ ] **[BLOCKER] Set up the Supabase keep-alive** — chosen in Phase 2 over a paid plan. A
@@ -1541,8 +1732,11 @@ Still no structural changes: every edit is localized, and the only new module is
 - [ ] **Credit the team and state your role.** Six contributors. API: 178 of 204 commits are
       yours. Web: a teammate has 42 commits to your 27. A short contributors note with a plain
       description of what you owned reads better than an implicit solo claim — and costs nothing.
-- [ ] **Put a demo banner in the app** — synthetic data, simulated integrations. Sets
+- [x] **Put a demo banner in the app** — synthetic data, simulated integrations. Sets
       expectations and explains the mock OAuth without anyone asking.
+      *Done in Phase 5 (`14d9806`): the amber demo banner above the topbar ("Demo mode · Fictional
+      data · simulated integrations · Viewing as …"), plus the welcome page's "What's different in
+      this demo" note.*
 - [ ] **Decide this file's fate.** `DEMO_RUNBOOK.md` sits in the API repo root and describes the
       demo shims frankly. Either gitignore it (stays local, still readable by agents) or commit
       it as an artifact of process. Just don't publish it unexamined.
