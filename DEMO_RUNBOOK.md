@@ -58,13 +58,15 @@ expectation that the October 2025 key would be dead. No `@pdftron/webviewer` rem
 `filter-repo` pass on the frontend repo**. See Phase 5 and Decision 6.
 
 **Phase 4 is COMPLETE (2026-09-23), on `demo`** — every item done and verified locally against
-the demo database, except the rate limits, which the user deliberately deferred (see that item).
+the demo database, except the rate limits, which the user deliberately deferred (see that item)
+— *since done in Phase 6: 1000 global / 100 chat per 15 min.*
 **Committed and pushed**: `feat(demo): enforce RBAC and gate the demo API`, `origin/demo` on
 `maural-demo-backend`. `origin/main` is untouched, still the team project as left (Decision 7).
 **The demo-password middleware is now mounted**, so every request except `/api/health` needs
 `Authorization: Bearer thornbury-demo-2026`.
 
-**Next backend phase is 6 (deploy).** Phase 5 is the frontend session's.
+**Next backend phase is 6 (deploy).** Phase 5 is the frontend session's. *(Phase 6's code half
+is now done and pushed to `origin/demo` — see below.)*
 
 **Phase 6 code half IN PROGRESS (2026-09-24), on `demo`.** Step 1 done: the three items Phase 5
 left for the backend are resolved (VTO + labor-config writes blocked; period-aware KPI lookup;
@@ -73,8 +75,10 @@ scorecard fixed). ~~Owed by the frontend session before the deployed demo is see
 **Both done by the frontend session** (`9305145`, `8c966c7` — see the Phase 5 status below).
 Step 2 done: rate limits set to 1000 global / 100 chat per 15 min. Step 3 done: the four
 integration `/disconnect` routes are blocked, and `prisma/reseed.js` restores data (never
-documents). Step 4 done: `jobs/keepalive.js` written and tested locally. **The code half of
-Phase 6 is complete.** Left for the user in the dashboards: deploy the API and frontend, then
+documents). Step 4 done: `jobs/keepalive.js` written and tested locally. Follow-ups from the
+frontend session's report: fallback KPI sections now send `period`, and the scorecard's
+`totalPipelineValue` is `null`. **The code half of Phase 6 is complete and pushed to
+`origin/demo`.** Left for the user in the dashboards: deploy the API and frontend, then
 add the keep-alive cron service (steps on the Phase 6 item). See "Added during Phase 6".
 
 **Phase 5 is COMPLETE apart from the joint verification pass (2026-09-24), on `demo` in
@@ -150,6 +154,10 @@ VTO writes are blocked, and the dashboard serves the seeded quarter matching the
 > untouched**, and so is `POST /api/docs`: `GET /api/docs/:id` and `GET /api/org/:orgId` both
 > return 200, so the WebViewer and upload paths are clear. Note this means **document rename
 > and org rename will 403** if those controls are reachable in the UI.
+> *(Phase 6 update: eight more are blocked, sixteen in all — VTO create/update/delete for
+> **every** persona, labor-config, and the four integration `/disconnect` routes. So the VTO
+> bullet above is now wider: every persona gets the `demo: true` 403 on VTO writes, not only
+> `org_staff`'s role 403. Handled on the frontend in `8c966c7`.)*
 >
 > **The demo passphrase is `thornbury-demo-2026`** (chosen 2026-09-23). This is the value a
 > visitor types into the gate; it is deliberately not a secret — Phase 7 publishes it in the
@@ -984,7 +992,9 @@ has its own session, which does **not** edit this file.
 - **[DECIDED] Document upload (`POST /api/docs`) stays open.** Raised because it is the same
   class of risk as the VTO — an uploaded file is embedded, becomes citable by the chatbot and
   appears in everyone's document list — and kept deliberately: it is there to show the upload
-  feature. The reseed path is what cleans it up.
+  feature. ~~The reseed path is what cleans it up.~~ *Corrected: the reseed is data-only (a later
+  decision below) and only **lists** visitor uploads — removing one is by hand in the Supabase
+  dashboard.*
 - **[DECIDED] The demo's clock is frozen at 22 Sep 2026; KPI periods do not move with the
   date.** Rolling seeded periods forward was rejected: the six documents, the VTO and the seed's
   own revenue table ("Period to date, 22 Sep") are all written around Q3 2026, and moving the
@@ -1707,6 +1717,10 @@ Still no structural changes: every edit is localized, and the only new module is
       its controller rather than the gate — the pattern requires an id segment, so the
       collection-level POST is untouched. Row counts confirmed unchanged after probing
       (2 orgs / 4 users / 6 files / 47 chunks), since every block lands before its handler.*
+      ***Extended again in Phase 6 (2026-09-24) — sixteen combinations now:*** *the eight above
+      plus `POST|PUT|DELETE /api/vto/:orgId`, `PUT /api/integrations/labor-config` and
+      `DELETE /api/integrations/{hubspot,quickbooks,monday,clickup}/disconnect`. See "Added during
+      Phase 6".*
 - [x] **[DONE in Phase 6, 2026-09-24 — user decision: 1000 global / 100 chat per 15 min.]**
       *The global limit stays at 1000 (cheap reads, bursty page loads, shared office/campus IPs);
       chat goes 200 → 100, not to the TODOs' 20, so experimenting visitors never hit it. Both TODO
