@@ -72,7 +72,9 @@ scorecard fixed). **Owed by the frontend session before the deployed demo is see
 1 Oct 2026:** pin the demo clock to 22 Sep 2026, and make the VTO editor save per-visitor.
 Step 2 done: rate limits set to 1000 global / 100 chat per 15 min. Step 3 done: the four
 integration `/disconnect` routes are blocked, and `prisma/reseed.js` restores data (never
-documents). Remaining here: the keep-alive script. See "Added during Phase 6".
+documents). Step 4 done: `jobs/keepalive.js` written and tested locally. **The code half of
+Phase 6 is complete.** Left for the user in the dashboards: deploy the API and frontend, then
+add the keep-alive cron service (steps on the Phase 6 item). See "Added during Phase 6".
 
 **Phase 5 is COMPLETE apart from the joint verification pass (2026-09-24), on `demo` in
 `maural-demo-frontend`** — four commits, all pushed to `origin/demo`:
@@ -1018,6 +1020,24 @@ has its own session, which does **not** edit this file.
   upload pruning must decode first and must refuse to delete unless all six seeded documents
   are matched** — a pruner with the raw comparison would have deleted the whole knowledge base,
   which can only be rebuilt locally.
+- **[DECIDED] Keep-alive: a Railway cron service running `jobs/keepalive.js`, not a GitHub
+  Action.** The user questioned whether it's needed for a demo kept up only a few weeks —
+  strictly optional, since a paused project can be restored from the dashboard in minutes, and
+  the alternative is opening the demo by hand every 4–5 days. Chosen because "a few weeks" still
+  spans two or three ~7-day pause windows, and the moment the link matters most (a reviewer
+  clicking days after an application) is exactly when nobody else has touched it. The GitHub
+  Action option was rejected: scheduled workflows are disabled after 60 days of repo inactivity,
+  a silent failure of exactly the kind the job exists to prevent. Why these details:
+  - **`jobs/`, not `scripts/`** — `.dockerignore` excludes `scripts`, so a script there would not
+    exist in the image. `jobs/` is excluded by neither `.dockerignore` nor `.gitignore`.
+  - **Plain `pg`, not `lib/prisma`** — anything that imports `config/env` exits unless all of the
+    API's required variables are set, which would mean copying ~20 variables into the cron
+    service. The script needs only `DIRECT_URL` (falls back to `DATABASE_URL`). `pg` and
+    `dotenv` are production dependencies, so they survive the Dockerfile's `npm prune`.
+  - **A real table read** (`count(*)` on `"Organisation"`), not `select 1`, and it fails if the
+    table is empty — so a wiped demo shows up as a failed cron run, not a silent "ok".
+  - **Separate from the reseed.** The keep-alive fails silently if it breaks, so it is kept
+    trivially simple; the reseed modifies data and should never run as a side effect of it.
 - **`seed.js` now exports `main()` and runs only when invoked directly**
   (`require.main === module`), so `reseed.js` reuses it instead of duplicating it. `node -r
   dotenv/config prisma/seed.js` and `prisma db seed` behave exactly as before (re-verified).
@@ -1864,7 +1884,20 @@ Still no structural changes: every edit is localized, and the only new module is
       **Not scheduled** — runs by hand for now. If it's scheduled later, make it a separate
       Railway cron service from the keep-alive (the keep-alive must stay trivially simple, since
       it fails silently).*
-- [ ] **[BLOCKER] Set up the Supabase keep-alive** — chosen in Phase 2 over a paid plan. A
+- [ ] **[BLOCKER] Set up the Supabase keep-alive** — *CODE DONE 2026-09-24: `jobs/keepalive.js`.
+      Still open: wiring it on Railway after the API deploy exists, then the 8-day check.*
+      *Railway wiring (dashboard): add a **second service** from the same repo and `demo`
+      branch — it builds the same Dockerfile, and `railway.toml` holds only `[build]`, so nothing
+      there needs changing. In that service's settings: **Start Command**
+      `node jobs/keepalive.js`; **Cron Schedule** `0 9 * * 1,3,5` (09:00 UTC Mon/Wed/Fri — the
+      longest gap is 3 days); **Variables**: only `DIRECT_URL`, as a reference to the API
+      service's value (`${{<api-service-name>.DIRECT_URL}}`). No other variable is needed —
+      the script doesn't load `config/env`. Check its first run: the log should read
+      `[keepalive] ok — 2 organisation(s)`, and a failed run shows as failed in Railway.*
+      *Verified locally (2026-09-24): ok with `.env`; ok with **only** `DIRECT_URL` set and no
+      `.env` in reach (the Railway situation); exit 1 with a clear message on a missing variable
+      and on a wrong password.*
+      Chosen in Phase 2 over a paid plan. A
       scheduled query every 2–3 days stops the free tier pausing on an idle demo; that interval
       leaves room for a missed run inside the ~7-day window. **The job must actually query the
       database.** `/api/health` does not (`app.js:24` returns uptime/memory only), so pinging it
