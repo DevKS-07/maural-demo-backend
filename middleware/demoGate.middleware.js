@@ -100,6 +100,16 @@ const BLOCKED_ROUTES = [
   // Labor KPI source override. Guarded only by requireAuth (a pass-through in
   // demo mode), so any persona could change it, and nothing in the demo needs it.
   { methods: ["PUT"], pattern: /^\/api\/integrations\/labor-config\/?$/ },
+
+  // Integration disconnects — also requireAuth-only. Disconnecting Monday
+  // clears the org's laborSource, after which the labor service returns a
+  // "not configured" result instead of failing, so the dashboard's seeded
+  // fallback never runs and the labor section goes blank for every visitor.
+  // The frontend's connect flow is browser-only and never calls these.
+  {
+    methods: ["DELETE"],
+    pattern: /^\/api\/integrations\/(hubspot|quickbooks|monday|clickup)\/disconnect\/?$/,
+  },
 ];
 
 const blockDestructiveRoutes = (req, res, next) => {
