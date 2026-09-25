@@ -247,9 +247,14 @@ async function main() {
   console.log("[seed] Done.");
 }
 
-main()
-  .catch((e) => {
-    console.error("[seed] Error:", e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+// Run only when invoked directly, so prisma/reseed.js can reuse main().
+if (require.main === module) {
+  main()
+    .catch((e) => {
+      console.error("[seed] Error:", e);
+      process.exit(1);
+    })
+    .finally(() => prisma.$disconnect());
+}
+
+module.exports = { main };
