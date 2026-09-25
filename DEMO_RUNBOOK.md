@@ -68,8 +68,9 @@ the demo database, except the rate limits, which the user deliberately deferred 
 
 **Phase 6 code half IN PROGRESS (2026-09-24), on `demo`.** Step 1 done: the three items Phase 5
 left for the backend are resolved (VTO + labor-config writes blocked; period-aware KPI lookup;
-scorecard fixed). **Owed by the frontend session before the deployed demo is seen on/after
-1 Oct 2026:** pin the demo clock to 22 Sep 2026, and make the VTO editor save per-visitor.
+scorecard fixed). ~~Owed by the frontend session before the deployed demo is seen on/after
+1 Oct 2026: pin the demo clock to 22 Sep 2026, and make the VTO editor save per-visitor.~~
+**Both done by the frontend session** (`9305145`, `8c966c7` — see the Phase 5 status below).
 Step 2 done: rate limits set to 1000 global / 100 chat per 15 min. Step 3 done: the four
 integration `/disconnect` routes are blocked, and `prisma/reseed.js` restores data (never
 documents). Step 4 done: `jobs/keepalive.js` written and tested locally. **The code half of
@@ -77,15 +78,19 @@ Phase 6 is complete.** Left for the user in the dashboards: deploy the API and f
 add the keep-alive cron service (steps on the Phase 6 item). See "Added during Phase 6".
 
 **Phase 5 is COMPLETE apart from the joint verification pass (2026-09-24), on `demo` in
-`maural-demo-frontend`** — four commits, all pushed to `origin/demo`:
+`maural-demo-frontend`** — six commits, all pushed to `origin/demo` (tip `8c966c7`):
 `14d9806` (Clerk → passphrase gate, welcome page with persona picker, demo banner, mock
 integrations, finance gate, profile), `8c1016b` (actions the demo can't perform shown disabled;
 static invitation sample), `54c1b27` (locked sidebar items that show live backend 403s),
-`f73c63a` (welcome-page copy aligned with what the demo allows). `origin/main` untouched.
+`f73c63a` (welcome-page copy aligned with what the demo allows), then two in response to Phase 6:
+`9305145` (demo clock pinned to 22 Sep 2026 — `src/lib/demoClock.ts`; timezone-safe
+`currentQuarter()`; "Showing Q3 2026 (latest available)" notes when the served period differs
+from the picked one) and `8c966c7` (VTO edits saved per-visitor in `localStorage["demo_vto"]`
+with "Reset to original"; labor-source toggle disabled). `origin/main` untouched.
 **The persona switcher is not a topbar dropdown** — decided mid-phase: it is a welcome page
 (`/welcome`, which replaced `/login`) plus a demo banner inside the app. Decisions and findings
-are in "Added during Phase 5". **Two items need the backend session:** VTO writes are not on the
-block list, and the dashboard fallback returns the same seeded quarter for every date range.
+are in "Added during Phase 5". ~~Two items need the backend session~~ — **resolved in Phase 6**:
+VTO writes are blocked, and the dashboard serves the seeded quarter matching the date range.
 
 > **⚠️ FOR THE FRONTEND SESSION — the `[CONFLICT]` is decided: RBAC is enforced.**
 >
@@ -266,7 +271,8 @@ aren't strings, but the frontend is built on them, so changing one on the backen
 
 **Frontend-only storage** (not part of the contract, recorded so nobody reuses the names):
 `localStorage["demo_role"]` — active persona; `localStorage["demo_connections"]` — per-visitor
-mock integration state (JSON).
+mock integration state (JSON); `localStorage["demo_vto"]` — per-visitor VTO edits, keyed by org
+id and merged per section (JSON; added in Phase 6, frontend `8c966c7`).
 
 ### Working in parallel
 
@@ -920,11 +926,13 @@ contract's default persona is applied before the role check rather than falling 
 - **The banner's "Viewing as" name comes from `/auth/me`**, not the stored persona, so it doubles
   as proof that `X-Demo-Role` reaches the backend.
 
-**Open — for the backend session:** *All three resolved in Phase 6 (2026-09-24) — see "Added
-during Phase 6". VTO and labor-config writes are blocked (the VTO editor moves to per-visitor
-browser saves); the backend now serves the seeded quarter overlapping the requested range, with
-the frontend's clock pin handed to the frontend session; the scorecard excludes the platform org
-and — a bigger fix than recorded here — now shows Thornbury's real numbers, which were also null.*
+**Open — for the backend session:** ***[ALL THREE RESOLVED 2026-09-24]*** *— see "Added
+during Phase 6".* *(1) **VTO writes and labor-config are blocked** on the backend; the frontend
+VTO editor saves per-visitor (`8c966c7`) and the labor-source toggle is disabled. (2) **The
+date-range problem is resolved** by the backend's overlap rule plus the frontend's pinned demo
+clock (`9305145`) — headers read "Q3 2026" whatever today's date is. (3) **The platform org is off
+the scorecard** (Thornbury only) — and, a bigger fix than recorded here, Thornbury's own scores,
+which were also null, are now real.*
 
 - **VTO writes are not blocked.** `POST|PUT|DELETE /api/vto/:orgId` is allowed for
   `org_executive`, so any visitor using Dana can overwrite or delete the seeded VTO — which feeds
@@ -1038,6 +1046,38 @@ has its own session, which does **not** edit this file.
     table is empty — so a wiped demo shows up as a failed cron run, not a silent "ok".
   - **Separate from the reseed.** The keep-alive fails silently if it breaks, so it is kept
     trivially simple; the reseed modifies data and should never run as a side effect of it.
+**From the frontend session's report (2026-09-24, frontend tip `8c966c7`):**
+
+- **The east-of-UTC date shift was real, and would have served Q2 to those visitors.**
+  `currentQuarter()` built local dates then called `toISOString()`, so in Kolkata or Tokyo it
+  requested `2026-06-30 → 2026-09-29` — which overlaps Q2 by one day. Under the backend's overlap
+  rule that ties with Q3, and the tie-break (most recent `periodStart`) happens to pick Q3, but the
+  request itself was wrong. **Fixed on the frontend** (`9305145`): dates are formatted from local
+  year/month/day, giving `07-01 → 09-30` in every timezone tested.
+- **Fallback KPI sections had no `period` field — a latent crash.** The live services return
+  `period: { startDate, endDate }` (finance adds `asOfDate`); the seeded rows carried only
+  `periodStart`/`periodEnd`. The frontend reads `section.period.startDate` in several places,
+  and `BudgetVarianceCard` does so **without `?.`**, so the Finance tab would have crashed as soon
+  as a visitor connected QuickBooks. Fixed on **both** sides: the frontend derives `period` if it
+  is missing (in `useFullDashboard`), and the backend's `sectionOrFallback` now sends
+  `period` in the live shape — `YYYY-MM-DD` strings, plus `asOfDate` for finance
+  (Q3 → `2026-07-01`/`2026-09-30`/`2026-09-22`). `periodStart`/`periodEnd` are still sent too.
+- **Scorecard `totalPipelineValue` is now `null`** — it had been the coverage ratio (1.72) under a
+  dollar-sounding name, the leftover noted above. No dollar pipeline value is persisted, so there
+  is nothing true to put there. The frontend never displayed it.
+- **`laborSources` / `activeLaborSource` are never sent — by any backend code, live path
+  included.** The frontend expects them on the dashboard summary; nothing in `controllers/` or
+  `services/` produces them, so the frontend was built against a response shape the team never
+  finished. The frontend defaults both to empty and the Monday-vs-ClickUp comparison never renders.
+  **Left as-is (not a demo regression):** showing it would mean new backend fields *and* seeded
+  ClickUp data; the demo seeds Monday only.
+
+**Verified by the frontend session against the running backend:** Q2 vs Q3 differ (Q2 EBITDA
+9.7% / coverage 1.94x / utilization 71.2%; Q3 5.2% / 1.72x / 66.4%); an unseeded range (Q1 2025)
+serves Q3 in every section; the admin scorecard lists Thornbury only, `ebitdaPct` 5.2,
+`pipelineCoverageRatio` 1.72. **Re-verified here after the `period` change:** Q3, Q2 and an
+unseeded range each carry the right `period`, and the scorecard returns `totalPipelineValue: null`.
+
 - **`seed.js` now exports `main()` and runs only when invoked directly**
   (`require.main === module`), so `reseed.js` reuses it instead of duplicating it. `node -r
   dotenv/config prisma/seed.js` and `prisma db seed` behave exactly as before (re-verified).
@@ -1064,9 +1104,9 @@ has its own session, which does **not** edit this file.
     **269%**. Now EBITDA / total revenue — matches the seeded `ebitdaMargin` exactly (5.2 / 9.7).
   - `pipelineCoverageRatio` divided `pipelineCoverage` by revenue again, rounding to **0**. The
     schema defines `pipelineCoverage` as the ratio ("proposed work / revenue goal") and the
-    dashboard and chatbot both display it as `1.72x`; it is now passed through. **Left as-is:**
-    `totalPipelineValue` still carries that ratio under a dollar-sounding name — the frontend
-    never reads it. And `leads.service.js:470` (live HubSpot path, dead in the demo) writes a
+    dashboard and chatbot both display it as `1.72x`; it is now passed through.
+    ~~Left as-is: `totalPipelineValue` still carries that ratio under a dollar-sounding name.~~
+    *Fixed later the same day — it is now `null` (see the frontend-report findings below).* And `leads.service.js:470` (live HubSpot path, dead in the demo) writes a
     dollar pipeline value into `pipelineCoverage`, contradicting the schema; not touched.
 - **The platform org is excluded by `is_platform`, not by "has no data".** Filtering on
   `is_platform: false` is correct outside the demo too — it is a *client* scorecard — whereas
@@ -1711,7 +1751,8 @@ Still no structural changes: every edit is localized, and the only new module is
 ## Phase 5 — Frontend demo changes (`demo` branch)
 
 **All code is on `demo` in `maural-demo-frontend`, pushed:** `14d9806`, `8c1016b`, `54c1b27`,
-`f73c63a`. Decisions and findings are in "Added during Phase 5".
+`f73c63a`, then `9305145` and `8c966c7` (Phase 6 follow-ups: demo clock, per-visitor VTO).
+Decisions and findings are in "Added during Phase 5" and "Added during Phase 6".
 
 - [x] **[BLOCKER] Write the `demoAuth` shim module** exporting Clerk's shapes: `ClerkProvider`
       as pass-through, `useAuth` → `{getToken, isSignedIn, isLoaded}`, `useUser` →
@@ -1810,9 +1851,10 @@ Still no structural changes: every edit is localized, and the only new module is
       - locked sidebar items show a 403 for Dana and Marcus; Priya and Avery have none;
       - as Dana: connect QuickBooks, then the Finance tab shows figures (not the prompt again);
         the VTO tab saves; org details can't be saved;
-        *(Amended in Phase 6: VTO writes are now blocked on the backend. "Saves" means saves
-        **to this browser only** — the edit survives a reload, and a second browser still shows
-        the seeded VTO. Depends on the frontend's per-visitor VTO pass.)*
+        *(Amended in Phase 6: VTO writes are blocked on the backend. "The VTO tab saves" now
+        means **saves in this browser only**; a private window shows the seeded VTO; "Reset to
+        original" restores it. Reload survival already checked by the user; the private-window
+        case was only simulated so far.)*
       - the date picker: Q2 2026 (Apr–Jun) shows different numbers from Q3; the landing headers
         say Q3 2026 whatever today's date is *(added in Phase 6; depends on the frontend clock pin)*;
       - as Priya: the admin scorecard lists Thornbury only, with real numbers (EBITDA 5.2%,
