@@ -80,7 +80,9 @@ integration `/disconnect` routes are blocked, and `prisma/reseed.js` restores da
 documents). Step 4 done: `jobs/keepalive.js` written and tested locally. Follow-ups from the
 frontend session's report: fallback KPI sections now send `period`, and the scorecard's
 `totalPipelineValue` is `null`. **The code half of Phase 6 is complete and pushed to
-`origin/demo`.** Left for the user in the dashboards: deploy the API and frontend, then
+`origin/demo`.** **Deployed 2026-09-24:** API on Railway, frontend on Vercel, both from `demo`,
+working end to end per the user. Frontend commits since the last report: `50394d9` (decoded
+document names, right viewer per type) and `8e71fb6` (WebViewer disposal + `Content-Encoding`). Left for the user in the dashboards: deploy the API and frontend, then
 add the keep-alive cron service (steps on the Phase 6 item). See "Added during Phase 6".
 
 **Phase 5 is COMPLETE (2026-09-24) — the joint verification pass is done too (user, in a
@@ -1917,7 +1919,8 @@ Decisions and findings are in "Added during Phase 5" and "Added during Phase 6".
       unauthenticated chat endpoint running a multi-agent pipeline is the one thing here that
       can actually cost money. *Created in Phase 3 (ingestion needs it first) — here, just
       confirm the cap is set and put the same key in Railway.*
-- [ ] **Deploy the API from `demo`.** Env (set in the **Railway dashboard** — no `.env` file
+- [x] **Deploy the API from `demo`.** *Done 2026-09-24 by the user — live at
+      `https://maural-demo-backend-production.up.railway.app` (Railway, branch `demo`).* Env (set in the **Railway dashboard** — no `.env` file
       reaches the image, `.dockerignore:14`): `NODE_ENV=demo` (any value except `production`;
       `demo` is preferred because `/api/health` shows it publicly), `DISABLE_AUTH=true`,
       `DEMO_ACCESS_KEY`, five Supabase values, capped OpenAI key, dummy `CLERK_SECRET_KEY`, and
@@ -1940,21 +1943,35 @@ Decisions and findings are in "Added during Phase 5" and "Added during Phase 6".
       `CLERK_PUBLISHABLE_KEY`, `CLERK_WEBHOOK_SECRET`, and every `HUBSPOT_` / `QUICKBOOKS_` /
       `MONDAY_` / `CLICKUP_` variable. **Set the service's branch to `demo`** — Railway defaults
       to the repo's default branch, and `main` has none of the demo shims.*
-- [ ] **Confirm no `.env` reaches the image** — `.dockerignore` already excludes `.env*`; verify
-      it still does after the history rewrite.
-- [ ] **Check `/api/health` and CORS.** A CORS miss surfaces as AuthContext's "Unable to reach
+- [x] **Confirm no `.env` reaches the image** — `.dockerignore` already excludes `.env*`; verify
+      it still does after the history rewrite. *Verified 2026-09-24: `.dockerignore:14` is `.env*`, and
+      the variable-list boot test proved the app runs with no env file at all.*
+- [x] **Check `/api/health` and CORS.** A CORS miss surfaces as AuthContext's "Unable to reach
       the server" screen, which looks like a backend outage.
-- [ ] **Deploy the frontend to Vercel from GitHub.** Set `VITE_*` values as Vercel **build-time**
+      *Done 2026-09-24 — and the CORS miss did happen on the first try: the browser showed the
+      preflight returning **204 with no `Access-Control-Allow-Origin`**, which is exactly what the
+      API returns for an origin not in `ALLOWED_ORIGINS`. Fixed by the user in Railway's variables;
+      works now. When it recurs, check in order: the variable change was **applied** and the
+      redeploy finished; the value is the exact origin (`https://`, no trailing slash, no path, no
+      quotes); and the page is on the production URL, not a per-deployment Vercel URL. Test with
+      `curl -si -X OPTIONS -H "Origin: <vercel-origin>" -H "Access-Control-Request-Method: GET"
+      -H "Access-Control-Request-Headers: authorization,x-demo-role" <api>/api/auth/me` — a
+      matching origin echoes an `access-control-allow-origin` line.*
+- [x] **Deploy the frontend to Vercel from GitHub.** *Done 2026-09-24 by the user, from `demo`.
+      `vercel.json` (frontend `cb25a1a`, extended in `8e71fb6`) supplies the SPA rewrite and
+      WebViewer's `Content-Encoding` headers. **Vercel's production branch must be set to `demo`**
+      — its first deploy uses the repo default, `main`.* Set `VITE_*` values as Vercel **build-time**
       env vars; Vite inlines them. `VITE_API_BASE_URL` must include the `/api` suffix (the local
       value is `http://localhost:5000/api`) — omitting it 404s every call.
       `public/config.js` ships with unsubstituted `${...}` placeholders on this path, which is
       fine: `src/env.ts` ignores any value starting with `${` and falls back to
       `import.meta.env`. Leave `config.js` in place — `index.html` loads it unconditionally, so
       deleting it means editing `index.html` too, for no benefit.
-- [ ] **Allowlist the right origin.** Vercel mints a unique preview URL per deployment, and
+- [x] **Allowlist the right origin.** *Done — production origin only (see the CORS item above).* Vercel mints a unique preview URL per deployment, and
       those won't be in `ALLOWED_ORIGINS` — previews will fail CORS while production works.
       Either test only on the production domain or add a pattern for previews.
-- [ ] **[NOW UNCONDITIONAL] Check the deployment size.** WebViewer **did** survive the licence
+- [x] **[NOW UNCONDITIONAL] Check the deployment size.** *Deployed fine with WebViewer included
+      (2026-09-24) — no build-time fetch needed.* WebViewer **did** survive the licence
       test (2026-09-23), so `public/lib/webviewer` — 172 MB across 677 files — lands in the
       Vercel build output for certain. Verify it deploys within limits before assuming it does.
 - [ ] **Walk the whole journey as a visitor:** passphrase → each of the four personas →
