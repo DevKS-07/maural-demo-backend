@@ -82,7 +82,9 @@ frontend session's report: fallback KPI sections now send `period`, and the scor
 `totalPipelineValue` is `null`. **The code half of Phase 6 is complete and pushed to
 `origin/demo`.** **Deployed 2026-09-24:** API on Railway, frontend on Vercel, both from `demo`,
 working end to end per the user. Frontend commits since the last report: `50394d9` (decoded
-document names, right viewer per type) and `8e71fb6` (WebViewer disposal + `Content-Encoding`). Left for the user in the dashboards: deploy the API and frontend, then
+document names, right viewer per type) and `8e71fb6` (WebViewer disposal + `Content-Encoding`).
+**Phase 6 is COMPLETE** (spend cap confirmed, live walk-through done, keep-alive cron wired) —
+apart from the keep-alive's 8-day check, due on or after **2 Oct 2026**. **Next: Phase 7.** Left for the user in the dashboards: deploy the API and frontend, then
 add the keep-alive cron service (steps on the Phase 6 item). See "Added during Phase 6".
 
 **Phase 5 is COMPLETE (2026-09-24) — the joint verification pass is done too (user, in a
@@ -1915,7 +1917,8 @@ Decisions and findings are in "Added during Phase 5" and "Added during Phase 6".
 
 ## Phase 6 — Deploy
 
-- [ ] **[BLOCKER] Dedicated OpenAI key with a hard spend cap.** Not your main key. A public
+- [x] **[BLOCKER] Dedicated OpenAI key with a hard spend cap.** *Confirmed by the user 2026-09-24:
+      cap set, same key in Railway.* Not your main key. A public
       unauthenticated chat endpoint running a multi-agent pipeline is the one thing here that
       can actually cost money. *Created in Phase 3 (ingestion needs it first) — here, just
       confirm the cap is set and put the same key in Railway.*
@@ -1974,7 +1977,7 @@ Decisions and findings are in "Added during Phase 5" and "Added during Phase 6".
       (2026-09-24) — no build-time fetch needed.* WebViewer **did** survive the licence
       test (2026-09-23), so `public/lib/webviewer` — 172 MB across 677 files — lands in the
       Vercel build output for certain. Verify it deploys within limits before assuming it does.
-- [ ] **Walk the whole journey as a visitor:** passphrase → each of the four personas →
+- [x] **Walk the whole journey as a visitor:** *Done by the user on the live URLs, 2026-09-24.* passphrase → each of the four personas →
       dashboard → documents → open a file → connect flow → two chatbot questions → citations and
       guardrail badge.
       *Amended in Phase 5: start at `/welcome` (the passphrase is entered there, with a persona
@@ -2003,8 +2006,10 @@ Decisions and findings are in "Added during Phase 5" and "Added during Phase 6".
       **Not scheduled** — runs by hand for now. If it's scheduled later, make it a separate
       Railway cron service from the keep-alive (the keep-alive must stay trivially simple, since
       it fails silently).*
-- [ ] **[BLOCKER] Set up the Supabase keep-alive** — *CODE DONE 2026-09-24: `jobs/keepalive.js`.
-      Still open: wiring it on Railway after the API deploy exists, then the 8-day check.*
+- [x] **[BLOCKER] Set up the Supabase keep-alive** — *CODE DONE 2026-09-24: `jobs/keepalive.js`.
+      **Wired on Railway by the user, 2026-09-24.** One check remains, and it cannot be done yet:
+      **on or after 2 Oct 2026, confirm in the Supabase dashboard that the project is still
+      active**, and that the cron service's runs log `[keepalive] ok`.*
       *Railway wiring (dashboard): add a **second service** from the same repo and `demo`
       branch — it builds the same Dockerfile, and `railway.toml` holds only `[build]`, so nothing
       there needs changing. In that service's settings: **Start Command**
