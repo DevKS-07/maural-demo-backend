@@ -70,7 +70,8 @@ the demo database, except the rate limits, which the user deliberately deferred 
 left for the backend are resolved (VTO + labor-config writes blocked; period-aware KPI lookup;
 scorecard fixed). **Owed by the frontend session before the deployed demo is seen on/after
 1 Oct 2026:** pin the demo clock to 22 Sep 2026, and make the VTO editor save per-visitor.
-Remaining here: rate limits, reseed path, keep-alive script. See "Added during Phase 6".
+Step 2 done: rate limits set to 1000 global / 100 chat per 15 min.
+Remaining here: reseed path, keep-alive script. See "Added during Phase 6".
 
 **Phase 5 is COMPLETE apart from the joint verification pass (2026-09-24), on `demo` in
 `maural-demo-frontend`** — four commits, all pushed to `origin/demo`:
@@ -981,6 +982,17 @@ has its own session, which does **not** edit this file.
   two landing-page quarter headers, **handed to the frontend session** — not done here. **It must
   land before anyone sees the deployed demo on or after 1 October 2026**, when the frontend's
   "current quarter" becomes Q4.
+- **[DECIDED] Rate limits: 1000 global / 100 chat per 15 min, per IP.** The user wanted room for
+  visitors to experiment, so neither goes back to the TODOs' 100 / 20. Reasoning: the global
+  limit guards cheap DB reads, and a low value would 429 real visitors (a persona switch is a full
+  reload, and one office IP can be several people). A person's chat rate is capped by the
+  8–57s response time to well under 100 per window, so the chat limit only ever binds a
+  script. **Consequence to keep in view:** a looping script can still spend at roughly 100
+  messages × 3–6 `gpt-4o-mini` calls per IP per 15 min (rough estimate, not measured: about
+  $0.50–1 per window). The OpenAI spend cap stops the bill, but **hitting it kills the chatbot for
+  every visitor until it resets** — so the cap is the real backstop, and it is worth checking
+  usage now and then after Phase 7 goes public. The limiter is per IP, so it slows casual
+  loops, not IP-rotating abuse. Note a chat request counts against **both** limiters.
 
 **Findings — things this file didn't anticipate:**
 
@@ -1607,8 +1619,14 @@ Still no structural changes: every edit is localized, and the only new module is
       its controller rather than the gate — the pattern requires an id segment, so the
       collection-level POST is untouched. Row counts confirmed unchanged after probing
       (2 orgs / 4 users / 6 files / 47 chunks), since every block lands before its handler.*
-- [ ] **[DEFERRED 2026-09-23 — user decision: leave out for now]** ~~Lower the rate limits~~ in
-      `app.js:75,85` — currently **1000 global / 200 chat per 15 min**, both still carrying their
+- [x] **[DONE in Phase 6, 2026-09-24 — user decision: 1000 global / 100 chat per 15 min.]**
+      *The global limit stays at 1000 (cheap reads, bursty page loads, shared office/campus IPs);
+      chat goes 200 → 100, not to the TODOs' 20, so experimenting visitors never hit it. Both TODO
+      comments replaced with the reasoning. Verified from the running server's headers:
+      `RateLimit-Policy: 100;w=900` on `/api/chat/*`, `1000;w=900` elsewhere. See "Added during
+      Phase 6".* Original item, kept for the record:
+      **[DEFERRED 2026-09-23 — user decision: leave out for now]** ~~Lower the rate limits~~ in
+      `app.js:75,85` (actually `app.js:81,91`) — currently **1000 global / 200 chat per 15 min**, both still carrying their
       "lower this back" TODOs. Chat is three to six model calls per message.
       **Consequence to carry forward, since this is the demo's one real money lever:** the chat
       endpoint is public and unauthenticated apart from the shared password, so with these
