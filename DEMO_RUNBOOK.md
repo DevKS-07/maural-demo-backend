@@ -85,16 +85,16 @@ add the keep-alive cron service (steps on the Phase 6 item). See "Added during P
 
 **Phase 5 is COMPLETE (2026-09-24) — the joint verification pass is done too (user, in a
 browser), on `demo` in
-`maural-demo-frontend`** — seven commits, all pushed to `origin/demo` (tip `5b6cbb1`):
+`maural-demo-frontend`** — eight commits, all pushed to `origin/demo` (tip `f44ee07`):
 `14d9806` (Clerk → passphrase gate, welcome page with persona picker, demo banner, mock
 integrations, finance gate, profile), `8c1016b` (actions the demo can't perform shown disabled;
 static invitation sample), `54c1b27` (locked sidebar items that show live backend 403s),
-`f73c63a` (welcome-page copy aligned with what the demo allows), then three in response to Phase 6:
+`f73c63a` (welcome-page copy aligned with what the demo allows), then four in response to Phase 6:
 `9305145` (demo clock pinned to 22 Sep 2026 — `src/lib/demoClock.ts`; timezone-safe
 `currentQuarter()`; "Showing Q3 2026 (latest available)" notes when the served period differs
 from the picked one), `8c966c7` (VTO edits saved per-visitor in `localStorage["demo_vto"]`
 with "Reset to original"; labor-source toggle disabled) and `5b6cbb1` (chatbot: a clear message
-on a chat-limit 429 instead of "check that Ollama is running"). `origin/main` untouched.
+on a chat-limit 429 instead of "check that Ollama is running") and `f44ee07` (remaining Ollama text removed from the chatbot). `origin/main` untouched.
 **The persona switcher is not a topbar dropdown** — decided mid-phase: it is a welcome page
 (`/welcome`, which replaced `/login`) plus a demo banner inside the app. Decisions and findings
 are in "Added during Phase 5". ~~Two items need the backend session~~ — **resolved in Phase 6**:
@@ -924,10 +924,8 @@ contract's default persona is applied before the role check rather than falling 
   only `chunk` and `guardrail`. The backend still sends `sources`, so restoring chips means
   reviving the rendering from `9d6901c`. The chatbot also ignores the `error` event, and its
   failure text tells visitors to check that "Ollama" is running (`floating-chatbot.tsx:1389`).
-  *(Phase 6: partly fixed in `5b6cbb1` — HTTP errors now show a real message. **Still open for
-  the frontend:** the network-failure fallback (`floating-chatbot.tsx:1401`) still mentions
-  Ollama, and so does the chatbot's "AI Online" panel (`:452`, "Connected to your knowledge base
-  via local Ollama RAG pipeline") — both wrong for a demo that runs on OpenAI.)*
+  *(Phase 6: fixed — `5b6cbb1` gives HTTP errors a real message, and `f44ee07` removes the
+  remaining visitor-facing Ollama text: the network-failure fallback and the "AI Online" panel.)*
 - **User edit and status toggle never reached a handler.** The frontend sends
   `PATCH /user/:id` and `PATCH /user/:id/status`; the backend has only `PUT` and `DELETE` on
   `/user/:userId`, so both 404 regardless of the demo gate. Disabled with the rest.
@@ -1113,9 +1111,8 @@ unseeded range each carry the right `period`, and the scorecard returns `totalPi
   under `/api/chat`, so ~100 requests to a nonexistent `/api/chat/<x>` path (404s, no model
   call) exhaust the bucket, and the next `POST /api/chat/stream` gets the 429. It also locks that
   IP out of chat for 15 minutes.*
-- **Still open for the frontend:** two visitor-facing Ollama mentions in `floating-chatbot.tsx` —
-  the network-failure message (`:1401`) and the "AI Online" panel (`:452`). See "Added during
-  Phase 5" → citation-chip finding.
+- ~~Still open for the frontend: two visitor-facing Ollama mentions in `floating-chatbot.tsx`.~~
+  ***Fixed in `f44ee07`*** *(pushed; verified here that `src/` has no "Ollama" left).*
 
 - **`seed.js` now exports `main()` and runs only when invoked directly**
   (`require.main === module`), so `reseed.js` reuses it instead of duplicating it. `node -r
@@ -1799,8 +1796,8 @@ Still no structural changes: every edit is localized, and the only new module is
 ## Phase 5 — Frontend demo changes (`demo` branch)
 
 **All code is on `demo` in `maural-demo-frontend`, pushed:** `14d9806`, `8c1016b`, `54c1b27`,
-`f73c63a`, then `9305145`, `8c966c7` and `5b6cbb1` (Phase 6 follow-ups: demo clock,
-per-visitor VTO, chat-limit message).
+`f73c63a`, then `9305145`, `8c966c7`, `5b6cbb1` and `f44ee07` (Phase 6 follow-ups: demo clock,
+per-visitor VTO, chat-limit message, Ollama text).
 Decisions and findings are in "Added during Phase 5" and "Added during Phase 6".
 
 - [x] **[BLOCKER] Write the `demoAuth` shim module** exporting Clerk's shapes: `ClerkProvider`
