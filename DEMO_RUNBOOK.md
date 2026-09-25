@@ -1926,6 +1926,20 @@ Decisions and findings are in "Added during Phase 5" and "Added during Phase 6".
       silently falls back to the anon key without it, and with RLS on (Phase 2) ingestion and
       document deletes then fail with `42501 ... violates row-level security policy`. If that
       error ever appears, check this variable — do not add RLS policies.
+      ***Variable list verified 2026-09-24** by booting `server.js` with exactly these and no env
+      file in reach: `NODE_ENV=demo`, `DISABLE_AUTH=true`, `DEMO_ACCESS_KEY`,
+      `CLERK_SECRET_KEY` (any dummy), `DATABASE_URL`, `DIRECT_URL`, `SUPABASE_URL`,
+      `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL`,
+      `OPENAI_EMBED_MODEL`, `ALLOWED_ORIGINS`, `FRONTEND_URL`, `FRONTEND_REDIRECT_URI` — health
+      reported `"environment":"demo"`, gate 401/200, personas, seeded dashboard, CORS preflight
+      204 and the documents list all worked. **Three traps when copying from
+      `.env.development.local`:** (1) **don't copy `HOST`** — it is `localhost` there, which would
+      bind the container to loopback and make it unreachable; unset, it defaults to `0.0.0.0`.
+      (2) **don't copy `PORT`** — Railway injects it and routes to it; `5000` is a local value.
+      (3) **strip the inline `# …` comments** the local file carries after values. Not needed:
+      `CLERK_PUBLISHABLE_KEY`, `CLERK_WEBHOOK_SECRET`, and every `HUBSPOT_` / `QUICKBOOKS_` /
+      `MONDAY_` / `CLICKUP_` variable. **Set the service's branch to `demo`** — Railway defaults
+      to the repo's default branch, and `main` has none of the demo shims.*
 - [ ] **Confirm no `.env` reaches the image** — `.dockerignore` already excludes `.env*`; verify
       it still does after the history rewrite.
 - [ ] **Check `/api/health` and CORS.** A CORS miss surfaces as AuthContext's "Unable to reach
