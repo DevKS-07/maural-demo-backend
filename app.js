@@ -75,21 +75,25 @@ app.use(
 );
 app.use(cookieParser());
 
-// Rate limiting — protects against brute-force and denial-of-service
-// Relaxed limits in development to avoid 429s during testing
+// Rate limiting — per client IP (see "trust proxy" above).
+// The global limit is generous on purpose: it covers cheap DB reads, a page
+// load fires a burst of requests, and several visitors can share one IP
+// behind an office or campus network.
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // TODO: lower back to 100 after development
+  max: 1000,
   standardHeaders: true, // Return rate limit info in RateLimit-* headers
   legacyHeaders: false, // Disable X-RateLimit-* headers
   message: { error: "Too many requests, please try again later." },
 });
 app.use(globalLimiter);
 
-// Stricter limit for chat — LLM calls are expensive
+// Stricter limit for chat — each message makes several LLM calls. A person is
+// bounded by response latency to far fewer than this per window; the limit is
+// there to slow a scripted loop before it exhausts the API spend cap.
 const chatLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200, // TODO: lower back to 20 after development
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Chat rate limit exceeded, please try again later." },
