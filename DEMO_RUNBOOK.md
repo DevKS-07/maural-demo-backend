@@ -17,7 +17,9 @@ local clone is checked out on `demo`, and `dev` is kept local at that commit and
 (No SHA recorded on purpose — edits to this file move it. Read it with `git ls-remote origin`.)
 
 **Remaining Phase 1 work is all on github.com by hand** (no `gh` on this machine): archive the
-two old team repos, and confirm private + collaborators on both new repos.
+two old team repos (optional), ~~and confirm private + collaborators on both new repos~~ —
+**the private + collaborators check is done (user, 2026-09-24)**. Both repos' Phase 1 is
+complete apart from the optional archive.
 
 **Phase 2 is complete (2026-09-22).** Pausing decision: free tier + a DB-touching keep-alive
 job, built in Phase 6. Demo project ref is **`jnmhzhjvizkrbvgdhyms`**, schema is pushed,
@@ -81,7 +83,8 @@ frontend session's report: fallback KPI sections now send `period`, and the scor
 `origin/demo`.** Left for the user in the dashboards: deploy the API and frontend, then
 add the keep-alive cron service (steps on the Phase 6 item). See "Added during Phase 6".
 
-**Phase 5 is COMPLETE apart from the joint verification pass (2026-09-24), on `demo` in
+**Phase 5 is COMPLETE (2026-09-24) — the joint verification pass is done too (user, in a
+browser), on `demo` in
 `maural-demo-frontend`** — six commits, all pushed to `origin/demo` (tip `8c966c7`):
 `14d9806` (Clerk → passphrase gate, welcome page with persona picker, demo banner, mock
 integrations, finance gate, profile), `8c1016b` (actions the demo can't perform shown disabled;
@@ -1288,13 +1291,15 @@ is optional insurance rather than a requirement.
       ```bash
       git checkout -b demo && git push -u origin demo
       ```
-- [ ] **Confirm the wiring.** `git remote -v` shows only the new repo in both working copies,
+- [x] **Confirm the wiring.** `git remote -v` shows only the new repo in both working copies,
       and Settings → Collaborators on both new repos lists only you. *Frontend: `git remote -v`
       verified. `git ls-remote` shows only `main` + `demo` at `0553ea3`, and no local-only
       commits. **API: git side verified** — `git remote -v` asserted as `maural-demo-backend`,
       and `git ls-remote` shows only `main` + `demo`, both at the same commit, with zero
       unpushed commits on either. (Local `dev` sits at that commit but is never pushed.)*
-      **Still open on both repos: the private + Collaborators check on github.com, by hand.**
+      ~~Still open on both repos: the private + Collaborators check on github.com, by hand.~~
+      ***Done by the user on github.com (2026-09-24)** — both repos private, collaborators
+      confirmed.*
 - [x] **Salvage the architecture diagrams.** *(API repo.)* **Done in commit `8398a65`.** All ten
       standalone SVGs copied from the gitignored `docs-assets/presentation/` into a tracked
       `docs/diagrams/`, with a `README.md` index splitting them into seven technical diagrams
@@ -1857,8 +1862,8 @@ Decisions and findings are in "Added during Phase 5" and "Added during Phase 6".
 - [x] ~~**If the viewer was dropped, add the demo-limitations note**~~ — **moot**, the viewer
       survived. (The general "this is a demo, data is synthetic" banner in Phase 7 still stands;
       that one is unrelated to the viewer.)
-- [ ] **Joint verification pass** — frontend against the running backend, in a browser. The only
-      open Phase 5 item. Check:
+- [x] **Joint verification pass** — frontend against the running backend, in a browser.
+      ***Done by the user (2026-09-24). Phase 5 is complete.*** Check:
       - wrong passphrase is rejected; `thornbury-demo-2026` gets in;
       - each of the four personas: banner name matches the chosen card, `/` loads, and the
         chatbot answers as the same persona as the rest of the app;
