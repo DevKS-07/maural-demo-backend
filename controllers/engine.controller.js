@@ -382,6 +382,18 @@ const readPersistedKpi = async (delegate, org_id, start, end) => {
 };
 
 /**
+ * The `period` object the live services return ({ startDate, endDate }, plus
+ * asOfDate for finance), built from a persisted row, so a fallback section has
+ * the same shape as a live one. The frontend reads `period.startDate`.
+ */
+const toDateOnly = (d) => new Date(d).toISOString().slice(0, 10);
+const periodOf = (row) => ({
+  startDate: toDateOnly(row.periodStart),
+  endDate: toDateOnly(row.periodEnd),
+  ...(row.asOfDate ? { asOfDate: toDateOnly(row.asOfDate) } : {}),
+});
+
+/**
  * Resolve one dashboard section: the live result when it succeeded, otherwise
  * the persisted row, otherwise the original error so a genuine failure is
  * still visible rather than being disguised as empty data.
@@ -392,7 +404,7 @@ const sectionOrFallback = async (settled, delegate, org_id, start, end, label) =
   const cached = await readPersistedKpi(delegate, org_id, start, end);
   if (cached) {
     console.log(`[SummaryEngine] ${label}: live call failed, served persisted row`);
-    return { ...cached, fromCache: true };
+    return { ...cached, period: periodOf(cached), fromCache: true };
   }
 
   return {
@@ -590,7 +602,10 @@ const buildOrgScore = ({ financial, leads, labor }) => {
   const totalRevenue = financial?.totalIncome ?? null;
   const netRevenue = financial?.netIncome ?? null;
   const ebitda = financial?.ebitda ?? null;
-  const totalPipelineValue = leads?.pipelineCoverage ?? null;
+  // LeadsKpi.pipelineCoverage is a ratio (see below). No dollar pipeline
+  // value is persisted, so totalPipelineValue is null rather than the ratio
+  // under a dollar-sounding name.
+  const coverage = leads?.pipelineCoverage ?? null;
   const headcount =
     (labor?.billableFTEs ?? 0) + (labor?.nonBillableFTEs ?? 0) || null;
 
@@ -612,15 +627,10 @@ const buildOrgScore = ({ financial, leads, labor }) => {
   // dashboard and chat both present it as one; dividing it by revenue again
   // rounded every org to 0.
   const pipelineCoverageRatio =
-    totalPipelineValue !== null
-      ? parseFloat(totalPipelineValue.toFixed(2))
-      : null;
+    coverage !== null ? parseFloat(coverage.toFixed(2)) : null;
 
   return {
-    totalPipelineValue:
-      totalPipelineValue !== null
-        ? parseFloat(totalPipelineValue.toFixed(2))
-        : null,
+    totalPipelineValue: null,
     pipelineCoverageRatio,
     totalRevenue:
       totalRevenue !== null ? parseFloat(totalRevenue.toFixed(2)) : null,
