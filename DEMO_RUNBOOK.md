@@ -85,15 +85,16 @@ add the keep-alive cron service (steps on the Phase 6 item). See "Added during P
 
 **Phase 5 is COMPLETE (2026-09-24) — the joint verification pass is done too (user, in a
 browser), on `demo` in
-`maural-demo-frontend`** — six commits, all pushed to `origin/demo` (tip `8c966c7`):
+`maural-demo-frontend`** — seven commits, all pushed to `origin/demo` (tip `5b6cbb1`):
 `14d9806` (Clerk → passphrase gate, welcome page with persona picker, demo banner, mock
 integrations, finance gate, profile), `8c1016b` (actions the demo can't perform shown disabled;
 static invitation sample), `54c1b27` (locked sidebar items that show live backend 403s),
-`f73c63a` (welcome-page copy aligned with what the demo allows), then two in response to Phase 6:
+`f73c63a` (welcome-page copy aligned with what the demo allows), then three in response to Phase 6:
 `9305145` (demo clock pinned to 22 Sep 2026 — `src/lib/demoClock.ts`; timezone-safe
 `currentQuarter()`; "Showing Q3 2026 (latest available)" notes when the served period differs
-from the picked one) and `8c966c7` (VTO edits saved per-visitor in `localStorage["demo_vto"]`
-with "Reset to original"; labor-source toggle disabled). `origin/main` untouched.
+from the picked one), `8c966c7` (VTO edits saved per-visitor in `localStorage["demo_vto"]`
+with "Reset to original"; labor-source toggle disabled) and `5b6cbb1` (chatbot: a clear message
+on a chat-limit 429 instead of "check that Ollama is running"). `origin/main` untouched.
 **The persona switcher is not a topbar dropdown** — decided mid-phase: it is a welcome page
 (`/welcome`, which replaced `/login`) plus a demo banner inside the app. Decisions and findings
 are in "Added during Phase 5". ~~Two items need the backend session~~ — **resolved in Phase 6**:
@@ -923,6 +924,10 @@ contract's default persona is applied before the role check rather than falling 
   only `chunk` and `guardrail`. The backend still sends `sources`, so restoring chips means
   reviving the rendering from `9d6901c`. The chatbot also ignores the `error` event, and its
   failure text tells visitors to check that "Ollama" is running (`floating-chatbot.tsx:1389`).
+  *(Phase 6: partly fixed in `5b6cbb1` — HTTP errors now show a real message. **Still open for
+  the frontend:** the network-failure fallback (`floating-chatbot.tsx:1401`) still mentions
+  Ollama, and so does the chatbot's "AI Online" panel (`:452`, "Connected to your knowledge base
+  via local Ollama RAG pipeline") — both wrong for a demo that runs on OpenAI.)*
 - **User edit and status toggle never reached a handler.** The frontend sends
   `PATCH /user/:id` and `PATCH /user/:id/status`; the backend has only `PUT` and `DELETE` on
   `/user/:userId`, so both 404 regardless of the demo gate. Disabled with the rest.
@@ -1090,6 +1095,27 @@ has its own session, which does **not** edit this file.
 serves Q3 in every section; the admin scorecard lists Thornbury only, `ebitdaPct` 5.2,
 `pipelineCoverageRatio` 1.72. **Re-verified here after the `period` change:** Q3, Q2 and an
 unseeded range each carry the right `period`, and the scorecard returns `totalPipelineValue: null`.
+
+**Second frontend report (2026-09-24, frontend tip `5b6cbb1`) — nothing open for the backend:**
+
+- **`bc7b07c` confirmed from the frontend side** against the running backend: `period` values as
+  above, including `asOfDate` on finance (Q3 `2026-09-22`, Q2 `2026-06-30`). The frontend now uses
+  the backend's `period` as sent; its `useFullDashboard` fill-in only applies when `period` is
+  missing, so it stays as a harmless fallback. Scorecard `totalPipelineValue: null` is fine — the
+  frontend type already allows null and never displays it.
+- **The `/disconnect` blocks were deliberately not probed by the frontend session** — a failed
+  block would really disconnect Monday on the shared DB. It relies on the backend's `403`
+  check above; the frontend never calls those routes (disconnect is simulated in the browser).
+- **Chat 429 now has a real message** (`5b6cbb1`, `floating-chatbot.tsx`): 429 → "The demo's chat
+  limit has been reached…"; any other non-OK → the server's `message`/`error`, or a generic
+  message with the status; network failure → unchanged. Not exercised against a real 429.
+  *Note: a real 429 can be produced **without LLM spend** — the chat limiter counts every request
+  under `/api/chat`, so ~100 requests to a nonexistent `/api/chat/<x>` path (404s, no model
+  call) exhaust the bucket, and the next `POST /api/chat/stream` gets the 429. It also locks that
+  IP out of chat for 15 minutes.*
+- **Still open for the frontend:** two visitor-facing Ollama mentions in `floating-chatbot.tsx` —
+  the network-failure message (`:1401`) and the "AI Online" panel (`:452`). See "Added during
+  Phase 5" → citation-chip finding.
 
 - **`seed.js` now exports `main()` and runs only when invoked directly**
   (`require.main === module`), so `reseed.js` reuses it instead of duplicating it. `node -r
@@ -1731,7 +1757,10 @@ Still no structural changes: every edit is localized, and the only new module is
       chat goes 200 → 100, not to the TODOs' 20, so experimenting visitors never hit it. Both TODO
       comments replaced with the reasoning. Verified from the running server's headers:
       `RateLimit-Policy: 100;w=900` on `/api/chat/*`, `1000;w=900` elsewhere. See "Added during
-      Phase 6".* Original item, kept for the record:
+      Phase 6". **The frontend handles a chat 429** (`5b6cbb1`): "The demo's chat limit has been
+      reached. Please wait a few minutes and try again." — type-checked, not exercised against a
+      real 429. The frontend session reports one page load uses only a handful of requests
+      against the 1000 global limit.* Original item, kept for the record:
       **[DEFERRED 2026-09-23 — user decision: leave out for now]** ~~Lower the rate limits~~ in
       `app.js:75,85` (actually `app.js:81,91`) — currently **1000 global / 200 chat per 15 min**, both still carrying their
       "lower this back" TODOs. Chat is three to six model calls per message.
@@ -1770,7 +1799,8 @@ Still no structural changes: every edit is localized, and the only new module is
 ## Phase 5 — Frontend demo changes (`demo` branch)
 
 **All code is on `demo` in `maural-demo-frontend`, pushed:** `14d9806`, `8c1016b`, `54c1b27`,
-`f73c63a`, then `9305145` and `8c966c7` (Phase 6 follow-ups: demo clock, per-visitor VTO).
+`f73c63a`, then `9305145`, `8c966c7` and `5b6cbb1` (Phase 6 follow-ups: demo clock,
+per-visitor VTO, chat-limit message).
 Decisions and findings are in "Added during Phase 5" and "Added during Phase 6".
 
 - [x] **[BLOCKER] Write the `demoAuth` shim module** exporting Clerk's shapes: `ClerkProvider`
