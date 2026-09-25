@@ -70,8 +70,9 @@ the demo database, except the rate limits, which the user deliberately deferred 
 left for the backend are resolved (VTO + labor-config writes blocked; period-aware KPI lookup;
 scorecard fixed). **Owed by the frontend session before the deployed demo is seen on/after
 1 Oct 2026:** pin the demo clock to 22 Sep 2026, and make the VTO editor save per-visitor.
-Step 2 done: rate limits set to 1000 global / 100 chat per 15 min.
-Remaining here: reseed path, keep-alive script. See "Added during Phase 6".
+Step 2 done: rate limits set to 1000 global / 100 chat per 15 min. Step 3 done: the four
+integration `/disconnect` routes are blocked, and `prisma/reseed.js` restores data (never
+documents). Remaining here: the keep-alive script. See "Added during Phase 6".
 
 **Phase 5 is COMPLETE apart from the joint verification pass (2026-09-24), on `demo` in
 `maural-demo-frontend`** — four commits, all pushed to `origin/demo`:
@@ -993,6 +994,33 @@ has its own session, which does **not** edit this file.
   every visitor until it resets** — so the cap is the real backstop, and it is worth checking
   usage now and then after Phase 7 goes public. The limiter is per IP, so it slows casual
   loops, not IP-rotating abuse. Note a chat request counts against **both** limiters.
+- **[DECIDED] The four integration `/disconnect` routes are blocked.**
+  `DELETE /api/integrations/{hubspot,quickbooks,monday,clickup}/disconnect` were `requireAuth`-only
+  (pass-through), so any persona could call them. **Monday's was a live way to break the demo,
+  found while scoping the reseed:** disconnecting it clears the org's `laborSource`, after which
+  `labour.service.js:54` *returns* a "not configured" object of nulls instead of throwing — and
+  the dashboard fallback only runs on a *failed* live call, so the labor section would go blank
+  for every visitor. (Established by reading the code, not by triggering it on the shared DB; the
+  equivalent state was produced directly in the reseed test below.) The frontend never calls
+  these routes — its connect flow is browser-only (Decision 3). All four verified `403 { demo: true }`.
+- **[DECIDED] The reseed restores data only; it never touches documents.** `prisma/reseed.js`
+  re-runs `seed.js` and then **reports**, without deleting, (a) rows the seed does not own —
+  extra orgs, users, KPI periods, VTOs, integration tokens — and (b) documents: whether all six
+  seeded ones are present and searchable, and any visitor uploads. Nothing is pruned: with the
+  gate in place nothing should create stray rows, so one appearing is a gate bug to investigate.
+  **Visitor uploads therefore accumulate** and stay citable by the chatbot until removed by hand
+  (document delete is blocked in the API, so via the Supabase dashboard — the `File` row, its
+  `document_embeddings` rows by `metadata->>'file_id'`, and the object in bucket `…0004`).
+- **`File.file_name` is stored URL-encoded** (`FY2026%20Strategic%20Plan%20…`) — the same
+  encoding as the citation-chip finding in Phase 3. The reseed's first run matched **0 of 6**
+  seeded documents against the manifest's plain names and reported all six as visitor uploads.
+  Harmless because it only reports; fixed by comparing decoded names. **Anyone who later builds
+  upload pruning must decode first and must refuse to delete unless all six seeded documents
+  are matched** — a pruner with the raw comparison would have deleted the whole knowledge base,
+  which can only be rebuilt locally.
+- **`seed.js` now exports `main()` and runs only when invoked directly**
+  (`require.main === module`), so `reseed.js` reuses it instead of duplicating it. `node -r
+  dotenv/config prisma/seed.js` and `prisma db seed` behave exactly as before (re-verified).
 
 **Findings — things this file didn't anticipate:**
 
@@ -1815,8 +1843,27 @@ Still no structural changes: every edit is localized, and the only new module is
       frontend in `bebb3ac` and the user accepted that as a demo limitation. Expect the guardrail
       badge only, and a silent 8–57s wait before an answer appears. Add the locked sidebar items
       (as Dana or Marcus) to the walk.*
-- [ ] **Set up a reseed path.** Even with writes blocked the demo drifts. A one-command reseed
+- [x] **Set up a reseed path.** Even with writes blocked the demo drifts. A one-command reseed
       is enough; a scheduled job is nicer.
+      *Done 2026-09-24 (code): `prisma/reseed.js`. **Data only — documents are never modified**
+      (user decision; see "Added during Phase 6").*
+      ```bash
+      node -r dotenv/config prisma/reseed.js   # locally (reads .env — check DIRECT_URL's host first)
+      node prisma/reseed.js                    # Railway: a shell on the API service, which holds every variable
+      ```
+      *Restores both orgs (incl. labor source and integration flags), roles, categories,
+      personas + org chart, both KPI periods and the VTO; exits 1 if the seed fails. Then prints
+      an ATTENTION list of anything it doesn't fix: stray rows, missing or chunkless seeded
+      documents, visitor uploads. **Document restoration is local-only and not automated:**
+      the files come from `uploads/`, which is gitignored, excluded from the image
+      (`.dockerignore`: `uploads/*`) and built by `demo-content/build-documents.ps1` through Word
+      on Windows — rebuild, then upload per `demo-content/upload-manifest.json` with the
+      `Authorization` header. **Verified against the demo DB:** clean run reports 6 of 6 seeded
+      documents searchable; after deliberately clearing Thornbury's `laborSource`/`mondayBoardId`
+      and changing the VTO title, one reseed restored both exactly.
+      **Not scheduled** — runs by hand for now. If it's scheduled later, make it a separate
+      Railway cron service from the keep-alive (the keep-alive must stay trivially simple, since
+      it fails silently).*
 - [ ] **[BLOCKER] Set up the Supabase keep-alive** — chosen in Phase 2 over a paid plan. A
       scheduled query every 2–3 days stops the free tier pausing on an idle demo; that interval
       leaves room for a missed run inside the ~7-day window. **The job must actually query the
